@@ -63,22 +63,24 @@ impl Project {
     }
 
     /// Returns the canonical path to the Docker Compose file for the project.
-    pub fn docker_compose_path(&self) -> eyre::Result<PathBuf> {
+    pub fn docker_compose_path(&self) -> eyre::Result<Option<PathBuf>> {
         /// Canonicalizes the docker compose path, ensuring it exists and is absolute.
-        fn canonicalize(path: &Path) -> eyre::Result<PathBuf> {
+        fn canonicalize(path: &Path) -> eyre::Result<Option<PathBuf>> {
             if !path.exists() {
-                return Err(eyre!(
-                    "Docker Compose file does not exist at {}",
-                    path.display()
-                ));
+                return Ok(None);
             }
 
-            path.canonicalize().map_err(|e| eyre!(e)).wrap_err_with(|| {
-                format!(
-                    "Failed to canonicalize docker compose path {}",
-                    path.display()
-                )
-            })
+            let canonical_path = path
+                .canonicalize()
+                .map_err(|e| eyre!(e))
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to canonicalize docker compose path {}",
+                        path.display()
+                    )
+                })?;
+
+            return Ok(Some(canonical_path));
         }
 
         if let Some(docker_compose) = self

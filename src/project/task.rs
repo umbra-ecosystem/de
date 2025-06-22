@@ -37,7 +37,8 @@ impl Task {
                 let docker_compose_path = project
                     .docker_compose_path()
                     .map_err(|e| eyre!(e))
-                    .wrap_err("Failed to get docker compose path")?;
+                    .wrap_err("Failed to get docker compose path")?
+                    .ok_or_else(|| eyre!("Docker compose path not found"))?;
 
                 let docker_compose_path = docker_compose_path
                     .to_str()

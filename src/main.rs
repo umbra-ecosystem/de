@@ -18,8 +18,8 @@ fn main() -> eyre::Result<()> {
         cli::Commands::Init { workspace } => {
             commands::init(workspace)?;
         }
-        cli::Commands::Run { command } => {
-            commands::run(command)?;
+        cli::Commands::Run { command, args } => {
+            commands::run(command, args)?;
         }
         cli::Commands::List { workspace } => {
             if let Some(workspace_name) = workspace {

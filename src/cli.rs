@@ -25,8 +25,12 @@ pub enum Commands {
 
     /// Run a command in the context of the current project.
     Run {
-        /// The command to run.
-        command: String,
+        /// The command to run listed in config file.
+        command: Slug,
+
+        /// Additional arguments to pass to the command.
+        #[arg(allow_hyphen_values = true, hide = true)]
+        args: Vec<String>,
     },
 
     /// List all projects of the current workspace.

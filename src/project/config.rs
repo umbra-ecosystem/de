@@ -16,7 +16,7 @@ pub struct ProjectManifest {
     #[serde(default)]
     pub project: Option<ProjectMetadata>,
     #[serde(default)]
-    pub tasks: BTreeMap<Slug, Task>,
+    pub tasks: Option<BTreeMap<Slug, Task>>,
 }
 
 impl ProjectManifest {
