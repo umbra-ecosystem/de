@@ -31,7 +31,7 @@ impl Project {
         let builder = config::Config::builder()
             .add_source(config::File::with_name(manifest_path.as_str()))
             .add_source(config::File::with_name(dot_manifest_path.as_str()).required(false))
-            .add_source(config::Environment::with_prefix("DE"))
+            .add_source(config::Environment::with_prefix("DE").separator("_"))
             .build()
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| format!("Failed to load project manifest from {}", dir.display()))?;
