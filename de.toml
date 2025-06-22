@@ -1,2 +1,8 @@
 [workspace]
 name = "de"
+
+[tasks]
+build = "cargo build --release"
+
+[tasks.test]
+command = "cargo test --release"

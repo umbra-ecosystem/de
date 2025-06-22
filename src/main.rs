@@ -18,7 +18,9 @@ fn main() -> eyre::Result<()> {
         cli::Commands::Init { workspace } => {
             commands::init(workspace)?;
         }
-        cli::Commands::Run { command } => {}
+        cli::Commands::Run { command } => {
+            commands::run(command)?;
+        }
         cli::Commands::List { workspace } => {
             if let Some(workspace_name) = workspace {
                 let workspace = Workspace::load_from_name(&workspace_name)
@@ -28,7 +30,8 @@ fn main() -> eyre::Result<()> {
 
                 commands::list(workspace)?;
             } else {
-                let current_workspace = workspace::Workspace::current()?;
+                let current_workspace = workspace::Workspace::current()?
+                    .ok_or_else(|| eyre!("No current workspace found"))?;
                 commands::list(current_workspace)?;
             }
         }

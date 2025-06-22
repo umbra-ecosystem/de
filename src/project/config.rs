@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -6,7 +7,7 @@ use std::{
 use eyre::{Context, eyre};
 use serde::{Deserialize, Serialize};
 
-use crate::types::Slug;
+use crate::{project::task::Task, types::Slug};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProjectManifest {
@@ -14,6 +15,8 @@ pub struct ProjectManifest {
     pub workspace: WorkspaceManifest,
     #[serde(default)]
     pub project: Option<ProjectMetadata>,
+    #[serde(default)]
+    pub tasks: BTreeMap<Slug, Task>,
 }
 
 impl ProjectManifest {

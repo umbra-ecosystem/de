@@ -1,10 +1,10 @@
-use std::path::PathBuf;
+pub mod config;
+mod task;
 
 use eyre::{Context, eyre};
+use std::path::{Path, PathBuf};
 
 use crate::project::config::ProjectManifest;
-
-pub mod config;
 
 pub struct Project {
     manifest: ProjectManifest,
@@ -23,13 +23,18 @@ impl Project {
         })
     }
 
-    pub fn current() -> eyre::Result<Self> {
+    pub fn current() -> eyre::Result<Option<Self>> {
         let manifest_path = std::env::current_dir()
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to get current working directory")?
             .join("de.toml");
 
-        Self::from_manifest_path(manifest_path)
+        if !manifest_path.exists() {
+            return Ok(None);
+        }
+
+        let project = Self::from_manifest_path(manifest_path)?;
+        Ok(Some(project))
     }
 
     pub fn manifest(&self) -> &ProjectManifest {
@@ -39,7 +44,9 @@ impl Project {
     pub fn manifest_path(&self) -> &PathBuf {
         &self.manifest_path
     }
+}
 
+impl Project {
     pub fn name(&self) -> eyre::Result<String> {
         let name = if let Some(name) = self.manifest().project().and_then(|p| p.name.as_deref()) {
             name.to_string()
@@ -53,5 +60,41 @@ impl Project {
         };
 
         Ok(name)
+    }
+
+    /// Returns the canonical path to the Docker Compose file for the project.
+    pub fn docker_compose_path(&self) -> eyre::Result<PathBuf> {
+        /// Canonicalizes the docker compose path, ensuring it exists and is absolute.
+        fn canonicalize(path: &Path) -> eyre::Result<PathBuf> {
+            if !path.exists() {
+                return Err(eyre!(
+                    "Docker Compose file does not exist at {}",
+                    path.display()
+                ));
+            }
+
+            path.canonicalize().map_err(|e| eyre!(e)).wrap_err_with(|| {
+                format!(
+                    "Failed to canonicalize docker compose path {}",
+                    path.display()
+                )
+            })
+        }
+
+        if let Some(docker_compose) = self
+            .manifest()
+            .project()
+            .and_then(|p| p.docker_compose.as_deref())
+        {
+            return canonicalize(docker_compose);
+        }
+
+        let docker_compose_path = self
+            .manifest_path()
+            .parent()
+            .ok_or_else(|| eyre!("Failed to get parent directory of manifest path"))?
+            .join("docker-compose.yml");
+
+        return canonicalize(&docker_compose_path);
     }
 }

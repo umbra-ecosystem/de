@@ -91,10 +91,14 @@ impl Workspace {
         }))
     }
 
-    pub fn current() -> eyre::Result<Self> {
+    pub fn current() -> eyre::Result<Option<Self>> {
         let project = Project::current()
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to load current project")?;
+
+        let Some(project) = project else {
+            return Ok(None);
+        };
 
         let workspace_name = project.manifest().workspace().name.clone();
         let workspace = Self::load_from_name(&workspace_name)
@@ -102,7 +106,7 @@ impl Workspace {
             .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?
             .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
 
-        Ok(workspace)
+        Ok(Some(workspace))
     }
 
     pub fn config(&self) -> &WorkspaceConfig {

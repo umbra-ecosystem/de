@@ -25,8 +25,10 @@ pub fn list(workspace: Workspace) -> eyre::Result<()> {
         })?;
 
         let mut message = project_name;
-        if &workspace_project.manifest == current_project.manifest_path() {
-            message.push_str(" (current)");
+        if let Some(current_project) = &current_project {
+            if &workspace_project.manifest == current_project.manifest_path() {
+                message.push_str(" (current)");
+            }
         }
 
         println!(" - {}", message);
