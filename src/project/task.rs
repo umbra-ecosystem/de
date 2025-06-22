@@ -57,7 +57,13 @@ impl Task {
                 let program = parts.next().ok_or_else(|| eyre!("Empty command"))?;
                 let args = parts.collect::<Vec<_>>();
 
+                let dir = project
+                    .manifest_path()
+                    .parent()
+                    .ok_or_else(|| eyre!("Failed to get project directory"))?;
+
                 let mut cmd = Command::new(program);
+                cmd.current_dir(dir);
                 cmd.args(&args);
                 Ok(cmd)
             }
