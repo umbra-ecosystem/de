@@ -39,7 +39,7 @@ impl Workspace {
         self.config
             .projects
             .iter()
-            .find(|p| p.manifest_path == manifest_path)
+            .find(|p| p.manifest == manifest_path)
     }
 
     pub fn add_project(&mut self, project: WorkspaceProject) {
@@ -49,12 +49,8 @@ impl Workspace {
 
     /// Deduplicate and sort projects in the workspace.
     pub fn dedup_projects(&mut self) {
-        self.config
-            .projects
-            .sort_by_key(|p| p.manifest_path.clone());
-        self.config
-            .projects
-            .dedup_by_key(|p| p.manifest_path.clone());
+        self.config.projects.sort_by_key(|p| p.manifest.clone());
+        self.config.projects.dedup_by_key(|p| p.manifest.clone());
     }
 
     pub fn path_from_name(name: &Slug) -> eyre::Result<PathBuf> {

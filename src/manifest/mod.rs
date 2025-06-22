@@ -30,4 +30,19 @@ impl Project {
     pub fn manifest_path(&self) -> &PathBuf {
         &self.manifest_path
     }
+
+    pub fn name(&self) -> eyre::Result<String> {
+        let name = if let Some(name) = self.manifest().project().and_then(|p| p.name.as_deref()) {
+            name.to_string()
+        } else {
+            self.manifest_path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|f| f.to_str())
+                .ok_or_else(|| eyre!("Failed to extract project name from manifest path"))?
+                .to_string()
+        };
+
+        Ok(name)
+    }
 }
