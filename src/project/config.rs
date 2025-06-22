@@ -1,10 +1,5 @@
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::{collections::BTreeMap, path::PathBuf, str::FromStr};
 
-use eyre::{Context, eyre};
 use serde::{Deserialize, Serialize};
 
 use crate::{project::task::Task, types::Slug};
@@ -26,24 +21,6 @@ impl ProjectManifest {
 
     pub fn project(&self) -> Option<&ProjectMetadata> {
         self.project.as_ref()
-    }
-}
-
-impl ProjectManifest {
-    pub fn from_file(path: &Path) -> eyre::Result<Option<Self>> {
-        if !path.exists() {
-            return Ok(None);
-        }
-
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to read project manifest from {}", path.display()))?;
-
-        let manifest: Self = toml::from_str(&content)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to parse project manifest")?;
-
-        Ok(Some(manifest))
     }
 }
 

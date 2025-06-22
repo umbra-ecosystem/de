@@ -16,17 +16,17 @@ pub fn list(workspace: Workspace) -> eyre::Result<()> {
 
     println!("Projects in workspace '{}':", name);
     for workspace_project in &workspace.config().projects {
-        let project = Project::from_manifest_path(workspace_project.manifest.clone())?;
+        let project = Project::from_dir(&workspace_project.dir)?;
         let project_name = project.name().map_err(|e| eyre!(e)).wrap_err_with(|| {
             format!(
                 "Failed to get project name for {}",
-                workspace_project.manifest.display()
+                workspace_project.dir.display()
             )
         })?;
 
         let mut message = project_name;
         if let Some(current_project) = &current_project {
-            if &workspace_project.manifest == current_project.manifest_path() {
+            if &workspace_project.dir == current_project.dir() {
                 message.push_str(" (current)");
             }
         }

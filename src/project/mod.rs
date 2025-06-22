@@ -7,33 +7,65 @@ use std::path::{Path, PathBuf};
 use crate::project::config::ProjectManifest;
 
 pub struct Project {
+    dir: PathBuf,
     manifest: ProjectManifest,
     manifest_path: PathBuf,
 }
 
 impl Project {
-    pub fn from_manifest_path(manifest_path: PathBuf) -> eyre::Result<Self> {
-        let manifest = ProjectManifest::from_file(&manifest_path)
-            .map_err(|e| eyre!(e))?
-            .ok_or_else(|| eyre!("Project manifest not found at {}", manifest_path.display()))?;
+    pub fn from_dir(dir: &Path) -> eyre::Result<Self> {
+        use ::config;
+
+        let manifest_path = dir
+            .join("de")
+            .to_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| eyre!("Failed to convert directory path to string"))?;
+
+        let dot_manifest_path = dir
+            .join(".de/config")
+            .to_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| eyre!("Failed to convert hidden config path to string"))?;
+
+        let builder = config::Config::builder()
+            .add_source(config::File::with_name(manifest_path.as_str()))
+            .add_source(config::File::with_name(dot_manifest_path.as_str()).required(false))
+            .add_source(config::Environment::with_prefix("DE"))
+            .build()
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to load project manifest from {}", dir.display()))?;
+
+        let manifest = builder
+            .try_deserialize::<ProjectManifest>()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to deserialize project manifest")?;
+
+        let manifest_path = dir
+            .join("de.toml")
+            .canonicalize()
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to canonicalize directory {}", dir.display()))?;
 
         Ok(Self {
             manifest,
-            manifest_path,
+            manifest_path: manifest_path.to_path_buf(),
+            dir: dir.to_path_buf(),
         })
     }
 
     pub fn current() -> eyre::Result<Option<Self>> {
-        let manifest_path = std::env::current_dir()
+        let current_dir = std::env::current_dir()
             .map_err(|e| eyre!(e))
-            .wrap_err("Failed to get current working directory")?
-            .join("de.toml");
+            .wrap_err("Failed to get current working directory")?;
+
+        let manifest_path = current_dir.join("de.toml");
 
         if !manifest_path.exists() {
             return Ok(None);
         }
 
-        let project = Self::from_manifest_path(manifest_path)?;
+        let project = Self::from_dir(&current_dir)?;
         Ok(Some(project))
     }
 
@@ -43,6 +75,10 @@ impl Project {
 
     pub fn manifest_path(&self) -> &PathBuf {
         &self.manifest_path
+    }
+
+    pub fn dir(&self) -> &PathBuf {
+        &self.dir
     }
 }
 

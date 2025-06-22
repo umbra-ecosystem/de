@@ -11,13 +11,11 @@ pub struct WorkspaceConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceProject {
-    pub manifest: PathBuf,
+    pub dir: PathBuf,
 }
 
 impl WorkspaceProject {
-    pub fn from_manifest_path(manifest_path: PathBuf) -> eyre::Result<Self> {
-        Ok(Self {
-            manifest: manifest_path,
-        })
+    pub fn new(dir: PathBuf) -> eyre::Result<Self> {
+        Ok(Self { dir })
     }
 }

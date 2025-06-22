@@ -18,7 +18,7 @@ pub fn add_project_to_workspace(
         Workspace::new(workspace_name)?
     };
 
-    let project = WorkspaceProject::from_manifest_path(project_manifest_path)
+    let project = WorkspaceProject::new(project_manifest_path)
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to load workspace project")?;
 

@@ -2,7 +2,7 @@ mod config;
 mod utils;
 
 use eyre::{Context, eyre};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::{
     project::Project,
@@ -36,13 +36,6 @@ impl Workspace {
         })
     }
 
-    pub fn get_project(&self, manifest_path: &Path) -> Option<&WorkspaceProject> {
-        self.config
-            .projects
-            .iter()
-            .find(|p| p.manifest == manifest_path)
-    }
-
     pub fn add_project(&mut self, project: WorkspaceProject) {
         self.config.projects.push(project);
         self.dedup_projects();
@@ -50,8 +43,8 @@ impl Workspace {
 
     /// Deduplicate and sort projects in the workspace.
     pub fn dedup_projects(&mut self) {
-        self.config.projects.sort_by_key(|p| p.manifest.clone());
-        self.config.projects.dedup_by_key(|p| p.manifest.clone());
+        self.config.projects.sort_by_key(|p| p.dir.clone());
+        self.config.projects.dedup_by_key(|p| p.dir.clone());
     }
 
     pub fn load_from_name(name: &Slug) -> eyre::Result<Option<Self>> {
@@ -111,10 +104,6 @@ impl Workspace {
 
     pub fn config(&self) -> &WorkspaceConfig {
         &self.config
-    }
-
-    pub fn config_path(&self) -> &Path {
-        self.config_path.as_path()
     }
 
     pub fn save(&self) -> eyre::Result<()> {
