@@ -5,6 +5,7 @@ use eyre::{Context, eyre};
 use std::path::{Path, PathBuf};
 
 use crate::{
+    project::Project,
     types::Slug,
     utils::get_project_dirs,
     workspace::config::{WorkspaceConfig, WorkspaceProject},
@@ -53,6 +54,16 @@ impl Workspace {
         self.config.projects.dedup_by_key(|p| p.manifest.clone());
     }
 
+    pub fn load_from_name(name: &Slug) -> eyre::Result<Option<Self>> {
+        let workspace_config_path = Self::path_from_name(name)?;
+
+        if !workspace_config_path.exists() {
+            return Ok(None);
+        }
+
+        Self::load_from_path(workspace_config_path)
+    }
+
     pub fn path_from_name(name: &Slug) -> eyre::Result<PathBuf> {
         let project_dirs = get_project_dirs()?;
 
@@ -63,16 +74,6 @@ impl Workspace {
             .join(&filename);
 
         Ok(path)
-    }
-
-    pub fn load_from_name(name: &Slug) -> eyre::Result<Option<Self>> {
-        let workspace_config_path = Self::path_from_name(name)?;
-
-        if !workspace_config_path.exists() {
-            return Ok(None);
-        }
-
-        Self::load_from_path(workspace_config_path)
     }
 
     pub fn load_from_path(path: PathBuf) -> eyre::Result<Option<Self>> {
@@ -88,6 +89,24 @@ impl Workspace {
             config_path: path,
             config,
         }))
+    }
+
+    pub fn current() -> eyre::Result<Self> {
+        let project = Project::current()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to load current project")?;
+
+        let workspace_name = project.manifest().workspace().name.clone();
+        let workspace = Self::load_from_name(&workspace_name)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?
+            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
+
+        Ok(workspace)
+    }
+
+    pub fn config(&self) -> &WorkspaceConfig {
+        &self.config
     }
 
     pub fn config_path(&self) -> &Path {

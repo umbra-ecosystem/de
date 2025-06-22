@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use eyre::{Context, bail, eyre};
+use eyre::{Context, eyre};
 
 use crate::{
-    manifest::config::{ProjectManifest, WorkspaceManifest},
+    project::config::{ProjectManifest, WorkspaceManifest},
     types::Slug,
     workspace,
 };

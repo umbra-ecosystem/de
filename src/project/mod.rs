@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use eyre::eyre;
+use eyre::{Context, eyre};
 
-use crate::manifest::config::ProjectManifest;
+use crate::project::config::ProjectManifest;
 
 pub mod config;
 
@@ -21,6 +21,15 @@ impl Project {
             manifest,
             manifest_path,
         })
+    }
+
+    pub fn current() -> eyre::Result<Self> {
+        let manifest_path = std::env::current_dir()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to get current working directory")?
+            .join("de.toml");
+
+        Self::from_manifest_path(manifest_path)
     }
 
     pub fn manifest(&self) -> &ProjectManifest {
