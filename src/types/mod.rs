@@ -6,6 +6,13 @@ use serde::{Deserialize, Serialize};
 pub struct Slug(String);
 
 impl Slug {
+    /// Returns the inner string representation of the slug.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Slug {
     /// Internal helper function to sanitize a string into a URL-safe, lowercase format.
     /// This function is used to generate suggestions for the user.
     fn sanitize(s: &str) -> String {

@@ -2,6 +2,7 @@ mod cli;
 mod commands;
 mod constants;
 mod project;
+mod shim;
 mod types;
 mod utils;
 mod workspace;
@@ -9,7 +10,10 @@ mod workspace;
 use clap::Parser;
 use eyre::{Context, eyre};
 
-use crate::{cli::Cli, workspace::Workspace};
+use crate::{
+    cli::{Cli, ShimCommands, TaskCommands},
+    workspace::Workspace,
+};
 
 fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
@@ -39,6 +43,25 @@ fn main() -> eyre::Result<()> {
             directory,
             workspace,
         } => {}
+        cli::Commands::Task { command } => match command {
+            TaskCommands::Check { task } => {
+                commands::task::check(task)?;
+            }
+        },
+        cli::Commands::Shim { command } => match command {
+            ShimCommands::Install => {
+                commands::shim::install()?;
+            }
+            ShimCommands::Add { command } => {
+                commands::shim::add(command)?;
+            }
+            ShimCommands::Remove { command } => {
+                commands::shim::remove(command)?;
+            }
+            ShimCommands::List => {
+                commands::shim::list()?;
+            }
+        },
     }
 
     Ok(())

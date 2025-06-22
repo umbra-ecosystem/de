@@ -50,4 +50,46 @@ pub enum Commands {
         #[arg(short, long)]
         workspace: Option<Slug>,
     },
+
+    /// Manage tasks defined in the project.
+    Task {
+        #[command(subcommand)]
+        command: TaskCommands,
+    },
+
+    /// Manage shims for de commands.
+    Shim {
+        #[command(subcommand)]
+        command: ShimCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TaskCommands {
+    /// Check if a task is defined in the project.
+    Check {
+        /// The name of the task to check.
+        task: Slug,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ShimCommands {
+    /// Add de shims directory to the PATH.
+    Install,
+
+    /// Add a shim for a specific command.
+    Add {
+        /// The command to shim.
+        command: Slug,
+    },
+
+    /// Remove a shim for a specific command.
+    Remove {
+        /// The command to remove the shim for.
+        command: Slug,
+    },
+
+    /// List all shims currently installed.
+    List,
 }
