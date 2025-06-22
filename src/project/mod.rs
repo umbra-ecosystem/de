@@ -16,6 +16,18 @@ impl Project {
     pub fn from_dir(dir: &Path) -> eyre::Result<Self> {
         use ::config;
 
+        let dot_env = dir.join(".env");
+        if dot_env.exists() {
+            dotenvy::from_path_override(&dot_env)
+                .map_err(|e| eyre!(e))
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to load environment variables from {}",
+                        dir.display()
+                    )
+                })?;
+        }
+
         let manifest_path = dir
             .join("de")
             .to_str()

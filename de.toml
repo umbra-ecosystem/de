@@ -1,6 +1,2 @@
 [workspace]
 name = "de"
-
-[tasks]
-build = "cargo build"
-cargo = "cargo"

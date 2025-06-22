@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env::current_dir, path::PathBuf};
 
 use eyre::{Context, eyre};
 
@@ -13,8 +13,12 @@ pub fn init(workspace_name: Slug) -> eyre::Result<()> {
         .wrap_err("Failed to write project manifest")
         .map_err(|e| eyre!(e))?;
 
+    let parent_dir = current_dir()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to get current directory")?;
+
     // Ensure the manifest path is absolute and canonicalized
-    let manifest_path = manifest_path
+    let parent_dir = parent_dir
         .canonicalize()
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| {
@@ -24,7 +28,7 @@ pub fn init(workspace_name: Slug) -> eyre::Result<()> {
             )
         })?;
 
-    workspace::add_project_to_workspace(workspace_name, manifest_path)
+    workspace::add_project_to_workspace(workspace_name, parent_dir)
         .wrap_err("Failed to add project to workspace")
         .map_err(|e| eyre!(e))?;
 
