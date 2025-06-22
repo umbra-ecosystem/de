@@ -1,8 +1,10 @@
 mod cli;
 mod commands;
-mod config;
 mod constants;
+mod manifest;
 mod types;
+mod utils;
+mod workspace;
 
 use clap::Parser;
 

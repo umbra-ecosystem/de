@@ -3,19 +3,24 @@ use std::path::PathBuf;
 use eyre::{Context, bail, eyre};
 
 use crate::{
-    config::project::{ProjectManifest, WorkspaceManifest},
+    manifest::config::{ProjectManifest, WorkspaceManifest},
     types::Slug,
+    workspace,
 };
 
-pub fn init(workspace: Slug) -> eyre::Result<()> {
-    write_manifest(workspace)
+pub fn init(workspace_name: Slug) -> eyre::Result<()> {
+    let manifest_path = write_manifest(workspace_name.clone())
         .wrap_err("Failed to write project manifest")
+        .map_err(|e| eyre!(e))?;
+
+    workspace::add_project_to_workspace(workspace_name, manifest_path)
+        .wrap_err("Failed to add project to workspace")
         .map_err(|e| eyre!(e))?;
 
     Ok(())
 }
 
-fn write_manifest(workspace: Slug) -> eyre::Result<()> {
+fn write_manifest(workspace: Slug) -> eyre::Result<PathBuf> {
     let manifest = ProjectManifest {
         workspace: WorkspaceManifest {
             name: workspace,
@@ -37,5 +42,5 @@ fn write_manifest(workspace: Slug) -> eyre::Result<()> {
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| format!("Failed to write manifest to {}", manifest_path.display()))?;
 
-    Ok(())
+    Ok(manifest_path)
 }

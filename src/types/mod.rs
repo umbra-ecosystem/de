@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -102,5 +102,11 @@ Suggested valid name: '{}'",
         // If all validations pass, ensure the stored name is indeed lowercase for consistency
         // (though the checks above ensure it, this makes it explicit if rules change later)
         Ok(Slug(trimmed_s.to_string()))
+    }
+}
+
+impl Display for Slug {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
