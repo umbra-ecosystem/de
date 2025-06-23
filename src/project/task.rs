@@ -29,6 +29,15 @@ impl RawTask {
 }
 
 impl Task {
+    pub fn command_str(&self) -> String {
+        match self {
+            Task::Compose { service, command } => {
+                format!("docker-compose exec {} {}", service, command)
+            }
+            Task::Raw(shell_task) => shell_task.command_str().to_string(),
+        }
+    }
+
     pub fn command(&self, project: &Project) -> eyre::Result<Command> {
         match self {
             Task::Compose { service, command } => {
@@ -47,8 +56,12 @@ impl Task {
                 cmd.arg("-f")
                     .arg(docker_compose_path)
                     .arg("exec")
-                    .arg(service)
-                    .arg(command);
+                    .arg(service);
+
+                let args = command.split_whitespace();
+                for arg in args {
+                    cmd.arg(arg);
+                }
 
                 Ok(cmd)
             }

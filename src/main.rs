@@ -11,7 +11,7 @@ use clap::Parser;
 use eyre::{Context, eyre};
 
 use crate::{
-    cli::{Cli, ShimCommands, TaskCommands},
+    cli::{Cli, Commands, ShimCommands, TaskCommands},
     workspace::Workspace,
 };
 
@@ -19,13 +19,13 @@ fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        cli::Commands::Init { workspace } => {
+        Commands::Init { workspace } => {
             commands::init(workspace)?;
         }
-        cli::Commands::Run { command, args } => {
+        Commands::Run { command, args } => {
             commands::run(command, args)?;
         }
-        cli::Commands::List { workspace } => {
+        Commands::List { workspace } => {
             if let Some(workspace_name) = workspace {
                 let workspace = Workspace::load_from_name(&workspace_name)
                     .map_err(|e| eyre!(e))
@@ -39,16 +39,19 @@ fn main() -> eyre::Result<()> {
                 commands::list(current_workspace)?;
             }
         }
-        cli::Commands::Discover {
+        Commands::Scan {
             directory,
             workspace,
         } => {}
-        cli::Commands::Task { command } => match command {
+        Commands::Task { command } => match command {
             TaskCommands::Check { task } => {
                 commands::task::check(task)?;
             }
+            TaskCommands::List => {
+                commands::task::list()?;
+            }
         },
-        cli::Commands::Shim { command } => match command {
+        Commands::Shim { command } => match command {
             ShimCommands::Install => {
                 commands::shim::install()?;
             }

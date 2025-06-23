@@ -40,8 +40,8 @@ pub enum Commands {
         workspace: Option<Slug>,
     },
 
-    /// Discover de projects and update the cache.
-    Discover {
+    /// Scan de projects and update the workspace configs.
+    Scan {
         /// The directory to discover projects in.
         #[arg(short, long, default_value = ".")]
         directory: PathBuf,
@@ -71,6 +71,9 @@ pub enum TaskCommands {
         /// The name of the task to check.
         task: Slug,
     },
+
+    /// List all tasks defined in the project.
+    List,
 }
 
 #[derive(Debug, Subcommand)]
