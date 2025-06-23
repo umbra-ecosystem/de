@@ -12,6 +12,7 @@
 - ⚡ **Task Execution**: Define and run both shell commands and Docker Compose service tasks
 - 🔗 **Command Shims**: Create command aliases that can be added to your PATH
 - 🔍 **Project Discovery**: Automatically scan and register projects in your workspaces
+- 🚀 **Docker Compose Management**: Start and stop all Docker Compose projects in a workspace
 - 🔧 **Environment Support**: Load `.env` files and environment variable configuration
 
 ## Installation
@@ -72,7 +73,23 @@ de run dev
 de run build --release  # Pass additional arguments
 ```
 
-### 4. List Projects
+### 4. Start/Stop Docker Compose Projects
+
+Start all Docker Compose projects in a workspace:
+
+```bash
+de start
+de start --workspace my-workspace
+```
+
+Stop all Docker Compose projects in a workspace:
+
+```bash
+de stop
+de stop --workspace my-workspace
+```
+
+### 5. List Projects
 
 View all projects in your current workspace:
 
@@ -213,6 +230,26 @@ php
 ```
 
 **Note**: Shims require a corresponding task with the same name defined in your project's `de.toml` file.
+
+#### Docker Compose Management
+
+Start and stop Docker Compose projects across workspaces:
+
+```bash
+# Start all Docker Compose projects in the current workspace
+de start
+
+# Start all Docker Compose projects in a specific workspace
+de start --workspace production
+
+# Stop all Docker Compose projects in the active workspace
+de stop
+
+# Stop all Docker Compose projects in a specific workspace  
+de stop --workspace production
+```
+
+These commands automatically run `docker-compose up -d` and `docker-compose down` respectively for all projects in the workspace that have Docker Compose files configured.
 
 ## Examples
 
