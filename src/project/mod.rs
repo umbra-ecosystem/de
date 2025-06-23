@@ -4,6 +4,7 @@ mod task;
 use ::config::FileFormat;
 use eyre::{Context, eyre};
 use std::{
+    borrow::Cow,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -123,7 +124,14 @@ impl Project {
     /// Returns the canonical path to the Docker Compose file for the project.
     pub fn docker_compose_path(&self) -> eyre::Result<Option<PathBuf>> {
         /// Canonicalizes the docker compose path, ensuring it exists and is absolute.
-        fn canonicalize(path: &Path) -> eyre::Result<Option<PathBuf>> {
+        fn canonicalize(project: &Project, path: &Path) -> eyre::Result<Option<PathBuf>> {
+            // Check if the path is relative and resolve it against the project directory
+            let path = if path.is_relative() {
+                project.dir().join(path).into()
+            } else {
+                Cow::Borrowed(path)
+            };
+
             if !path.exists() {
                 return Ok(None);
             }
@@ -146,16 +154,11 @@ impl Project {
             .project()
             .and_then(|p| p.docker_compose.as_deref())
         {
-            return canonicalize(docker_compose);
+            return canonicalize(self, docker_compose);
         }
 
-        let docker_compose_path = self
-            .manifest_path()
-            .parent()
-            .ok_or_else(|| eyre!("Failed to get parent directory of manifest path"))?
-            .join("docker-compose.yml");
-
-        return canonicalize(&docker_compose_path);
+        let docker_compose_path = self.dir().join("docker-compose.yml");
+        return canonicalize(self, &docker_compose_path);
     }
 
     /// Runs `docker-compose up -d` for the project, starting all services defined in the Docker Compose file.
