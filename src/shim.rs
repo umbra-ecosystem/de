@@ -8,57 +8,54 @@ pub fn get_shims_dir() -> eyre::Result<std::path::PathBuf> {
 pub fn generate_shim_bash_script(program_name: &str) -> String {
     format!(
         r##"#!/bin/bash
-# This script wraps the '{program_name}' command.
-# It checks 'de task {program_name} check' (output hidden).
-# If successful, it runs 'de run {program_name}' with all arguments.
-# Otherwise, it falls back to the system's '{program_name}' command.
+# This script is auto-generated and should not be manually edited.
 
-# This function executes the Nth command found in the PATH.
+# This script wraps the '{program_name}' command.
+# It prioritizes 'de run {program_name}' if 'de task check {program_name}' passes silently.
+# Otherwise, it falls back to the system's original '{program_name}' command.
+
+# Executes the Nth occurrence of a command found in PATH.
+# Essential for shims to call the original command without infinite recursion.
+# Args: $1=command_name, $2=occurrence_number (defaults to 1), $@=command_arguments.
 exec_nth_command() {{
     local command_name="$1"
     local n="${{2:-1}}"
     local path_found=""
     local current_match_count=0
 
-    # Validate command name presence
-    [[ -z "$command_name" ]] && return 1
+    # Validate inputs.
+    [[ -z "$command_name" ]] && {{ echo "Error: Command name missing." >&2; return 1; }}
+    [[ ! "$n" =~ ^[1-9][0-9]*$ ]] && {{ echo "Error: 'n' must be a positive integer." >&2; return 1; }}
 
-    # Validate 'n' is a positive integer
-    [[ ! "$n" =~ ^[1-9][0-9]*$ ]] && return 1
-
-    # Split PATH into an array of directories
+    # Search PATH for the Nth executable.
     IFS=':' read -ra path_dirs <<< "$PATH"
-
-    # Iterate through each directory in PATH
     for dir in "${{path_dirs[@]}}"; do
         local full_path="$dir/$command_name"
-
-        # Check if the file exists and is executable (and not a directory)
         if [[ -x "$full_path" && ! -d "$full_path" ]]; then
             current_match_count=$((current_match_count + 1))
-
-            # If this is the Nth match, store it and break
-            if [[ "$current_match_count" -eq "$n" ]]; then
-                path_found="$full_path"
-                break
-            fi
+            [[ "$current_match_count" -eq "$n" ]] && {{ path_found="$full_path"; break; }}
         fi
     done
 
-    # If the Nth command was found, execute it; otherwise, return an error
-    [[ -z "$path_found" ]] && return 1 || exec "$path_found" "${{@:3}}"
+    # Execute or error. 'exec' replaces current process.
+    if [[ -n "$path_found" ]]; then
+        exec "$path_found" "${{@:3}}"
+    else
+        echo "Error: ${{n}}th occurrence of '$command_name' not found in PATH." >&2
+        return 1
+    fi
 }}
 
-# Check 'de task check {program_name}' silently.
-# '> /dev/null 2>&1' hides all output.
-# '&&' proceeds only if the check is successful.
-if de task {program_name} check >/dev/null 2>&1; then
-  # If check passes, execute 'de run {program_name}' with all arguments.
-  # 'exec' replaces the current process with 'de run {program_name}'.
-  exec de run {program_name} "$@"
+# --- Main Logic ---
+
+# Silently check 'de task {program_name}'. Redirects all output to /dev/null.
+if de task check {program_name} >/dev/null 2>&1; then
+    # If check passes, execute 'de run {program_name}'. 'exec' avoids new process.
+    exec de run {program_name} "$@"
 else
-  # If check fails, fall back to the original '{program_name}' command.
-  exec exec_nth_command "{program_name}" 2 "$@"
+    # If check fails or 'de' not found, fall back to system command.
+    # Calls the 2nd instance of '{program_name}' in PATH (assuming 1st is this shim).
+    exec_nth_command "{program_name}" 2 "$@"
 fi
 "##
     )
