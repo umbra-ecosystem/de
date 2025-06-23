@@ -43,8 +43,8 @@ pub enum Commands {
     /// Scan de projects and update the workspace configs.
     Scan {
         /// The directory to discover projects in.
-        #[arg(short, long, default_value = ".")]
-        directory: PathBuf,
+        #[arg(short, long)]
+        dir: Option<PathBuf>,
 
         /// The name of the workspace to discover projects in. Defaults to all workspaces.
         #[arg(short, long)]
