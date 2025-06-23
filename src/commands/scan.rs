@@ -5,7 +5,7 @@ use walkdir::WalkDir;
 use crate::{
     project::Project,
     types::Slug,
-    workspace::{self, Workspace},
+    workspace::{self},
 };
 
 /// Scans the specified directory for `de.toml` files and updates the workspace configuration.

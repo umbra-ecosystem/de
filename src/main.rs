@@ -1,5 +1,6 @@
 mod cli;
 mod commands;
+mod config;
 mod constants;
 mod project;
 mod shim;
@@ -21,6 +22,12 @@ fn main() -> eyre::Result<()> {
     match cli.command {
         Commands::Init { workspace } => {
             commands::init(workspace)?;
+        }
+        Commands::Start { workspace } => {
+            commands::start(workspace)?;
+        }
+        Commands::Stop { workspace } => {
+            commands::stop(workspace)?;
         }
         Commands::Run { command, args } => {
             commands::run(command, args)?;

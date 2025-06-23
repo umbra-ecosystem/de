@@ -23,6 +23,19 @@ pub enum Commands {
         workspace: Slug,
     },
 
+    /// Spin up all projects in the workspace.
+    Start {
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
+
+    /// Spin down all projects in the workspace.
+    Stop {
+        /// The name of the workspace to stop projects in. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
+
     /// Run a command in the context of the current project.
     Run {
         /// The command to run listed in config file.

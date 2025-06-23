@@ -5,13 +5,14 @@ use eyre::{Context, eyre};
 use std::path::PathBuf;
 
 use crate::{
+    config::Config,
     project::Project,
     types::Slug,
     utils::get_project_dirs,
     workspace::config::{WorkspaceConfig, WorkspaceProject},
 };
 
-pub use utils::add_project_to_workspace;
+pub use utils::{add_project_to_workspace, spin_down_workspace, spin_up_workspace};
 
 #[derive(Debug)]
 pub struct Workspace {
@@ -84,24 +85,6 @@ impl Workspace {
         }))
     }
 
-    pub fn current() -> eyre::Result<Option<Self>> {
-        let project = Project::current()
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to load current project")?;
-
-        let Some(project) = project else {
-            return Ok(None);
-        };
-
-        let workspace_name = project.manifest().workspace().name.clone();
-        let workspace = Self::load_from_name(&workspace_name)
-            .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?
-            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
-
-        Ok(Some(workspace))
-    }
-
     pub fn config(&self) -> &WorkspaceConfig {
         &self.config
     }
@@ -133,5 +116,63 @@ impl Workspace {
             })?;
 
         Ok(())
+    }
+}
+
+impl Workspace {
+    pub fn current() -> eyre::Result<Option<Self>> {
+        let project = Project::current()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to load current project")?;
+
+        let Some(project) = project else {
+            return Ok(None);
+        };
+
+        let workspace_name = project.manifest().workspace().name.clone();
+        let workspace = Self::load_from_name(&workspace_name)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?
+            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
+
+        Ok(Some(workspace))
+    }
+
+    pub fn working() -> eyre::Result<Option<Self>> {
+        let app_config = Config::load()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to load application config")?;
+
+        let Some(workspace_name) = app_config.get_active_workspace() else {
+            return Ok(None);
+        };
+
+        let workspace = Self::load_from_name(&workspace_name)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?;
+
+        Ok(workspace)
+    }
+
+    pub fn active() -> eyre::Result<Option<Self>> {
+        // Try to get the current workspace from the environment
+        let current_workspace = Self::current()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to get current workspace")?;
+
+        if let Some(workspace) = current_workspace {
+            return Ok(Some(workspace));
+        }
+
+        // If no current workspace, try to load the workspace from the config
+        let working_workspace = Self::working()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to get working workspace")?;
+
+        if let Some(workspace) = working_workspace {
+            return Ok(Some(workspace));
+        }
+
+        Ok(None)
     }
 }

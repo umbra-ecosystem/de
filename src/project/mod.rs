@@ -3,7 +3,10 @@ mod task;
 
 use ::config::FileFormat;
 use eyre::{Context, eyre};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use crate::project::config::ProjectManifest;
 
@@ -153,5 +156,78 @@ impl Project {
             .join("docker-compose.yml");
 
         return canonicalize(&docker_compose_path);
+    }
+
+    /// Runs `docker-compose up -d` for the project, starting all services defined in the Docker Compose file.
+    ///
+    /// Returns `Ok(true)` if the command was successful, or `Ok(false)` if no Docker Compose file was found.
+    pub fn docker_compose_up(&self) -> eyre::Result<bool> {
+        let docker_compose_path = self
+            .docker_compose_path()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to get Docker Compose path")?;
+
+        let Some(docker_compose_path) = docker_compose_path else {
+            return Ok(false);
+        };
+
+        let status = Command::new("docker-compose")
+            .arg("-f")
+            .arg(docker_compose_path)
+            .arg("up")
+            .arg("-d")
+            .status()
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to run docker-compose up for project {}",
+                    self.name().unwrap_or_else(|_| "unknown".to_string())
+                )
+            })?;
+
+        if !status.success() {
+            return Err(eyre!(
+                "docker-compose up failed with status code: {}",
+                status.code().unwrap_or(-1)
+            ));
+        }
+
+        Ok(true)
+    }
+
+    /// Runs `docker-compose down` for the project, stopping all services defined in the Docker Compose file.
+    ///
+    /// Returns `Ok(true)` if the command was successful, or `Ok(false)` if no Docker Compose file was found.
+    pub fn docker_compose_down(&self) -> eyre::Result<bool> {
+        let docker_compose_path = self
+            .docker_compose_path()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to get Docker Compose path")?;
+
+        let Some(docker_compose_path) = docker_compose_path else {
+            return Ok(false);
+        };
+
+        let status = Command::new("docker-compose")
+            .arg("-f")
+            .arg(docker_compose_path)
+            .arg("down")
+            .status()
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to run docker-compose down for project {}",
+                    self.name().unwrap_or_else(|_| "unknown".to_string())
+                )
+            })?;
+
+        if !status.success() {
+            return Err(eyre!(
+                "docker-compose down failed with status code: {}",
+                status.code().unwrap_or(-1)
+            ));
+        }
+
+        Ok(true)
     }
 }
