@@ -1,5 +1,6 @@
 [package]
 name = "de"
+description = "A simple CLI for managing isolated development environments with Docker Compose."
 version = "0.1.0"
 edition = "2024"
 repository = "https://github.com/umbra-ecosystem/de"
