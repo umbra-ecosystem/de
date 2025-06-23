@@ -1,6 +1,7 @@
 pub mod config;
 mod task;
 
+use ::config::FileFormat;
 use eyre::{Context, eyre};
 use std::path::{Path, PathBuf};
 
@@ -29,20 +30,30 @@ impl Project {
         }
 
         let manifest_path = dir
-            .join("de")
+            .join("de.toml")
+            .canonicalize()
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to canonicalize directory {}", dir.display()))?;
+
+        let manifest_path_str = manifest_path
             .to_str()
             .map(|s| s.to_string())
             .ok_or_else(|| eyre!("Failed to convert directory path to string"))?;
 
         let dot_manifest_path = dir
-            .join(".de/config")
+            .join(".de/config.toml")
             .to_str()
             .map(|s| s.to_string())
             .ok_or_else(|| eyre!("Failed to convert hidden config path to string"))?;
 
         let builder = config::Config::builder()
-            .add_source(config::File::with_name(manifest_path.as_str()))
-            .add_source(config::File::with_name(dot_manifest_path.as_str()).required(false))
+            .add_source(config::File::new(
+                manifest_path_str.as_str(),
+                FileFormat::Toml,
+            ))
+            .add_source(
+                config::File::new(dot_manifest_path.as_str(), FileFormat::Toml).required(false),
+            )
             .add_source(config::Environment::with_prefix("DE").separator("_"))
             .build()
             .map_err(|e| eyre!(e))
@@ -52,12 +63,6 @@ impl Project {
             .try_deserialize::<ProjectManifest>()
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to deserialize project manifest")?;
-
-        let manifest_path = dir
-            .join("de.toml")
-            .canonicalize()
-            .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to canonicalize directory {}", dir.display()))?;
 
         Ok(Self {
             manifest,
@@ -80,7 +85,9 @@ impl Project {
         let project = Self::from_dir(&current_dir)?;
         Ok(Some(project))
     }
+}
 
+impl Project {
     pub fn manifest(&self) -> &ProjectManifest {
         &self.manifest
     }
