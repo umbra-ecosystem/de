@@ -1,44 +1,57 @@
-use std::{env::current_dir, path::PathBuf};
+use std::{
+    env::current_dir,
+    path::{Path, PathBuf},
+};
 
 use eyre::{Context, eyre};
 
 use crate::{
-    project::config::{ProjectManifest, WorkspaceManifest},
+    project::{
+        Project,
+        config::{ProjectManifest, ProjectMetadata, WorkspaceManifest},
+    },
     types::Slug,
     workspace,
 };
 
 pub fn init(workspace_name: Slug) -> eyre::Result<()> {
-    let manifest_path = write_manifest(workspace_name.clone())
-        .wrap_err("Failed to write project manifest")
-        .map_err(|e| eyre!(e))?;
-
     let parent_dir = current_dir()
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get current directory")?;
 
-    // Ensure the manifest path is absolute and canonicalized
-    let parent_dir = parent_dir
+    let project_dir = parent_dir
         .canonicalize()
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| {
             format!(
-                "Failed to canonicalize manifest path {}",
-                manifest_path.display()
+                "Failed to canonicalize project dir {}",
+                parent_dir.display()
             )
         })?;
 
-    workspace::add_project_to_workspace(workspace_name, parent_dir)
+    let name = write_manifest(workspace_name.clone(), &project_dir)
+        .wrap_err("Failed to write project manifest")
+        .map_err(|e| eyre!(e))?;
+
+    workspace::add_project_to_workspace(workspace_name, name, project_dir)
         .wrap_err("Failed to add project to workspace")
         .map_err(|e| eyre!(e))?;
 
     Ok(())
 }
 
-fn write_manifest(workspace: Slug) -> eyre::Result<PathBuf> {
+fn write_manifest(workspace: Slug, project_dir: &Path) -> eyre::Result<Slug> {
+    let name = Project::infer_name(project_dir)
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to infer project name from directory")?;
+
     let manifest = ProjectManifest {
         workspace: WorkspaceManifest {
             name: workspace,
+            ..Default::default()
+        },
+        project: ProjectMetadata {
+            name: name.clone(),
             ..Default::default()
         },
         ..Default::default()
@@ -46,7 +59,7 @@ fn write_manifest(workspace: Slug) -> eyre::Result<PathBuf> {
 
     let manifest_path = PathBuf::from("de.toml");
     if manifest_path.exists() {
-        return Ok(manifest_path);
+        return Ok(name);
     }
 
     let manifest_str = toml::to_string_pretty(&manifest)
@@ -57,5 +70,5 @@ fn write_manifest(workspace: Slug) -> eyre::Result<PathBuf> {
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| format!("Failed to write manifest to {}", manifest_path.display()))?;
 
-    Ok(manifest_path)
+    Ok(name)
 }

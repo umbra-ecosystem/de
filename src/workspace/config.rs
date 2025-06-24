@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use crate::types::Slug;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceConfig {
     pub name: Slug,
-    pub projects: Vec<WorkspaceProject>,
+    pub projects: BTreeMap<Slug, WorkspaceProject>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

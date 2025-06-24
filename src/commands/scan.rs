@@ -65,8 +65,13 @@ fn update_workspace(manifest_path: &Path, workspace: Option<&Slug>) -> eyre::Res
         }
     }
 
+    let project_id = Project::infer_name(project_path)
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to infer project ID")?;
+
     workspace::add_project_to_workspace(
         project.manifest().workspace.name.clone(),
+        project_id,
         project_path.to_path_buf(),
     )
     .wrap_err("Failed to add project to workspace")

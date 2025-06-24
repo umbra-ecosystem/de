@@ -10,12 +10,21 @@ impl Slug {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Consumes the Slug and returns the inner string.
+    pub fn into_inner(self) -> String {
+        self.0
+    }
 }
 
 impl Slug {
+    pub fn unknown() -> Self {
+        Self("unknown".to_string())
+    }
+
     /// Internal helper function to sanitize a string into a URL-safe, lowercase format.
     /// This function is used to generate suggestions for the user.
-    fn sanitize(s: &str) -> String {
+    pub fn sanitize(s: &str) -> Option<Slug> {
         let mut sanitized_chars: Vec<char> = Vec::new();
         let mut last_char_was_separator = true; // Treat start as if previous was separator for leading hyphens
 
@@ -43,7 +52,7 @@ impl Slug {
                 _ => {
                     // Replace any other character with a hyphen, if not already a separator
                     if !last_char_was_separator {
-                        sanitized_chars.push('-');
+                        sanitized_chars.push('_');
                         last_char_was_separator = true;
                     }
                 }
@@ -52,17 +61,18 @@ impl Slug {
 
         let mut sanitized_name: String = sanitized_chars.into_iter().collect();
 
-        // Remove any leading or trailing hyphens/underscores that might have been introduced
+        // Ensure start with ascii and remove any leading or trailing hyphens/underscores that might have been introduced
         sanitized_name = sanitized_name
+            .trim_start_matches(|c: char| !c.is_ascii_lowercase())
             .trim_start_matches(|c| c == '-' || c == '_')
             .trim_end_matches(|c| c == '-' || c == '_')
             .to_string();
 
         // Handle case where sanitization results in an empty string (e.g., input was "!!!").
         if sanitized_name.is_empty() {
-            "invalid-name".to_string() // Fallback generic name for suggestions
+            None
         } else {
-            sanitized_name
+            Some(Self(sanitized_name))
         }
     }
 }
@@ -84,24 +94,26 @@ impl FromStr for Slug {
         };
 
         // Rule 1: Must start with an alphabetic character (a-z, A-Z)
-        if !first_char.is_ascii_alphabetic() {
-            let suggested_name = Self::sanitize(trimmed_s);
+        if !first_char.is_ascii_lowercase() {
+            let suggestion = Self::sanitize(trimmed_s)
+                .map(|s| format!(" \nSuggested valid name: '{s}'"))
+                .unwrap_or_else(|| " \nNo valid suggestion available.".to_string());
             return Err(format!(
-                "This must start with an alphabetic character. It starts with '{}'. \
-Suggested valid name: '{}'",
-                first_char, suggested_name
+                "This must start with an alphabetic character. It starts with '{}'.{}",
+                first_char, suggestion
             ));
         }
 
         // Rule 2: All characters must be lowercase alphanumeric, hyphen, or underscore
         for ch in trimmed_s.chars() {
             if !(ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_') {
-                let suggested_name = Self::sanitize(trimmed_s);
+                let suggestion = Self::sanitize(trimmed_s)
+                    .map(|s| format!(" \nSuggested valid name: '{s}'"))
+                    .unwrap_or_else(|| " \nNo valid suggestion available.".to_string());
                 return Err(format!(
                     "This contains invalid character: '{}'. \
-Only lowercase alphanumeric characters, hyphens, and underscores are allowed. \
-Suggested valid name: '{}'",
-                    ch, suggested_name
+Only lowercase alphanumeric characters, hyphens, and underscores are allowed.{}",
+                    ch, suggestion
                 ));
             }
         }

@@ -9,7 +9,7 @@ pub struct ProjectManifest {
     #[serde(default)]
     pub workspace: WorkspaceManifest,
     #[serde(default)]
-    pub project: Option<ProjectMetadata>,
+    pub project: ProjectMetadata,
     #[serde(default)]
     pub tasks: Option<BTreeMap<Slug, Task>>,
 }
@@ -19,8 +19,8 @@ impl ProjectManifest {
         &self.workspace
     }
 
-    pub fn project(&self) -> Option<&ProjectMetadata> {
-        self.project.as_ref()
+    pub fn project(&self) -> &ProjectMetadata {
+        &self.project
     }
 }
 
@@ -42,10 +42,23 @@ fn default_workspace_name() -> Slug {
     Slug::from_str("default").expect("default workspace name should be valid")
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMetadata {
-    #[serde(default)]
-    pub name: Option<String>,
+    #[serde(default = "default_project_name")]
+    pub name: Slug,
     #[serde(default)]
     pub docker_compose: Option<PathBuf>,
+}
+
+impl Default for ProjectMetadata {
+    fn default() -> Self {
+        Self {
+            name: Slug::from_str("default").expect("default project name should be valid"),
+            docker_compose: None,
+        }
+    }
+}
+
+fn default_project_name() -> Slug {
+    Slug::from_str("default").expect("default project name should be valid")
 }

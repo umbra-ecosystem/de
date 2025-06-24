@@ -28,7 +28,7 @@ impl Workspace {
 
         let config = WorkspaceConfig {
             name,
-            projects: Vec::new(),
+            projects: Default::default(),
         };
 
         Ok(Self {
@@ -37,15 +37,8 @@ impl Workspace {
         })
     }
 
-    pub fn add_project(&mut self, project: WorkspaceProject) {
-        self.config.projects.push(project);
-        self.dedup_projects();
-    }
-
-    /// Deduplicate and sort projects in the workspace.
-    pub fn dedup_projects(&mut self) {
-        self.config.projects.sort_by_key(|p| p.dir.clone());
-        self.config.projects.dedup_by_key(|p| p.dir.clone());
+    pub fn add_project(&mut self, id: Slug, project: WorkspaceProject) {
+        self.config.projects.insert(id, project);
     }
 
     pub fn load_from_name(name: &Slug) -> eyre::Result<Option<Self>> {

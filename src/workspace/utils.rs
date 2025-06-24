@@ -7,7 +7,11 @@ use crate::{
 };
 use eyre::{Context, eyre};
 
-pub fn add_project_to_workspace(workspace_name: Slug, project_dir: PathBuf) -> eyre::Result<()> {
+pub fn add_project_to_workspace(
+    workspace_name: Slug,
+    project_id: Slug,
+    project_dir: PathBuf,
+) -> eyre::Result<()> {
     let mut workspace = if let Some(workspace) =
         Workspace::load_from_name(&workspace_name).map_err(|e| eyre!(e))?
     {
@@ -20,7 +24,7 @@ pub fn add_project_to_workspace(workspace_name: Slug, project_dir: PathBuf) -> e
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to load workspace project")?;
 
-    workspace.add_project(project);
+    workspace.add_project(project_id, project);
 
     workspace
         .save()
@@ -33,16 +37,14 @@ pub fn add_project_to_workspace(workspace_name: Slug, project_dir: PathBuf) -> e
 pub fn spin_up_workspace(workspace: &Workspace) -> eyre::Result<()> {
     let mut applied_projects = Vec::new();
 
-    for wp in &workspace.config().projects {
+    for (id, wp) in &workspace.config().projects {
         let project = Project::from_dir(&wp.dir)
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| {
                 format!("Failed to load project from directory {}", wp.dir.display())
             })?;
 
-        let project_name = project.name().map_err(|e| eyre!(e))?;
-
-        println!("Spinning up project {}:", project_name);
+        println!("Spinning up project {id}:");
 
         let applied = project
             .docker_compose_up()
@@ -50,13 +52,13 @@ pub fn spin_up_workspace(workspace: &Workspace) -> eyre::Result<()> {
             .wrap_err_with(|| {
                 format!(
                     "Failed to spin up project {} in workspace {}",
-                    project_name,
+                    id,
                     workspace.config().name
                 )
             })?;
 
         if applied {
-            applied_projects.push(project_name);
+            applied_projects.push(project);
         }
     }
 
@@ -70,16 +72,14 @@ pub fn spin_up_workspace(workspace: &Workspace) -> eyre::Result<()> {
 pub fn spin_down_workspace(workspace: &Workspace) -> eyre::Result<()> {
     let mut applied_projects = Vec::new();
 
-    for wp in &workspace.config().projects {
+    for (id, wp) in &workspace.config().projects {
         let project = Project::from_dir(&wp.dir)
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| {
                 format!("Failed to load project from directory {}", wp.dir.display())
             })?;
 
-        let project_name = project.name().map_err(|e| eyre!(e))?;
-
-        println!("Spinning down project {}:", project_name);
+        println!("Spinning down project {id}:");
 
         let applied = project
             .docker_compose_down()
@@ -87,13 +87,13 @@ pub fn spin_down_workspace(workspace: &Workspace) -> eyre::Result<()> {
             .wrap_err_with(|| {
                 format!(
                     "Failed to spin down project {} in workspace {}",
-                    project_name,
+                    id,
                     workspace.config().name
                 )
             })?;
 
         if applied {
-            applied_projects.push(project_name);
+            applied_projects.push(project);
         }
     }
 

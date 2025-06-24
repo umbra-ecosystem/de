@@ -13,7 +13,7 @@ pub fn list() -> eyre::Result<()> {
         return Ok(());
     };
 
-    println!("Tasks in project '{}':", project.name()?);
+    println!("Tasks in project '{}':", project.manifest().project().name);
     for (name, task) in tasks {
         println!(" - {}: {}", name, task.command_str());
     }

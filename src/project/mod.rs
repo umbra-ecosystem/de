@@ -9,7 +9,7 @@ use std::{
     process::Command,
 };
 
-use crate::project::config::ProjectManifest;
+use crate::{project::config::ProjectManifest, types::Slug};
 
 pub struct Project {
     dir: PathBuf,
@@ -106,19 +106,17 @@ impl Project {
 }
 
 impl Project {
-    pub fn name(&self) -> eyre::Result<String> {
-        let name = if let Some(name) = self.manifest().project().and_then(|p| p.name.as_deref()) {
-            name.to_string()
-        } else {
-            self.manifest_path
-                .parent()
-                .and_then(|p| p.file_name())
-                .and_then(|f| f.to_str())
-                .ok_or_else(|| eyre!("Failed to extract project name from manifest path"))?
-                .to_string()
-        };
+    pub fn infer_name(dir: &Path) -> eyre::Result<Slug> {
+        let dir_name = dir
+            .file_name()
+            .and_then(|f| f.to_str())
+            .ok_or_else(|| eyre!("Failed to extract project name from manifest path"))?
+            .to_string();
 
-        Ok(name)
+        let slug = Slug::sanitize(&dir_name)
+            .ok_or_else(|| eyre!("Failed to sanitize project name from directory"))?;
+
+        Ok(slug)
     }
 
     /// Returns the canonical path to the Docker Compose file for the project.
@@ -149,11 +147,7 @@ impl Project {
             return Ok(Some(canonical_path));
         }
 
-        if let Some(docker_compose) = self
-            .manifest()
-            .project()
-            .and_then(|p| p.docker_compose.as_deref())
-        {
+        if let Some(docker_compose) = self.manifest().project().docker_compose.as_deref() {
             return canonicalize(self, docker_compose);
         }
 
@@ -184,7 +178,7 @@ impl Project {
             .wrap_err_with(|| {
                 format!(
                     "Failed to run docker-compose up for project {}",
-                    self.name().unwrap_or_else(|_| "unknown".to_string())
+                    self.manifest().project().name
                 )
             })?;
 
@@ -220,7 +214,7 @@ impl Project {
             .wrap_err_with(|| {
                 format!(
                     "Failed to run docker-compose down for project {}",
-                    self.name().unwrap_or_else(|_| "unknown".to_string())
+                    self.manifest().project().name
                 )
             })?;
 
