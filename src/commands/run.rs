@@ -15,8 +15,6 @@ pub fn run(task_name: Slug, args: Vec<String>) -> eyre::Result<()> {
         .and_then(|tasks| tasks.get(&task_name))
         .ok_or_else(|| eyre!("Task '{}' not found in project", task_name))?;
 
-    println!("Running task: {}", task_name);
-
     let mut command = task
         .command(&project)
         .map_err(|e| eyre!(e))
