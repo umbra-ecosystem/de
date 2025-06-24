@@ -60,11 +60,9 @@ This creates a `de.toml` configuration file in your project directory.
 Edit the generated `de.toml` file to define tasks:
 
 ```toml
-[workspace]
-name = "my-workspace"
-
 [project]
 name = "my-api"
+workspace = "my-workspace"
 docker_compose = "docker-compose.yml"
 
 [tasks]
@@ -308,11 +306,9 @@ These commands automatically run `docker-compose up -d` and `docker-compose down
 ### Web Application Project
 
 ```toml
-[workspace]
-name = "web-apps"
-
 [project]
 name = "my-blog"
+workspace = "web-apps"
 docker_compose = "docker-compose.dev.yml"
 
 [tasks]
@@ -333,11 +329,9 @@ deploy = "docker push my-blog:latest"
 ### Microservices Workspace
 
 ```toml
-[workspace]
-name = "microservices"
-
 [project]
 name = "user-service"
+workspace = "microservices"
 
 [tasks]
 # Local development
