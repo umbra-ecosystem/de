@@ -11,8 +11,8 @@ use crate::{
 /// Scans the specified directory for `de.toml` files and updates the workspace configuration.
 ///
 /// FIXME: We can improve this by only checking for config files and not all files.
-pub fn scan(dir: Option<PathBuf>, workspace: Option<Slug>) -> eyre::Result<()> {
-    let dir = match dir {
+pub fn scan(target_dir: Option<PathBuf>, workspace: Option<Slug>) -> eyre::Result<()> {
+    let dir = match target_dir {
         Some(d) => d,
         None => std::env::current_dir()
             .map_err(|e| eyre!(e))

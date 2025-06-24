@@ -229,10 +229,10 @@ Automatically discover and register projects:
 de scan
 
 # Scan specific directory
-de scan --dir ~/projects
+de scan ~/projects
 
 # Scan for only specific workspace projects
-de scan --workspace production --dir ~/production-apps
+de scan ~/production-apps --workspace production
 ```
 
 #### Command Shims
