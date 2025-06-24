@@ -265,7 +265,6 @@ Use `update` when workspace configurations need to be synchronized:
 - After moving or deleting project directories
 - After renaming projects in their `de.toml` files
 - After migrating projects between workspaces
-- When setting up on a new machine after syncing project files
 
 #### Command Shims
 
