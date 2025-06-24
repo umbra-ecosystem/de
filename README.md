@@ -35,7 +35,21 @@ Create a new project and add it to a workspace:
 
 ```bash
 cd my-project
-de init my-workspace
+de init
+```
+
+This will interactively prompt you for:
+- **Workspace name**: Which workspace to add the project to
+- **Project name**: The name for your project (defaults to directory name)
+
+You can also specify these options directly:
+
+```bash
+# Initialize with specific workspace and project name
+de init --workspace my-workspace --name my-api
+
+# Initialize a specific directory
+de init /path/to/project --workspace my-workspace
 ```
 
 This creates a `de.toml` configuration file in your project directory.
@@ -111,24 +125,33 @@ Create a new project and add it to a workspace:
 
 ```bash
 cd my-project
-de init my-workspace
+de init
+```
+
+The command will interactively prompt you for the workspace and project name if not provided. You can also specify them directly:
+
+```bash
+# With explicit options
+de init --workspace my-workspace --name my-api
+
+# Initialize a different directory
+de init /path/to/project --workspace production
 ```
 
 This creates a `de.toml` configuration file in your project directory with the following structure:
 
 ```toml
-[workspace]
-name = "my-workspace"
+[project]
+name = "my-api"
+workspace = "my-workspace"
 ```
 
 You can then add project metadata and tasks:
 
 ```toml
-[workspace]
-name = "my-workspace"
-
 [project]
 name = "my-api"
+workspace = "my-workspace"
 docker_compose = "docker-compose.yml"
 
 [tasks]
@@ -141,12 +164,10 @@ dev = { service = "api", command = "cargo watch -x run" }
 Projects are configured using `de.toml` files with the following structure:
 
 ```toml
-[workspace]
-name = "workspace-name"
-
 [project]
-name = "project-name"                    # Optional: project display name
-docker_compose = "docker-compose.yml"   # Optional: path to docker-compose file
+name = "project-name"
+workspace = "workspace-name"
+docker_compose = "docker-compose.yml"    # Optional: path to docker-compose file
 
 [tasks]
 # Simple shell command
@@ -210,7 +231,7 @@ de scan
 # Scan specific directory
 de scan --dir ~/projects
 
-# Scan and add to specific workspace
+# Scan for only specific workspace projects
 de scan --workspace production --dir ~/production-apps
 ```
 
@@ -245,7 +266,7 @@ de start --workspace production
 # Stop all Docker Compose projects in the active workspace
 de stop
 
-# Stop all Docker Compose projects in a specific workspace  
+# Stop all Docker Compose projects in a specific workspace
 de stop --workspace production
 ```
 
