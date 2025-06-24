@@ -1,6 +1,7 @@
 use std::{
     env::current_dir,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use eyre::{Context, eyre};
@@ -11,7 +12,7 @@ use crate::{
         config::{ProjectManifest, ProjectMetadata},
     },
     types::Slug,
-    workspace,
+    workspace::{self, Workspace},
 };
 
 pub fn init(
@@ -43,13 +44,14 @@ pub fn init(
             )
         })?;
 
+    println!("Initializing project in {}", project_dir.display());
+
     let workspace_name = if let Some(name) = workspace_name {
         name
     } else {
-        let project = Project::from_dir(&project_dir)
+        prompt_workspace_name()
             .map_err(|e| eyre!(e))
-            .wrap_err("Failed to load project from directory")?;
-        project.manifest().project().workspace.clone()
+            .wrap_err("Failed to prompt for workspace name")?
     };
 
     let name = write_manifest(workspace_name.clone(), &project_dir, project_name)
@@ -82,13 +84,17 @@ fn write_manifest(
 
         if let Some(name) = project_name {
             manifest.project.name = name;
+        } else {
+            manifest.project.name = prompt_project_name(project_dir)
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to prompt for project name")?;
         }
 
         manifest
     } else {
-        let name = Project::infer_name(project_dir)
+        let name = prompt_project_name(project_dir)
             .map_err(|e| eyre!(e))
-            .wrap_err("Failed to infer project name from directory")?;
+            .wrap_err("Failed to prompt for project name")?;
 
         ProjectManifest {
             project: ProjectMetadata {
@@ -106,4 +112,59 @@ fn write_manifest(
         .wrap_err_with(|| format!("Failed to save manifest to {}", manifest_path.display()))?;
 
     Ok(manifest.project.name)
+}
+
+fn prompt_workspace_name() -> eyre::Result<Slug> {
+    use dialoguer::Input;
+
+    let default_name = Workspace::active()
+        .ok()
+        .flatten()
+        .map(|ws| ws.config().name.to_string());
+
+    let mut prompt = Input::new().with_prompt("Enter workspace name");
+
+    if let Some(name) = default_name {
+        prompt = prompt.default(name);
+    }
+
+    let name = prompt
+        .validate_with(|input: &String| {
+            Slug::from_str(input)
+                .map(|_| ())
+                .map_err(|_| "Invalid workspace name. Must be a valid slug.")
+        })
+        .interact_text()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to read workspace name")?;
+
+    Slug::from_str(&name)
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to parse workspace name")
+}
+
+fn prompt_project_name(project_dir: &Path) -> eyre::Result<Slug> {
+    use dialoguer::Input;
+
+    let default_name = Project::infer_name(project_dir).ok();
+
+    let mut prompt = Input::new().with_prompt("Enter project name");
+
+    if let Some(name) = default_name {
+        prompt = prompt.default(name.to_string());
+    }
+
+    let name = prompt
+        .validate_with(|input: &String| {
+            Slug::from_str(input)
+                .map(|_| ())
+                .map_err(|_| "Invalid project name. Must be a valid slug.")
+        })
+        .interact_text()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to read project name")?;
+
+    Slug::from_str(&name)
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to parse project name")
 }
