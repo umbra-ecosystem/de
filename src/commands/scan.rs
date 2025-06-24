@@ -60,7 +60,7 @@ fn update_workspace(manifest_path: &Path, workspace: Option<&Slug>) -> eyre::Res
         .wrap_err("Failed to load project from directory")?;
 
     if let Some(ws) = workspace {
-        if project.manifest().workspace.name != *ws {
+        if project.manifest().project().workspace != *ws {
             return Ok(());
         }
     }
@@ -70,7 +70,7 @@ fn update_workspace(manifest_path: &Path, workspace: Option<&Slug>) -> eyre::Res
         .wrap_err("Failed to infer project ID")?;
 
     workspace::add_project_to_workspace(
-        project.manifest().workspace.name.clone(),
+        project.manifest().project().workspace.clone(),
         project_id,
         project_path.to_path_buf(),
     )

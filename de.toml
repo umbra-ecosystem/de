@@ -1,5 +1,3 @@
-[workspace]
-name = "de"
-
 [project]
 name = "de"
+workspace = "default"

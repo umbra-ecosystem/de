@@ -122,7 +122,7 @@ impl Workspace {
             return Ok(None);
         };
 
-        let workspace_name = project.manifest().workspace().name.clone();
+        let workspace_name = project.manifest().project().workspace.clone();
         let workspace = Self::load_from_name(&workspace_name)
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?

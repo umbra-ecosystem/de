@@ -8,7 +8,7 @@ use eyre::{Context, eyre};
 use crate::{
     project::{
         Project,
-        config::{ProjectManifest, ProjectMetadata, WorkspaceManifest},
+        config::{ProjectManifest, ProjectMetadata},
     },
     types::Slug,
     workspace,
@@ -49,7 +49,7 @@ pub fn init(
         let project = Project::from_dir(&project_dir)
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to load project from directory")?;
-        project.manifest().workspace().name.clone()
+        project.manifest().project().workspace.clone()
     };
 
     let name = write_manifest(workspace_name.clone(), &project_dir, project_name)
@@ -91,12 +91,9 @@ fn write_manifest(
             .wrap_err("Failed to infer project name from directory")?;
 
         ProjectManifest {
-            workspace: WorkspaceManifest {
-                name: workspace_name,
-                ..Default::default()
-            },
             project: ProjectMetadata {
                 name: name.clone(),
+                workspace: workspace_name,
                 ..Default::default()
             },
             ..Default::default()

@@ -16,7 +16,7 @@ pub fn start(workspace_name: Option<Slug>) -> eyre::Result<()> {
             .wrap_err("Failed to get current project")?
             .ok_or_else(|| eyre!("No current project found"))?;
 
-        project.manifest().workspace().name.clone()
+        project.manifest().project().workspace.clone()
     };
 
     let workspace = Workspace::load_from_name(&workspace_name)
