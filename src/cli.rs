@@ -71,6 +71,17 @@ pub enum Commands {
         workspace: Option<Slug>,
     },
 
+    /// Update workspace registrations and project configurations.
+    Update {
+        /// Update all workspaces and projects.
+        #[arg(long)]
+        all: bool,
+
+        /// The name of the workspace to update projects in. Defaults to the current workspace.
+        #[arg(short, long)]
+        workspace: Option<Option<Slug>>,
+    },
+
     /// Manage tasks defined in the project.
     Task {
         #[command(subcommand)]

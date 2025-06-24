@@ -53,6 +53,9 @@ fn main() -> eyre::Result<()> {
         Commands::Scan { dir, workspace } => {
             commands::scan(dir, workspace)?;
         }
+        Commands::Update { all, workspace } => {
+            commands::update(all, workspace)?;
+        }
         Commands::Task { command } => match command {
             TaskCommands::Check { task } => {
                 commands::task::check(task)?;

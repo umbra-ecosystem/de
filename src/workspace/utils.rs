@@ -24,7 +24,16 @@ pub fn add_project_to_workspace(
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to load workspace project")?;
 
-    // FIXME: Check if project already exists in workspace under a different ID
+    if let Some(existing_project) = workspace.config().projects.get(&project_id) {
+        if existing_project.dir != project.dir {
+            return Err(eyre!(
+                "Project ID '{}' already exists with a different directory: {}",
+                project_id,
+                existing_project.dir.display()
+            ));
+        }
+    }
+
     workspace.add_project(project_id, project);
 
     workspace

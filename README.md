@@ -12,6 +12,7 @@
 - ⚡ **Task Execution**: Define and run both shell commands and Docker Compose service tasks
 - 🔗 **Command Shims**: Create command aliases that can be added to your PATH
 - 🔍 **Project Discovery**: Automatically scan and register projects in your workspaces
+- 🔄 **Workspace Synchronization**: Update and maintain workspace configurations and project registrations
 - 🚀 **Docker Compose Management**: Start and stop all Docker Compose projects in a workspace
 - 🔧 **Environment Support**: Load `.env` files and environment variable configuration
 
@@ -234,6 +235,37 @@ de scan ~/projects
 # Scan for only specific workspace projects
 de scan ~/production-apps --workspace production
 ```
+
+#### Workspace Synchronization
+
+Keep workspace configurations synchronized with your projects:
+
+```bash
+# Update current project's workspace registration
+de update
+
+# Update all projects in the current workspace
+de update --workspace
+
+# Update all projects in a specific workspace
+de update --workspace my-workspace
+
+# Update all workspaces and projects
+de update --all
+```
+
+The `update` command helps maintain workspace integrity by:
+
+- **Validating project existence**: Removes stale project entries for directories that no longer exist
+- **Detecting name changes**: Updates registrations when project names change in `de.toml` files
+- **Handling workspace migrations**: Removes projects that have moved to different workspaces
+- **Refreshing configurations**: Ensures workspace registrations reflect current project states
+
+Use `update` when workspace configurations need to be synchronized:
+- After moving or deleting project directories
+- After renaming projects in their `de.toml` files
+- After migrating projects between workspaces
+- When setting up on a new machine after syncing project files
 
 #### Command Shims
 

@@ -5,13 +5,11 @@ use eyre::{Context, eyre};
 use std::path::PathBuf;
 
 use crate::{
-    config::Config,
-    project::Project,
-    types::Slug,
-    utils::get_project_dirs,
-    workspace::config::{WorkspaceConfig, WorkspaceProject},
+    config::Config, project::Project, types::Slug, utils::get_project_dirs,
+    workspace::config::WorkspaceConfig,
 };
 
+pub use config::WorkspaceProject;
 pub use utils::{add_project_to_workspace, spin_down_workspace, spin_up_workspace};
 
 #[derive(Debug)]
@@ -39,6 +37,10 @@ impl Workspace {
 
     pub fn add_project(&mut self, id: Slug, project: WorkspaceProject) {
         self.config.projects.insert(id, project);
+    }
+
+    pub fn remove_project(&mut self, id: &Slug) {
+        self.config.projects.remove(id);
     }
 
     pub fn load_from_name(name: &Slug) -> eyre::Result<Option<Self>> {
