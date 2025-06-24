@@ -19,8 +19,16 @@ pub struct Cli {
 pub enum Commands {
     /// Initialize as a de project.
     Init {
+        /// The path to the project directory. Defaults to the current directory.
+        path: Option<PathBuf>,
+
         /// The name of the workspace of the project.
-        workspace: Slug,
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// The name of the project. Defaults to the current directory name.
+        #[arg(short, long)]
+        name: Option<Slug>,
     },
 
     /// Spin up all projects in the workspace.

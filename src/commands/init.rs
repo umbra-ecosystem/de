@@ -14,22 +14,45 @@ use crate::{
     workspace,
 };
 
-pub fn init(workspace_name: Slug) -> eyre::Result<()> {
-    let parent_dir = current_dir()
-        .map_err(|e| eyre!(e))
-        .wrap_err("Failed to get current directory")?;
+pub fn init(
+    project_dir: Option<PathBuf>,
+    project_name: Option<Slug>,
+    workspace_name: Option<Slug>,
+) -> eyre::Result<()> {
+    let project_dir = if let Some(project_dir) = project_dir {
+        if !project_dir.is_dir() {
+            return Err(eyre!(
+                "The specified project directory is not a valid directory"
+            ));
+        }
 
-    let project_dir = parent_dir
+        project_dir
+    } else {
+        current_dir()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to get current directory")?
+    };
+
+    let project_dir = project_dir
         .canonicalize()
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| {
             format!(
                 "Failed to canonicalize project dir {}",
-                parent_dir.display()
+                project_dir.display()
             )
         })?;
 
-    let name = write_manifest(workspace_name.clone(), &project_dir)
+    let workspace_name = if let Some(name) = workspace_name {
+        name
+    } else {
+        let project = Project::from_dir(&project_dir)
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to load project from directory")?;
+        project.manifest().workspace().name.clone()
+    };
+
+    let name = write_manifest(workspace_name.clone(), &project_dir, project_name)
         .wrap_err("Failed to write project manifest")
         .map_err(|e| eyre!(e))?;
 
@@ -40,35 +63,50 @@ pub fn init(workspace_name: Slug) -> eyre::Result<()> {
     Ok(())
 }
 
-fn write_manifest(workspace: Slug, project_dir: &Path) -> eyre::Result<Slug> {
-    let name = Project::infer_name(project_dir)
-        .map_err(|e| eyre!(e))
-        .wrap_err("Failed to infer project name from directory")?;
+fn write_manifest(
+    workspace_name: Slug,
+    project_dir: &Path,
+    project_name: Option<Slug>,
+) -> eyre::Result<Slug> {
+    let manifest_path = PathBuf::from("de.toml");
 
-    let manifest = ProjectManifest {
-        workspace: WorkspaceManifest {
-            name: workspace,
+    let manifest = if manifest_path.exists() {
+        let mut manifest = ProjectManifest::load(&manifest_path)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to load existing manifest from {}",
+                    manifest_path.display()
+                )
+            })?;
+
+        if let Some(name) = project_name {
+            manifest.project.name = name;
+        }
+
+        manifest
+    } else {
+        let name = Project::infer_name(project_dir)
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to infer project name from directory")?;
+
+        ProjectManifest {
+            workspace: WorkspaceManifest {
+                name: workspace_name,
+                ..Default::default()
+            },
+            project: ProjectMetadata {
+                name: name.clone(),
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        project: ProjectMetadata {
-            name: name.clone(),
-            ..Default::default()
-        },
-        ..Default::default()
+        }
     };
 
-    let manifest_path = PathBuf::from("de.toml");
-    if manifest_path.exists() {
-        return Ok(name);
-    }
-
-    let manifest_str = toml::to_string_pretty(&manifest)
+    manifest
+        .save(&manifest_path)
         .map_err(|e| eyre!(e))
-        .wrap_err("Failed to format manifest as string")?;
+        .wrap_err_with(|| format!("Failed to save manifest to {}", manifest_path.display()))?;
 
-    std::fs::write(&manifest_path, manifest_str)
-        .map_err(|e| eyre!(e))
-        .wrap_err_with(|| format!("Failed to write manifest to {}", manifest_path.display()))?;
-
-    Ok(name)
+    Ok(manifest.project.name)
 }

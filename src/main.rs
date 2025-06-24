@@ -20,8 +20,12 @@ fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { workspace } => {
-            commands::init(workspace)?;
+        Commands::Init {
+            path,
+            name,
+            workspace,
+        } => {
+            commands::init(path, name, workspace)?;
         }
         Commands::Start { workspace } => {
             commands::start(workspace)?;

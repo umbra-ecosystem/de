@@ -1,5 +1,10 @@
-use std::{collections::BTreeMap, path::PathBuf, str::FromStr};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
+use eyre::{Context, eyre};
 use serde::{Deserialize, Serialize};
 
 use crate::{project::task::Task, types::Slug};
@@ -21,6 +26,28 @@ impl ProjectManifest {
 
     pub fn project(&self) -> &ProjectMetadata {
         &self.project
+    }
+
+    pub fn load(path: &Path) -> eyre::Result<ProjectManifest> {
+        let manifest_str = std::fs::read_to_string(path)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to read manifest file at {}", path.display()))?;
+
+        toml::from_str(&manifest_str)
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to parse project manifest")
+    }
+
+    pub fn save(&self, path: &Path) -> eyre::Result<()> {
+        let manifest_str = toml::to_string_pretty(&self)
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to format manifest as string")?;
+
+        std::fs::write(path, manifest_str)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to write manifest to {}", path.display()))?;
+
+        Ok(())
     }
 }
 
