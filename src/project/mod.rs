@@ -75,6 +75,20 @@ impl Project {
         })
     }
 
+    pub fn from_dir_recursive(dir: &Path) -> eyre::Result<Option<Self>> {
+        let mut current_dir = dir.to_path_buf();
+
+        loop {
+            if current_dir.join("de.toml").exists() {
+                return Self::from_dir(&current_dir).map(Some);
+            }
+
+            if !current_dir.pop() {
+                return Ok(None);
+            }
+        }
+    }
+
     pub fn current() -> eyre::Result<Option<Self>> {
         let current_dir = std::env::current_dir()
             .map_err(|e| eyre!(e))
@@ -86,7 +100,7 @@ impl Project {
             return Ok(None);
         }
 
-        let project = Self::from_dir(&current_dir)?;
+        let project = Self::from_dir_recursive(&current_dir)?;
         Ok(Some(project))
     }
 }
