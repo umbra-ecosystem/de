@@ -13,7 +13,6 @@ directories = "6.0.0"
 dotenvy = "0.15.7"
 eyre = "0.6.12"
 serde = { version = "1.0.219", features = ["derive"] }
-smol = "2.0.2"
 toml = "0.8.23"
 tracing = "0.1.41"
 walkdir = "2.5.0"
@@ -21,7 +20,7 @@ walkdir = "2.5.0"
 [dependencies.axoupdater]
 version = "0.9.0"
 default-features = false
-features = ["github_releases"]
+features = ["github_releases", "blocking"]
 
 [profile.release]
 strip = true
