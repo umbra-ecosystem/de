@@ -94,14 +94,7 @@ impl Project {
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to get current working directory")?;
 
-        let manifest_path = current_dir.join("de.toml");
-
-        if !manifest_path.exists() {
-            return Ok(None);
-        }
-
-        let project = Self::from_dir_recursive(&current_dir)?;
-        Ok(Some(project))
+        Self::from_dir_recursive(&current_dir)
     }
 }
 
