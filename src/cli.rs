@@ -100,6 +100,9 @@ pub enum Commands {
         #[command(subcommand)]
         command: SelfCommands,
     },
+
+    /// Diagnose and check the health of your de environment.
+    Doctor,
 }
 
 #[derive(Debug, Subcommand)]

@@ -83,6 +83,9 @@ fn main() -> eyre::Result<()> {
                 commands::self_::update()?;
             }
         },
+        Commands::Doctor => {
+            commands::doctor()?;
+        }
     }
 
     Ok(())
