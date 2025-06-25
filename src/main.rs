@@ -12,7 +12,7 @@ use clap::Parser;
 use eyre::{Context, eyre};
 
 use crate::{
-    cli::{Cli, Commands, ShimCommands, TaskCommands},
+    cli::{Cli, Commands, SelfCommands, ShimCommands, TaskCommands},
     workspace::Workspace,
 };
 
@@ -76,6 +76,11 @@ fn main() -> eyre::Result<()> {
             }
             ShimCommands::List => {
                 commands::shim::list()?;
+            }
+        },
+        Commands::Self_ { command } => match command {
+            SelfCommands::Update => {
+                commands::self_::update()?;
             }
         },
     }

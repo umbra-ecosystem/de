@@ -2,6 +2,7 @@ mod init;
 mod list;
 mod run;
 mod scan;
+pub mod self_;
 mod start;
 mod stop;
 mod update;

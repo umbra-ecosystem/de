@@ -28,6 +28,16 @@ Download the latest release from the [GitHub releases page](https://github.com/u
 cargo install --git https://github.com/umbra-ecosystem/de
 ```
 
+### Updating
+
+If you installed `de` from a pre-built binary, you can update to the latest version using:
+
+```bash
+de self update
+```
+
+This will automatically download and install the latest release from GitHub.
+
 ## Quick Start
 
 ### 1. Initialize a Project
@@ -263,6 +273,21 @@ Use `update` when workspace configurations need to be synchronized:
 - After moving or deleting project directories
 - After renaming projects in their `de.toml` files
 - After migrating projects between workspaces
+
+#### Self-Update
+
+Keep `de` up to date with the latest features and bug fixes:
+
+```bash
+# Update to the latest version
+de self update
+```
+
+The update command will:
+- Check for the latest release on GitHub
+- Download and install the new version if available
+- Display the new version number after successful update
+- Show "No updates available" if you're already on the latest version
 
 #### Command Shims
 

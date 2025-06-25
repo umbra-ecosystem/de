@@ -93,6 +93,13 @@ pub enum Commands {
         #[command(subcommand)]
         command: ShimCommands,
     },
+
+    /// Manage the de CLI itself.
+    #[command(name = "self")]
+    Self_ {
+        #[command(subcommand)]
+        command: SelfCommands,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -126,4 +133,10 @@ pub enum ShimCommands {
 
     /// List all shims currently installed.
     List,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SelfCommands {
+    /// Update the de CLI itself.
+    Update,
 }
