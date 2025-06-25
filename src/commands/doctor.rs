@@ -3,104 +3,163 @@ use std::process::Command;
 
 use crate::{project::Project, workspace::Workspace};
 
+#[derive(Debug)]
+struct DiagnosticResult {
+    errors: u32,
+    warnings: u32,
+    details: Vec<String>,
+}
+
+impl DiagnosticResult {
+    fn new() -> Self {
+        Self {
+            errors: 0,
+            warnings: 0,
+            details: Vec::new(),
+        }
+    }
+
+    fn add_success(&mut self, message: String) {
+        self.details.push(format!("  ✓ {}", message));
+    }
+
+    fn add_error(&mut self, message: String, suggestion: Option<String>) {
+        self.errors += 1;
+        self.details.push(format!("  ✗ {}", message));
+        if let Some(suggestion) = suggestion {
+            self.details.push(format!("    → {}", suggestion));
+        }
+    }
+
+    fn add_warning(&mut self, message: String, suggestion: Option<String>) {
+        self.warnings += 1;
+        self.details.push(format!("  ! {}", message));
+        if let Some(suggestion) = suggestion {
+            self.details.push(format!("    → {}", suggestion));
+        }
+    }
+
+    fn add_info(&mut self, message: String) {
+        self.details.push(format!("    - {}", message));
+    }
+}
+
 pub fn doctor() -> eyre::Result<()> {
-    println!("🩺 de Doctor - Health Check");
-    println!("═══════════════════════════");
+    println!("de doctor");
+    println!("---------");
+
+    // Check system dependencies
+    println!("System Dependencies:");
+    let system_result = check_system_dependencies();
+    for detail in &system_result.details {
+        println!("{}", detail);
+    }
     println!();
 
-    let mut issues_found = 0;
-    let mut warnings_found = 0;
-
-    // Check Docker installation
-    println!("🐳 Checking Docker installation...");
-    match check_docker() {
-        Ok(version) => println!("   ✅ Docker is available ({})", version),
-        Err(e) => {
-            println!("   ❌ Docker is not available: {}", e);
-            println!("      💡 Install Docker from https://docs.docker.com/get-docker/");
-            issues_found += 1;
-        }
+    // Check project configuration
+    println!("Project Configuration:");
+    let project_result = check_project_configuration();
+    for detail in &project_result.details {
+        println!("{}", detail);
     }
-
-    // Check Docker Compose installation
-    println!("🐙 Checking Docker Compose installation...");
-    match check_docker_compose() {
-        Ok(version) => println!("   ✅ Docker Compose is available ({})", version),
-        Err(e) => {
-            println!("   ❌ Docker Compose is not available: {}", e);
-            println!(
-                "      💡 Install Docker Compose from https://docs.docker.com/compose/install/"
-            );
-            issues_found += 1;
-        }
-    }
-
-    // Check if we're in a de project
-    println!("📁 Checking current project...");
-    match Project::current() {
-        Ok(Some(project)) => {
-            println!(
-                "   ✅ Found de project: {}",
-                project.manifest().project().name
-            );
-
-            // Check project configuration
-            let project_issues = check_project_health(&project);
-            issues_found += project_issues.0;
-            warnings_found += project_issues.1;
-        }
-        Ok(None) => {
-            println!("   ⚠️  Not in a de project directory");
-            println!("      💡 Run 'de init' to initialize a project here");
-            warnings_found += 1;
-        }
-        Err(e) => {
-            println!("   ❌ Error checking project: {}", e);
-            issues_found += 1;
-        }
-    }
+    println!();
 
     // Check workspace configuration
-    println!("🏢 Checking workspace configuration...");
-    match Workspace::active() {
-        Ok(Some(workspace)) => {
-            println!("   ✅ Active workspace: {}", workspace.config().name);
-
-            // Check workspace health
-            let (workspace_issues, workspace_warnings) = check_workspace_health(&workspace);
-            issues_found += workspace_issues;
-            warnings_found += workspace_warnings;
-        }
-        Ok(None) => {
-            println!("   ⚠️  No active workspace found");
-            println!("      💡 Initialize a project or set an active workspace");
-            warnings_found += 1;
-        }
-        Err(e) => {
-            println!("   ❌ Error checking workspace: {}", e);
-            issues_found += 1;
-        }
+    println!("Workspace Configuration:");
+    let workspace_result = check_workspace_configuration();
+    for detail in &workspace_result.details {
+        println!("{}", detail);
     }
 
-    // Summary
-    println!();
-    println!("📊 Health Check Summary");
-    println!("═══════════════════════");
+    // Calculate totals and print status
+    let total_errors = system_result.errors + project_result.errors + workspace_result.errors;
+    let total_warnings =
+        system_result.warnings + project_result.warnings + workspace_result.warnings;
 
-    if issues_found == 0 && warnings_found == 0 {
-        println!("🎉 Everything looks healthy! No issues found.");
+    println!();
+    println!("Status:");
+    if total_errors == 0 && total_warnings == 0 {
+        println!("  All systems operational");
     } else {
-        if issues_found > 0 {
-            println!("❌ {} critical issue(s) found", issues_found);
+        if total_errors > 0 {
+            println!("  {} error(s) found", total_errors);
         }
-        if warnings_found > 0 {
-            println!("⚠️  {} warning(s) found", warnings_found);
+        if total_warnings > 0 {
+            println!("  {} warning(s) found", total_warnings);
         }
         println!();
-        println!("💡 Address the issues above to ensure optimal de experience.");
+        println!("Run 'de doctor' again after addressing issues to verify fixes.");
     }
 
     Ok(())
+}
+
+fn check_system_dependencies() -> DiagnosticResult {
+    let mut result = DiagnosticResult::new();
+
+    // Check Docker
+    match check_docker() {
+        Ok(version) => result.add_success(format!("Docker: {}", version.trim())),
+        Err(e) => result.add_error(
+            format!("Docker: {}", e),
+            Some("Install from https://docs.docker.com/get-docker/".to_string()),
+        ),
+    }
+
+    // Check Docker Compose
+    match check_docker_compose() {
+        Ok(version) => result.add_success(format!("Docker Compose: {}", version.trim())),
+        Err(e) => result.add_error(
+            format!("Docker Compose: {}", e),
+            Some("Install from https://docs.docker.com/compose/install/".to_string()),
+        ),
+    }
+
+    result
+}
+
+fn check_project_configuration() -> DiagnosticResult {
+    let mut result = DiagnosticResult::new();
+
+    match Project::current() {
+        Ok(Some(project)) => {
+            result.add_success(format!("Project: {}", project.manifest().project().name));
+            check_project_details(&project, &mut result);
+        }
+        Ok(None) => {
+            result.add_warning(
+                "Not in a de project directory".to_string(),
+                Some("Run 'de init' to initialize a project here".to_string()),
+            );
+        }
+        Err(e) => {
+            result.add_error(format!("Project check failed: {}", e), None);
+        }
+    }
+
+    result
+}
+
+fn check_workspace_configuration() -> DiagnosticResult {
+    let mut result = DiagnosticResult::new();
+
+    match Workspace::active() {
+        Ok(Some(workspace)) => {
+            result.add_success(format!("Active workspace: {}", workspace.config().name));
+            check_workspace_details(&workspace, &mut result);
+        }
+        Ok(None) => {
+            result.add_warning(
+                "No active workspace found".to_string(),
+                Some("Initialize a project or set an active workspace".to_string()),
+            );
+        }
+        Err(e) => {
+            result.add_error(format!("Workspace check failed: {}", e), None);
+        }
+    }
+
+    result
 }
 
 fn check_docker() -> eyre::Result<String> {
@@ -164,49 +223,37 @@ fn check_docker_compose() -> eyre::Result<String> {
     Ok(version)
 }
 
-fn check_project_health(project: &Project) -> (u32, u32) {
-    let mut issues = 0;
-    let mut warnings = 0;
-
+fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
     // Check if project directory exists
     if !project.dir().exists() {
-        println!(
-            "   ❌ Project directory does not exist: {}",
-            project.dir().display()
+        result.add_error(
+            format!("Project directory missing: {}", project.dir().display()),
+            None,
         );
-        issues += 1;
     }
 
     // Check if de.toml exists and is readable
     if !project.manifest_path().exists() {
-        println!("   ❌ Project manifest (de.toml) does not exist");
-        issues += 1;
-    } else {
-        println!("   ✅ Project manifest found");
+        result.add_error("Project manifest (de.toml) missing".to_string(), None);
     }
 
     // Check Docker Compose file if configured
     match project.docker_compose_path() {
         Ok(Some(compose_path)) => {
-            println!(
-                "   ✅ Docker Compose file found: {}",
-                compose_path.display()
-            );
-
-            // Try to validate the compose file
             if let Err(e) = validate_docker_compose(&compose_path) {
-                println!("   ❌ Docker Compose file validation failed: {}", e);
-                issues += 1;
+                result.add_error(format!("Docker Compose file invalid: {}", e), None);
             } else {
-                println!("   ✅ Docker Compose file is valid");
+                result.add_success(format!(
+                    "Docker Compose file: {}",
+                    compose_path.file_name().unwrap().to_string_lossy()
+                ));
             }
         }
         Ok(None) => {
-            println!("   ℹ️  No Docker Compose file configured (optional)");
+            result.add_info("Docker Compose: not configured".to_string());
         }
         Err(e) => {
-            println!("   ❌ Error checking Docker Compose file: {}", e);
-            issues += 1;
+            result.add_error(format!("Docker Compose check failed: {}", e), None);
         }
     }
 
@@ -218,37 +265,34 @@ fn check_project_health(project: &Project) -> (u32, u32) {
         .map(|t| t.len())
         .unwrap_or(0);
     if task_count == 0 {
-        println!("   ⚠️  No tasks defined in project");
-        println!("      💡 Add tasks to your de.toml to make the most of de");
-        warnings += 1;
+        result.add_warning(
+            "No tasks defined".to_string(),
+            Some("Add tasks to your de.toml".to_string()),
+        );
     } else {
-        println!("   ✅ {} task(s) defined", task_count);
+        result.add_success(format!("Tasks: {} defined", task_count));
     }
 
     // Check .env file
     let env_file = project.dir().join(".env");
     if env_file.exists() {
-        println!("   ✅ Environment file (.env) found");
+        result.add_success("Environment file: .env".to_string());
     } else {
-        println!("   ℹ️  No .env file found (optional)");
+        result.add_info("Environment file: not found".to_string());
     }
-
-    (issues, warnings)
 }
 
-fn check_workspace_health(workspace: &Workspace) -> (u32, u32) {
-    let issues = 0;
-    let mut warnings = 0;
-
+fn check_workspace_details(workspace: &Workspace, result: &mut DiagnosticResult) {
     let config = workspace.config();
     let project_count = config.projects.len();
 
     if project_count == 0 {
-        println!("   ⚠️  Workspace has no projects");
-        println!("      💡 Run 'de scan' to discover projects or 'de init' to create new ones");
-        warnings += 1;
+        result.add_warning(
+            "Workspace has no projects".to_string(),
+            Some("Run 'de scan' to discover projects or 'de init' to create new ones".to_string()),
+        );
     } else {
-        println!("   ✅ Workspace contains {} project(s)", project_count);
+        result.add_success(format!("Projects: {} registered", project_count));
 
         // Check if projects still exist
         let mut valid_projects = 0;
@@ -259,29 +303,28 @@ fn check_workspace_health(workspace: &Workspace) -> (u32, u32) {
                 valid_projects += 1;
             } else {
                 invalid_projects += 1;
-                println!(
-                    "   ❌ Project '{}' directory not found: {}",
-                    project_id,
-                    workspace_project.dir.display()
+                result.add_error(
+                    format!(
+                        "Missing: {} ({})",
+                        project_id,
+                        workspace_project.dir.display()
+                    ),
+                    None,
                 );
             }
         }
 
         if invalid_projects > 0 {
-            println!(
-                "   ⚠️  {} project(s) have missing directories",
-                invalid_projects
+            result.add_warning(
+                format!("{} project(s) have missing directories", invalid_projects),
+                Some("Run 'de update' to clean up workspace configuration".to_string()),
             );
-            println!("      💡 Run 'de update' to clean up workspace configuration");
-            warnings += 1;
         }
 
-        if valid_projects > 0 {
-            println!("   ✅ {} project(s) have valid directories", valid_projects);
+        if valid_projects > 0 && invalid_projects == 0 {
+            result.add_success("All project directories found".to_string());
         }
     }
-
-    (issues, warnings)
 }
 
 fn validate_docker_compose(compose_path: &std::path::Path) -> eyre::Result<()> {
