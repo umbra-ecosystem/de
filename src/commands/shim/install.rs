@@ -1,6 +1,6 @@
 use eyre::{Context, eyre};
 
-use crate::shim::get_shims_dir;
+use crate::utils::get_shims_dir;
 use std::{
     fs,
     io::Write,

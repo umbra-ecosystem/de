@@ -3,7 +3,6 @@ mod commands;
 mod config;
 mod constants;
 mod project;
-mod shim;
 mod types;
 mod utils;
 mod workspace;

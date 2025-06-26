@@ -1,4 +1,4 @@
-use crate::shim::get_shims_dir;
+use crate::utils::get_shims_dir;
 use eyre::{WrapErr, eyre};
 
 pub fn list() -> eyre::Result<()> {

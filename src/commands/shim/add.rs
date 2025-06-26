@@ -1,8 +1,8 @@
 use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 
 use crate::{
-    shim::{generate_shim_bash_script, get_shims_dir},
     types::Slug,
+    utils::{generate_shim_bash_script, get_shims_dir},
 };
 use eyre::{WrapErr, eyre};
 

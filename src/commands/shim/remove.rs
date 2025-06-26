@@ -1,4 +1,4 @@
-use crate::{shim::get_shims_dir, types::Slug};
+use crate::{types::Slug, utils::get_shims_dir};
 use eyre::{WrapErr, eyre};
 
 pub fn remove(command: Slug) -> eyre::Result<()> {
