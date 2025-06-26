@@ -6,22 +6,28 @@ use std::process::Command;
 
 /// Show the status of the active workspace and its projects.
 pub fn status() -> eyre::Result<()> {
+    tracing::info!("Starting status command");
     let workspace = match Workspace::active()? {
         Some(ws) => ws,
         None => {
+            tracing::warn!("No active workspace found");
             println!("No active workspace found.");
             return Ok(());
         }
     };
 
     let ws_config = workspace.config();
+    tracing::info!("Loaded workspace '{}'", ws_config.name);
     println!("Workspace: {}", ws_config.name);
     println!("Projects:");
 
     let statuses: Vec<ProjectStatus> = ws_config
         .projects
         .iter()
-        .map(|(slug, ws_project)| ProjectStatus::gather(slug, ws_project))
+        .map(|(slug, ws_project)| {
+            tracing::info!("Processing project '{}'", slug);
+            ProjectStatus::gather(slug, ws_project)
+        })
         .collect();
 
     for status in &statuses {
@@ -30,10 +36,11 @@ pub fn status() -> eyre::Result<()> {
 
     print_status_summary(&statuses);
 
+    tracing::info!("Finished status command");
     Ok(())
 }
 
-/// ProjectStatus holds all status info for a project.
+/// Holds all dynamic status info for a project in the workspace.
 struct ProjectStatus {
     slug: Slug,
     present: bool,
@@ -42,6 +49,7 @@ struct ProjectStatus {
     git: GitStatus,
 }
 
+/// Status for a single Docker Compose service.
 struct DockerServiceStatus {
     name: String,
     status: String,
@@ -49,11 +57,13 @@ struct DockerServiceStatus {
 }
 
 impl ProjectStatus {
+    /// Gather dynamic status for a project, including Git and Docker Compose state.
     fn gather(slug: &Slug, ws_project: &WorkspaceProject) -> Self {
         let dir = &ws_project.dir;
         let present = dir.exists();
 
         if !present {
+            tracing::warn!("Project '{}' directory missing: {}", slug, dir.display());
             return ProjectStatus {
                 slug: slug.clone(),
                 present: false,
@@ -65,10 +75,12 @@ impl ProjectStatus {
 
         match Project::from_dir(dir) {
             Ok(project) => {
+                tracing::debug!("Loaded project manifest for '{}'", slug);
                 let dc_path = project.docker_compose_path().unwrap_or(None);
-                let docker_services = dc_path
-                    .as_ref()
-                    .and_then(|compose_path| get_docker_services(compose_path));
+                let docker_services = dc_path.as_ref().and_then(|compose_path| {
+                    tracing::debug!("Checking Docker Compose services for '{}'", slug);
+                    get_docker_services(compose_path)
+                });
                 let downed_services = dc_path
                     .as_ref()
                     .and_then(|compose_path| get_downed_services(compose_path));
@@ -82,16 +94,20 @@ impl ProjectStatus {
                     git,
                 }
             }
-            Err(_) => ProjectStatus {
-                slug: slug.clone(),
-                present: true,
-                docker_services: None,
-                downed_services: None,
-                git: GitStatus::not_repo(),
-            },
+            Err(e) => {
+                tracing::error!("Failed to load project '{}': {:?}", slug, e);
+                ProjectStatus {
+                    slug: slug.clone(),
+                    present: true,
+                    docker_services: None,
+                    downed_services: None,
+                    git: GitStatus::not_repo(),
+                }
+            }
         }
     }
 
+    /// Print the status for this project.
     fn print(&self) {
         println!(
             "  - {} [{}]",
@@ -114,10 +130,7 @@ impl ProjectStatus {
     }
 }
 
-// --- Types for status reporting ---
-
-// (Removed duplicate ProjectStatus definition)
-
+/// Git status for a project.
 struct GitStatus {
     is_repo: bool,
     branch: Option<String>,
@@ -126,6 +139,9 @@ struct GitStatus {
     dirty: bool,
 }
 
+/// Print a concise, actionable summary of project and service status.
+/// Only nonzero items are shown, each with a one-line suggestion.
+/// If everything is clean, prints a single "All projects and services are up to date."
 fn print_status_summary(statuses: &[ProjectStatus]) {
     let dirty = statuses
         .iter()
@@ -144,6 +160,14 @@ fn print_status_summary(statuses: &[ProjectStatus]) {
         .filter_map(|s| s.downed_services.as_ref())
         .map(|downed| downed.len())
         .sum();
+
+    tracing::info!(
+        "Summary: dirty={}, ahead={}, behind={}, downed_services={}",
+        dirty,
+        ahead,
+        behind,
+        downed_services_total
+    );
 
     println!();
     println!("Status Summary:");
@@ -293,10 +317,11 @@ impl GitStatus {
     }
 }
 
-// --- Status collection logic ---
-
+/// Get the status of all Docker Compose services for a project.
+/// Returns a vector of DockerServiceStatus, or None if docker-compose fails.
 fn get_docker_services(compose_path: &Path) -> Option<Vec<DockerServiceStatus>> {
     use std::process::Command;
+    tracing::debug!("Running docker-compose ps -a for {:?}", compose_path);
     let output = Command::new("docker-compose")
         .arg("-f")
         .arg(compose_path)
@@ -353,6 +378,12 @@ fn get_docker_services(compose_path: &Path) -> Option<Vec<DockerServiceStatus>> 
             let ports = ports_idx
                 .and_then(|idx| fields.get(idx).map(|s| s.to_string()))
                 .filter(|s| !s.is_empty());
+            tracing::debug!(
+                "Service '{}' status: '{}', ports: {:?}",
+                name,
+                status,
+                ports
+            );
             services.push(DockerServiceStatus {
                 name,
                 status,
