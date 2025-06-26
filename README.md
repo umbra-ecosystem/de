@@ -126,6 +126,29 @@ Or list projects in a specific workspace:
 de list --workspace my-workspace
 ```
 
+### 6. Check Project and Environment Health
+
+Diagnose and check the health of your `de` environment:
+
+```bash
+de doctor
+```
+
+This command will check for common issues, missing files, and misconfigurations in your workspace and projects.
+
+### 7. Show Workspace and Project Status
+
+Get a concise, actionable summary of the dynamic state of all projects in the current workspace:
+
+```bash
+de status
+```
+
+This command shows:
+- Git status (uncommitted changes, ahead/behind remote)
+- Docker Compose service status (up/down)
+- A summary of actionable items with suggestions
+
 ## Project Initialization
 
 ### Initialize a New Project
@@ -243,6 +266,30 @@ de scan ~/projects
 # Scan for only specific workspace projects
 de scan ~/production-apps --workspace production
 ```
+
+#### Doctor
+
+Diagnose your environment, dependencies, and project/workspace configuration:
+
+```bash
+de doctor
+```
+
+- Checks for required system dependencies (Docker, Docker Compose)
+- Validates project and workspace configuration
+- Reports missing files, misconfigurations, and actionable suggestions
+
+#### Status
+
+Show a concise, actionable summary of the current workspace:
+
+```bash
+de status
+```
+
+- Shows Git status (uncommitted changes, ahead/behind remote)
+- Shows Docker Compose service status (up/down)
+- Summarizes actionable items with suggestions
 
 #### Workspace Synchronization
 
