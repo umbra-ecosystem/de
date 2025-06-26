@@ -1,7 +1,7 @@
 use eyre::eyre;
 use std::process::Command;
 
-use crate::{project::Project, workspace::Workspace};
+use crate::{project::Project, types::Slug, workspace::Workspace};
 
 #[derive(Debug)]
 struct DiagnosticResult {
@@ -20,34 +20,31 @@ impl DiagnosticResult {
     }
 
     fn add_success(&mut self, message: String) {
-        self.details.push(format!("    ✓ {}", message));
+        self.details.push(format!("  ✓ {}", message));
     }
 
     fn add_error(&mut self, message: String, suggestion: Option<String>) {
         self.errors += 1;
-        self.details.push(format!("    ✗ {}", message));
+        self.details.push(format!("  ✗ {}", message));
         if let Some(suggestion) = suggestion {
-            self.details.push(format!("      → {}", suggestion));
+            self.details.push(format!("    → {}", suggestion));
         }
     }
 
     fn add_warning(&mut self, message: String, suggestion: Option<String>) {
         self.warnings += 1;
-        self.details.push(format!("    ! {}", message));
+        self.details.push(format!("  ! {}", message));
         if let Some(suggestion) = suggestion {
-            self.details.push(format!("      → {}", suggestion));
+            self.details.push(format!("    → {}", suggestion));
         }
     }
 
     fn add_info(&mut self, message: String) {
-        self.details.push(format!("    - {}", message));
+        self.details.push(format!("  - {}", message));
     }
 }
 
-pub fn doctor() -> eyre::Result<()> {
-    println!("de doctor");
-    println!("---------");
-
+pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
     // Check system dependencies
     println!("System Dependencies:");
     let system_result = check_system_dependencies();
@@ -57,24 +54,43 @@ pub fn doctor() -> eyre::Result<()> {
     println!();
 
     // Check project configuration
-    println!("Project Configuration:");
-    let project_result = check_project_configuration();
-    for detail in &project_result.details {
-        println!("{}", detail);
-    }
-    println!();
+    // We don't want to show the project in doctor if its not in the current workspace
+    let project = Project::current();
+    let project_result = if workspace_name.as_ref()
+        .map(|workspace_name| matches!(project, Ok(Some(project)) if &project.manifest().project().workspace == workspace_name))
+        .unwrap_or(true)
+    {
+        println!("Project Configuration:");
+        let project_result = check_project_configuration();
+        for detail in &project_result.details {
+            println!("{}", detail);
+        }
+        println!();
+        Some(project_result)
+    } else {
+        None
+    };
 
     // Check workspace configuration
     println!("Workspace Configuration:");
-    let workspace_result = check_workspace_configuration();
+    let workspace_result = check_workspace_configuration(workspace_name.as_ref());
     for detail in &workspace_result.details {
         println!("{}", detail);
     }
 
     // Calculate totals and print status
-    let total_errors = system_result.errors + project_result.errors + workspace_result.errors;
-    let total_warnings =
-        system_result.warnings + project_result.warnings + workspace_result.warnings;
+    let total_errors = system_result.errors
+        + project_result
+            .as_ref()
+            .map(|v| v.errors)
+            .unwrap_or_default()
+        + workspace_result.errors;
+    let total_warnings = system_result.warnings
+        + project_result
+            .as_ref()
+            .map(|v| v.warnings)
+            .unwrap_or_default()
+        + workspace_result.warnings;
 
     println!();
     println!("Status:");
@@ -140,19 +156,32 @@ fn check_project_configuration() -> DiagnosticResult {
     result
 }
 
-fn check_workspace_configuration() -> DiagnosticResult {
+fn check_workspace_configuration(workspace_name: Option<&Slug>) -> DiagnosticResult {
     let mut result = DiagnosticResult::new();
 
-    match Workspace::active() {
+    let workspace = if let Some(name) = workspace_name {
+        Workspace::load_from_name(name)
+    } else {
+        Workspace::active()
+    };
+
+    match workspace {
         Ok(Some(workspace)) => {
-            result.add_success(format!("Active workspace: {}", workspace.config().name));
+            result.add_success(format!("Workspace: {}", workspace.config().name));
             check_workspace_details(&workspace, &mut result);
         }
         Ok(None) => {
-            result.add_warning(
-                "No active workspace found".to_string(),
-                Some("Initialize a project or set an active workspace".to_string()),
-            );
+            if workspace_name.is_some() {
+                result.add_error(
+                    "Workspace not found".to_string(),
+                    Some("Check if the workspace name is correct or run 'de init' to create a new workspace".to_string()
+                ));
+            } else {
+                result.add_warning(
+                    "No active workspace found".to_string(),
+                    Some("Initialize a project or set an active workspace".to_string()),
+                );
+            }
         }
         Err(e) => {
             result.add_error(format!("Workspace check failed: {}", e), None);

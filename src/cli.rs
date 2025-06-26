@@ -102,7 +102,10 @@ pub enum Commands {
     },
 
     /// Diagnose and check the health of your de environment.
-    Doctor,
+    Doctor {
+        /// The name of the workspace to diagnose. Defaults to the active workspace.
+        workspace: Option<Slug>,
+    },
 
     /// Show the status of the current workspace and projects.
     Status,
