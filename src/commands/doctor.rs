@@ -20,22 +20,22 @@ impl DiagnosticResult {
     }
 
     fn add_success(&mut self, message: String) {
-        self.details.push(format!("  ✓ {}", message));
+        self.details.push(format!("    ✓ {}", message));
     }
 
     fn add_error(&mut self, message: String, suggestion: Option<String>) {
         self.errors += 1;
-        self.details.push(format!("  ✗ {}", message));
+        self.details.push(format!("    ✗ {}", message));
         if let Some(suggestion) = suggestion {
-            self.details.push(format!("    → {}", suggestion));
+            self.details.push(format!("      → {}", suggestion));
         }
     }
 
     fn add_warning(&mut self, message: String, suggestion: Option<String>) {
         self.warnings += 1;
-        self.details.push(format!("  ! {}", message));
+        self.details.push(format!("    ! {}", message));
         if let Some(suggestion) = suggestion {
-            self.details.push(format!("    → {}", suggestion));
+            self.details.push(format!("      → {}", suggestion));
         }
     }
 
