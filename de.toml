@@ -1,3 +1,6 @@
 [project]
 name = "de"
 workspace = "de"
+
+[tasks]
+testing-this = { service = "testing-this", command = "echo 'Testing this task'" }

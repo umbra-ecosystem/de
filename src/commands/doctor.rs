@@ -224,6 +224,9 @@ fn check_docker_compose() -> eyre::Result<String> {
 }
 
 fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
+    use crate::project::Task;
+    use std::process::Command;
+
     // Check if project directory exists
     if !project.dir().exists() {
         result.add_error(
@@ -237,6 +240,9 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
         result.add_error("Project manifest (de.toml) missing".to_string(), None);
     }
 
+    // Track Compose services for later check
+    let mut compose_services: Option<Vec<String>> = None;
+
     // Check Docker Compose file if configured
     match project.docker_compose_path() {
         Ok(Some(compose_path)) => {
@@ -247,6 +253,53 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
                     "Docker Compose file: {}",
                     compose_path.file_name().unwrap().to_string_lossy()
                 ));
+
+                // Try to get list of services from docker-compose config --services
+                let output = Command::new("docker-compose")
+                    .arg("-f")
+                    .arg(&compose_path)
+                    .arg("config")
+                    .arg("--services")
+                    .output();
+
+                let services = if let Ok(output) = &output {
+                    if output.status.success() {
+                        let stdout = String::from_utf8_lossy(&output.stdout);
+                        let v: Vec<String> = stdout.lines().map(|s| s.trim().to_string()).collect();
+                        if !v.is_empty() { Some(v) } else { None }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Fallback to docker compose (plugin) if standalone fails
+                let services = if services.is_none() {
+                    let output = Command::new("docker")
+                        .arg("compose")
+                        .arg("-f")
+                        .arg(&compose_path)
+                        .arg("config")
+                        .arg("--services")
+                        .output();
+                    if let Ok(output) = &output {
+                        if output.status.success() {
+                            let stdout = String::from_utf8_lossy(&output.stdout);
+                            let v: Vec<String> =
+                                stdout.lines().map(|s| s.trim().to_string()).collect();
+                            if !v.is_empty() { Some(v) } else { None }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    services
+                };
+
+                compose_services = services;
             }
         }
         Ok(None) => {
@@ -271,6 +324,44 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
         );
     } else {
         result.add_success(format!("Tasks: {} defined", task_count));
+    }
+
+    // Check if Compose tasks reference missing services or if no Compose file exists
+    if let Some(tasks) = project.manifest().tasks.as_ref() {
+        if let Some(services) = compose_services.as_ref() {
+            let service_set: std::collections::HashSet<_> = services.iter().collect();
+            for (task_name, task) in tasks {
+                if let Task::Compose { service, .. } = task {
+                    if !service_set.contains(&service) {
+                        result.add_error(
+                            format!(
+                                "Task '{}' references missing Docker Compose service '{}'",
+                                task_name, service
+                            ),
+                            Some(
+                                "Check your de.toml and docker-compose.yml for consistency"
+                                    .to_string(),
+                            ),
+                        );
+                    }
+                }
+            }
+        } else {
+            // No Compose file found, but there are Compose tasks
+            for (task_name, task) in tasks {
+                if let Task::Compose { service, .. } = task {
+                    result.add_error(
+                        format!(
+                            "Task '{}' references Docker Compose service '{}' but no Docker Compose file is configured or found",
+                            task_name, service
+                        ),
+                        Some(
+                            "Add a docker-compose.yml or configure the docker_compose path in de.toml".to_string(),
+                        ),
+                    );
+                }
+            }
+        }
     }
 
     // Check .env file
