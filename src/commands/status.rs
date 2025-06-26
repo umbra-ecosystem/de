@@ -32,12 +32,21 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
     println!("Workspace: {}", ws_config.name);
     println!("Projects:");
 
+    let current_project = Project::current()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to load current project")?;
+
     let statuses: Vec<ProjectStatus> = ws_config
         .projects
         .iter()
-        .map(|(slug, ws_project)| {
-            tracing::info!("Processing project '{}'", slug);
-            ProjectStatus::gather(slug, ws_project)
+        .map(|(project_name, ws_project)| {
+            tracing::info!("Processing project '{}'", project_name);
+            ProjectStatus::gather(
+                &ws_config.name,
+                project_name,
+                ws_project,
+                current_project.as_ref(),
+            )
         })
         .collect();
 
@@ -55,6 +64,7 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
 struct ProjectStatus {
     slug: Slug,
     present: bool,
+    current: bool,
     docker_services: Option<Vec<DockerServiceStatus>>,
     downed_services: Option<Vec<String>>,
     git: GitStatus,
@@ -69,15 +79,25 @@ struct DockerServiceStatus {
 
 impl ProjectStatus {
     /// Gather dynamic status for a project, including Git and Docker Compose state.
-    fn gather(slug: &Slug, ws_project: &WorkspaceProject) -> Self {
+    fn gather(
+        workspace_name: &Slug,
+        project_name: &Slug,
+        ws_project: &WorkspaceProject,
+        current_project: Option<&Project>,
+    ) -> Self {
         let dir = &ws_project.dir;
         let present = dir.exists();
 
         if !present {
-            tracing::warn!("Project '{}' directory missing: {}", slug, dir.display());
+            tracing::warn!(
+                "Project '{}' directory missing: {}",
+                project_name,
+                dir.display()
+            );
             return ProjectStatus {
-                slug: slug.clone(),
+                slug: project_name.clone(),
                 present: false,
+                current: false,
                 docker_services: None,
                 downed_services: None,
                 git: GitStatus::not_repo(),
@@ -86,30 +106,39 @@ impl ProjectStatus {
 
         match Project::from_dir(dir) {
             Ok(project) => {
-                tracing::debug!("Loaded project manifest for '{}'", slug);
+                tracing::debug!("Loaded project manifest for '{}'", project_name);
+
+                let current = current_project.as_ref().map_or(false, |p| {
+                    &p.manifest().project().workspace == workspace_name
+                        && &p.manifest().project().name == project_name
+                });
+
                 let dc_path = project.docker_compose_path().unwrap_or(None);
                 let docker_services = dc_path.as_ref().and_then(|compose_path| {
-                    tracing::debug!("Checking Docker Compose services for '{}'", slug);
+                    tracing::debug!("Checking Docker Compose services for '{}'", project_name);
                     get_docker_services(compose_path)
                 });
                 let downed_services = dc_path
                     .as_ref()
                     .and_then(|compose_path| get_downed_services(compose_path));
+
                 let git = GitStatus::gather(dir);
 
                 ProjectStatus {
-                    slug: slug.clone(),
+                    slug: project_name.clone(),
                     present: true,
+                    current,
                     docker_services,
                     downed_services,
                     git,
                 }
             }
             Err(e) => {
-                tracing::error!("Failed to load project '{}': {:?}", slug, e);
+                tracing::error!("Failed to load project '{}': {:?}", project_name, e);
                 ProjectStatus {
-                    slug: slug.clone(),
+                    slug: project_name.clone(),
                     present: true,
+                    current: false,
                     docker_services: None,
                     downed_services: None,
                     git: GitStatus::not_repo(),
@@ -121,9 +150,10 @@ impl ProjectStatus {
     /// Print the status for this project.
     fn print(&self) {
         println!(
-            "  - {} [{}]",
+            "  - {} [{}]{}",
             self.slug,
-            if self.present { "present" } else { "missing" }
+            if self.present { "present" } else { "missing" },
+            if self.current { " - current" } else { "" }
         );
         println!("      Git: {}", self.git.format());
         if let Some(ref docker_services) = self.docker_services {
