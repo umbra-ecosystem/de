@@ -131,6 +131,14 @@ fn print_status_summary(statuses: &[ProjectStatus]) {
         .iter()
         .filter(|s| s.git.is_repo && s.git.dirty)
         .count();
+    let ahead = statuses
+        .iter()
+        .filter(|s| s.git.is_repo && s.git.ahead.unwrap_or(0) > 0)
+        .count();
+    let behind = statuses
+        .iter()
+        .filter(|s| s.git.is_repo && s.git.behind.unwrap_or(0) > 0)
+        .count();
     let downed_services_total: usize = statuses
         .iter()
         .filter_map(|s| s.downed_services.as_ref())
@@ -139,11 +147,29 @@ fn print_status_summary(statuses: &[ProjectStatus]) {
 
     println!();
     println!("Status Summary:");
-    println!("  Projects with uncommitted changes: {}", dirty);
-    println!(
-        "  Downed Docker Compose services: {}",
-        downed_services_total
-    );
+    let mut any = false;
+    if dirty > 0 {
+        println!("  Uncommitted changes: {}    (run: git commit)", dirty);
+        any = true;
+    }
+    if behind > 0 {
+        println!("  To pull: {}                (run: git pull)", behind);
+        any = true;
+    }
+    if ahead > 0 {
+        println!("  To push: {}                (run: git push)", ahead);
+        any = true;
+    }
+    if downed_services_total > 0 {
+        println!(
+            "  Downed services: {}        (run: docker-compose up -d)",
+            downed_services_total
+        );
+        any = true;
+    }
+    if !any {
+        println!("  All projects and services are up to date.");
+    }
 }
 
 impl GitStatus {
