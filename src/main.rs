@@ -85,8 +85,8 @@ fn main() -> eyre::Result<()> {
         Commands::Doctor { workspace } => {
             commands::doctor(workspace)?;
         }
-        Commands::Status => {
-            commands::status()?;
+        Commands::Status { workspace } => {
+            commands::status(workspace)?;
         }
     }
 

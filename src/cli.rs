@@ -108,7 +108,10 @@ pub enum Commands {
     },
 
     /// Show the status of the current workspace and projects.
-    Status,
+    Status {
+        /// The name of the workspace to show status for. Defaults to the active workspace.
+        workspace: Option<Slug>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

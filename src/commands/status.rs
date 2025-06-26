@@ -1,18 +1,29 @@
-use crate::project::Project;
-use crate::types::Slug;
-use crate::workspace::{Workspace, WorkspaceProject};
+use eyre::{WrapErr, eyre};
 use std::path::Path;
 use std::process::Command;
 
+use crate::project::Project;
+use crate::types::Slug;
+use crate::workspace::{Workspace, WorkspaceProject};
+
 /// Show the status of the active workspace and its projects.
-pub fn status() -> eyre::Result<()> {
+pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
     tracing::info!("Starting status command");
-    let workspace = match Workspace::active()? {
-        Some(ws) => ws,
-        None => {
-            tracing::warn!("No active workspace found");
-            println!("No active workspace found.");
-            return Ok(());
+
+    let workspace = if let Some(workspace_name) = workspace_name {
+        tracing::info!("Loading workspace '{}'", workspace_name);
+        Workspace::load_from_name(&workspace_name)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?
+            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?
+    } else {
+        match Workspace::active()? {
+            Some(ws) => ws,
+            None => {
+                tracing::warn!("No active workspace found");
+                println!("No active workspace found.");
+                return Ok(());
+            }
         }
     };
 
