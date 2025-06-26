@@ -86,6 +86,9 @@ fn main() -> eyre::Result<()> {
         Commands::Doctor => {
             commands::doctor()?;
         }
+        Commands::Status => {
+            commands::status()?;
+        }
     }
 
     Ok(())

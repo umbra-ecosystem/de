@@ -5,6 +5,7 @@ mod run;
 mod scan;
 pub mod self_;
 mod start;
+mod status;
 mod stop;
 mod update;
 
@@ -17,5 +18,6 @@ pub use list::list;
 pub use run::run;
 pub use scan::scan;
 pub use start::start;
+pub use status::status;
 pub use stop::stop;
 pub use update::update;

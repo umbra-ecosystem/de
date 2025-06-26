@@ -103,6 +103,9 @@ pub enum Commands {
 
     /// Diagnose and check the health of your de environment.
     Doctor,
+
+    /// Show the status of the current workspace and projects.
+    Status,
 }
 
 #[derive(Debug, Subcommand)]
