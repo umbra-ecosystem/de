@@ -7,14 +7,27 @@
 
 ## Features
 
-- 🏗️ **Project Management**: Initialize and organize projects with declarative configuration
-- 🌐 **Workspace Organization**: Group related projects into named workspaces
-- ⚡ **Task Execution**: Define and run both shell commands and Docker Compose service tasks
-- 🔗 **Command Shims**: Create command aliases that can be added to your PATH
-- 🔍 **Project Discovery**: Automatically scan and register projects in your workspaces
-- 🔄 **Workspace Synchronization**: Update and maintain workspace configurations and project registrations
-- 🚀 **Docker Compose Management**: Start and stop all Docker Compose projects in a workspace
-- 🔧 **Environment Support**: Load `.env` files and environment variable configuration
+- **Workspace & Project Management**
+  - 🏗️ Initialize and organize projects with declarative configuration
+  - 🌐 Group related projects into named workspaces
+  - 🔍 Automatically discover and register projects
+  - 🔄 Synchronize and update workspace/project registrations
+
+- **Task & Command Execution**
+  - ⚡ Define and run both shell commands and Docker Compose service tasks
+  - 🔗 Create command shims/aliases for easy access
+
+- **Docker Compose Integration**
+  - 🚀 Start and stop all Docker Compose projects in a workspace
+  - 📦 Manage services across multiple projects
+
+- **Environment & Configuration**
+  - 🔧 Load `.env` files and environment variable configuration
+  - 🏷️ Support for local overrides and configuration hierarchy
+
+- **Diagnostics & Status**
+  - 🩺 Diagnose environment, dependencies, and configuration with `de doctor`
+  - 📊 Get a concise, actionable summary of Git and Docker Compose status with `de status`
 
 ## Installation
 
