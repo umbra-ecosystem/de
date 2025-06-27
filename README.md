@@ -16,6 +16,7 @@
 - **Task & Command Execution**
   - ⚡ Define and run both shell commands and Docker Compose service tasks
   - 🔗 Create command shims/aliases for easy access
+  - ✅ Check and list available tasks
 
 - **Docker Compose Integration**
   - 🚀 Start and stop all Docker Compose projects in a workspace
@@ -291,6 +292,7 @@ de doctor
 - Checks for required system dependencies (Docker, Docker Compose)
 - Validates project and workspace configuration
 - Reports missing files, misconfigurations, and actionable suggestions
+- Checks if Docker Compose services referenced in tasks exist
 
 #### Status
 
@@ -349,6 +351,18 @@ The update command will:
 - Display the new version number after successful update
 - Show "No updates available" if you're already on the latest version
 
+#### Task Management
+
+Manage tasks defined in your project's `de.toml` file.
+
+```bash
+# List all available tasks
+de task list
+
+# Check if a specific task is defined
+de task check <task-name>
+```
+
 #### Command Shims
 
 Create command aliases that work from anywhere:
@@ -376,13 +390,19 @@ de start
 
 # Start all Docker Compose projects in a specific workspace
 de start --workspace production
+```
 
+The `start` command will also set the started workspace as the active one.
+
+```bash
 # Stop all Docker Compose projects in the active workspace
 de stop
 
 # Stop all Docker Compose projects in a specific workspace
 de stop --workspace production
 ```
+
+The `stop` command will check for uncommitted or unpushed changes and prompt for confirmation before stopping. It will also deactivate the workspace if it was the active one.
 
 These commands automatically run `docker-compose up -d` and `docker-compose down` respectively for all projects in the workspace that have Docker Compose files configured.
 
