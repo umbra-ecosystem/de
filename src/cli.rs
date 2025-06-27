@@ -128,9 +128,6 @@ pub enum TaskCommands {
 
 #[derive(Debug, Subcommand)]
 pub enum ShimCommands {
-    /// Add de shims directory to the PATH.
-    Install,
-
     /// Add a shim for a specific command.
     Add {
         /// The command to shim.
@@ -145,6 +142,12 @@ pub enum ShimCommands {
 
     /// List all shims currently installed.
     List,
+
+    /// Add de shims directory to the PATH.
+    Install,
+
+    /// Uninstall the de shims directory from the PATH.
+    Uninstall,
 }
 
 #[derive(Debug, Subcommand)]

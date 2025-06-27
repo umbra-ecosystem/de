@@ -1,8 +1,36 @@
+use eyre::{WrapErr, eyre};
+use std::path::Path;
+
 use crate::utils::get_project_dirs;
 
 pub fn get_shims_dir() -> eyre::Result<std::path::PathBuf> {
     let dirs = get_project_dirs()?;
     Ok(dirs.data_dir().join("shims"))
+}
+
+pub fn shim_export_line(shims_dir: &Path) -> eyre::Result<String> {
+    let shims_dir_str = shims_dir
+        .to_str()
+        .ok_or_else(|| eyre::eyre!("Failed to convert shims directory path to string"))?;
+    Ok(format!("export PATH=\"{}:$PATH\"", shims_dir_str))
+}
+
+pub fn check_shim_installation_in_shell_config(
+    file: &Path,
+    shims_dir: &Path,
+) -> eyre::Result<bool> {
+    if !file.exists() {
+        return Ok(false);
+    }
+
+    // This is above content read to avoid reading the file if export line fails
+    let shim_export = shim_export_line(shims_dir)?;
+
+    let content = std::fs::read_to_string(file)
+        .map_err(|e| eyre!(e))
+        .wrap_err_with(|| format!("Failed to read file: {}", file.display()))?;
+
+    Ok(content.contains(&shim_export))
 }
 
 pub fn generate_shim_bash_script(program_name: &str) -> String {

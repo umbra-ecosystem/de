@@ -19,6 +19,7 @@ pub fn add(command: Slug) -> eyre::Result<()> {
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| format!("Failed to write shim to {}", shim_path.display()))?;
 
+    #[cfg(target_family = "unix")]
     apply_executable_permissions(&shim_path)
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| {
@@ -31,6 +32,7 @@ pub fn add(command: Slug) -> eyre::Result<()> {
     Ok(())
 }
 
+#[cfg(target_family = "unix")]
 fn apply_executable_permissions(shim_file: &Path) -> eyre::Result<()> {
     let mut permissions = fs::metadata(shim_file)?.permissions();
     permissions.set_mode(permissions.mode() | 0o111); // Add execute permissions for owner, group, others

@@ -1,6 +1,9 @@
 use eyre::{Context, eyre};
 
-use crate::utils::get_shims_dir;
+use crate::utils::{
+    check_shim_installation_in_shell_config, get_shims_dir, shim_export_line,
+    unix::{get_shell_config_paths, primary_shell_config_path},
+};
 use std::{
     fs,
     io::Write,
@@ -12,19 +15,7 @@ pub fn install() -> eyre::Result<()> {
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get shims directory")?;
 
-    let user_dirs =
-        directories::UserDirs::new().ok_or_else(|| eyre!("Failed to get user directories"))?;
-    let home_dir = user_dirs.home_dir();
-
-    let shell_config_paths = if cfg!(target_os = "linux") {
-        vec![home_dir.join(".bashrc"), home_dir.join(".zshrc")]
-    } else if cfg!(target_os = "macos") {
-        vec![home_dir.join(".zshrc"), home_dir.join(".bash_profile")]
-    } else {
-        return Err(eyre!(
-            "Unsupported operating system for shell configuration"
-        ));
-    };
+    let shell_config_paths = get_shell_config_paths()?;
 
     let is_installed = check_shim_installation(&shell_config_paths, &shims_dir)
         .map_err(|e| eyre!(e))
@@ -36,15 +27,7 @@ pub fn install() -> eyre::Result<()> {
     }
 
     // If not installed, add the shims directory to the shell configuration files
-    let file = if cfg!(target_os = "linux") {
-        home_dir.join(".bashrc")
-    } else if cfg!(target_os = "macos") {
-        home_dir.join(".zshrc")
-    } else {
-        return Err(eyre!(
-            "Unsupported operating system for shell configuration"
-        ));
-    };
+    let file = primary_shell_config_path()?;
 
     // Ensure the shims directory exists before adding it to the shell config
     if !shims_dir.exists() {
@@ -87,30 +70,9 @@ fn check_shim_installation(config_files: &[PathBuf], install_dir: &Path) -> eyre
     Ok(false)
 }
 
-fn check_shim_installation_in_shell_config(
-    config_file: &Path,
-    install_dir: &Path,
-) -> eyre::Result<bool> {
-    let path_export_line = format!("export PATH=\"{}:$PATH\"", install_dir.display());
-    let current_content = fs::read_to_string(config_file)
-        .map_err(|e| eyre!(e))
-        .wrap_err_with(|| {
-            format!(
-                "Failed to read shell config file: {}",
-                config_file.display()
-            )
-        })?;
-
-    if current_content.contains(&path_export_line) {
-        return Ok(true);
-    } else {
-        return Ok(false);
-    }
-}
-
 /// Add the installation directory to the user's shell configuration file
 fn add_to_shell_config(config_file_path: &Path, install_dir: &Path) -> eyre::Result<()> {
-    let path_export_line = format!("export PATH=\"{}:$PATH\"", install_dir.display());
+    let shim_export = shim_export_line(&install_dir)?;
 
     let mut file = fs::OpenOptions::new()
         .create(true)
@@ -119,7 +81,7 @@ fn add_to_shell_config(config_file_path: &Path, install_dir: &Path) -> eyre::Res
 
     // Append a newline before the new line for better formatting, then the export line
     file.write_all(b"\n")?;
-    file.write_all(path_export_line.as_bytes())?;
+    file.write_all(shim_export.as_bytes())?;
     file.write_all(b"\n")?; // Another newline after for cleanliness
 
     Ok(())

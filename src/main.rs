@@ -64,9 +64,6 @@ fn main() -> eyre::Result<()> {
             }
         },
         Commands::Shim { command } => match command {
-            ShimCommands::Install => {
-                commands::shim::install()?;
-            }
             ShimCommands::Add { command } => {
                 commands::shim::add(command)?;
             }
@@ -75,6 +72,12 @@ fn main() -> eyre::Result<()> {
             }
             ShimCommands::List => {
                 commands::shim::list()?;
+            }
+            ShimCommands::Install => {
+                commands::shim::install()?;
+            }
+            ShimCommands::Uninstall => {
+                commands::shim::uninstall()?;
             }
         },
         Commands::Self_ { command } => match command {
