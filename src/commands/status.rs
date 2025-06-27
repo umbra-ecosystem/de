@@ -27,6 +27,13 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
         }
     };
 
+    workspace_status(&workspace)?;
+
+    tracing::info!("Finished status command");
+    Ok(())
+}
+
+pub fn workspace_status(workspace: &Workspace) -> eyre::Result<WorkspaceStatus> {
     let ws_config = workspace.config();
     tracing::info!("Loaded workspace '{}'", ws_config.name);
     println!("Workspace: {}", ws_config.name);
@@ -56,8 +63,19 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
 
     print_status_summary(&statuses);
 
-    tracing::info!("Finished status command");
-    Ok(())
+    Ok(WorkspaceStatus { statuses })
+}
+
+pub struct WorkspaceStatus {
+    statuses: Vec<ProjectStatus>,
+}
+
+impl WorkspaceStatus {
+    pub fn has_uncommited_or_unpushed_changes(&self) -> bool {
+        self.statuses
+            .iter()
+            .any(|s| s.git.is_repo && (s.git.dirty || s.git.ahead.unwrap_or(0) > 0))
+    }
 }
 
 /// Holds all dynamic status info for a project in the workspace.
@@ -181,8 +199,6 @@ struct GitStatus {
 }
 
 /// Print a concise, actionable summary of project and service status.
-/// Only nonzero items are shown, each with a one-line suggestion.
-/// If everything is clean, prints a single "All projects and services are up to date."
 fn print_status_summary(statuses: &[ProjectStatus]) {
     let dirty = statuses
         .iter()
@@ -232,6 +248,7 @@ fn print_status_summary(statuses: &[ProjectStatus]) {
         );
         any = true;
     }
+
     if !any {
         println!("  All projects and services are up to date.");
     }

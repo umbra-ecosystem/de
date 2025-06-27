@@ -1,8 +1,10 @@
 use crate::{
+    commands::status::workspace_status,
     config::Config,
     types::Slug,
     workspace::{Workspace, spin_down_workspace},
 };
+use dialoguer::Confirm;
 use eyre::{Context, eyre};
 
 pub fn stop(workspace_name: Option<Slug>) -> eyre::Result<()> {
@@ -17,6 +19,26 @@ pub fn stop(workspace_name: Option<Slug>) -> eyre::Result<()> {
             .wrap_err("Failed to get current workspace")?
             .ok_or_else(|| eyre!("No workspace is currently active"))?
     };
+
+    let workspace_status = workspace_status(&workspace)
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to get workspace status")?;
+
+    println!();
+
+    if workspace_status.has_uncommited_or_unpushed_changes() {
+        let prompt = Confirm::new()
+            .with_prompt("Uncommitted or unpushed changes detected. Stop anyway?")
+            .default(false)
+            .interact()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to prompt for confirmation")?;
+
+        if !prompt {
+            println!("Aborting stop operation.");
+            return Ok(());
+        }
+    }
 
     spin_down_workspace(&workspace)
         .map_err(|e| eyre!(e))
