@@ -1,6 +1,7 @@
 use eyre::{WrapErr, eyre};
 
 use crate::{
+    commands::status::workspace_status,
     config::Config,
     project::Project,
     types::Slug,
@@ -31,6 +32,10 @@ pub fn start(workspace_name: Option<Slug>) -> eyre::Result<()> {
     Config::mutate_persisted(|config| {
         config.set_active_workspace(Some(workspace_name));
     })?;
+
+    // We ignore the error here because we want to proceed even if the status check fails
+    println!();
+    let _ = workspace_status(&workspace);
 
     Ok(())
 }
