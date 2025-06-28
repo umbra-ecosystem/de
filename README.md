@@ -133,7 +133,29 @@ de exec python my_script.py -- --some-arg value
 
 This command is useful for one-off operations or when you need to interact directly with the project's environment without defining a specific task in `de.toml`.
 
-### 5. Start/Stop Docker Compose Projects
+### 5. Execute Arbitrary Commands Across All Projects
+
+Run any command within the context of all projects in a workspace:
+
+```bash
+de exec-all -- <command> <args>
+```
+
+For example, to run `npm install` in all projects in the current workspace:
+
+```bash
+de exec-all -- npm install
+```
+
+Or to run a specific script with arguments in all projects:
+
+```bash
+de exec-all -- python my_script.py -- --some-arg value
+```
+
+This command is useful for performing bulk operations across multiple projects in a workspace.
+
+### 6. Start/Stop Docker Compose Projects
 
 Start all Docker Compose projects in a workspace:
 
@@ -149,7 +171,7 @@ de stop
 de stop --workspace my-workspace
 ```
 
-### 5. List Projects
+### 7. List Projects
 
 View all projects in your current workspace:
 

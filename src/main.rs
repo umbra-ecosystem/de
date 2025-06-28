@@ -35,6 +35,16 @@ fn main() -> eyre::Result<()> {
         Commands::Run { command, args } => {
             commands::run(command, args)?;
         }
+        Commands::Exec {
+            project,
+            workspace,
+            command,
+        } => {
+            commands::exec(project, workspace, command)?;
+        }
+        Commands::ExecAll { workspace, command } => {
+            commands::exec_all(workspace, command)?;
+        }
         Commands::List { workspace } => {
             if let Some(workspace_name) = workspace {
                 let workspace = Workspace::load_from_name(&workspace_name)
@@ -90,13 +100,6 @@ fn main() -> eyre::Result<()> {
         }
         Commands::Status { workspace } => {
             commands::status(workspace)?;
-        }
-        Commands::Exec {
-            project,
-            workspace,
-            command,
-        } => {
-            commands::exec(project, workspace, command)?;
         }
     }
 

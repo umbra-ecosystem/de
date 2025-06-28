@@ -54,6 +54,31 @@ pub enum Commands {
         args: Vec<String>,
     },
 
+    /// Execute a command in a project's context.
+    Exec {
+        /// The name of the project to execute the command in.
+        project: Slug,
+
+        /// The name of the workspace to execute the command in. Defaults to the active workspace.
+        #[clap(short, long)]
+        workspace: Option<Slug>,
+
+        /// The command to execute.
+        #[clap(last = true)]
+        command: Vec<String>,
+    },
+
+    /// Execute a command in the context of all projects in a workspace.
+    ExecAll {
+        /// The name of the workspace to execute the command in. Defaults to the active workspace.
+        #[clap(short, long)]
+        workspace: Option<Slug>,
+
+        /// The command to execute.
+        #[clap(last = true)]
+        command: Vec<String>,
+    },
+
     /// List all projects of the current workspace.
     List {
         /// The name of the workspace to list projects from. Defaults to the current workspace.
@@ -111,20 +136,6 @@ pub enum Commands {
     Status {
         /// The name of the workspace to show status for. Defaults to the active workspace.
         workspace: Option<Slug>,
-    },
-
-    /// Execute a command in a project's context.
-    Exec {
-        /// The name of the project to execute the command in.
-        project: Slug,
-
-        /// The name of the workspace to execute the command in. Defaults to the active workspace.
-        #[clap(short, long)]
-        workspace: Option<Slug>,
-
-        /// The command to execute.
-        #[clap(last = true)]
-        command: Vec<String>,
     },
 }
 
