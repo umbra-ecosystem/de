@@ -103,7 +103,7 @@ build = { command = "docker build -t my-api ." }
 
 ### 3. Run Tasks
 
-Execute defined tasks from anywhere in your project:
+Execute defined tasks from anywhere in your project. If a task is not found in the project, `de` will attempt to run a workspace task with the same name.
 
 ```bash
 de run test
@@ -111,7 +111,32 @@ de run dev
 de run build --release  # Pass additional arguments
 ```
 
-### 4. Execute Arbitrary Commands
+### 4. Define Workspace Tasks
+
+Edit the `de.toml` file in your workspace configuration directory (usually `~/.config/de/workspaces/<workspace-name>.toml`) to define workspace-level tasks:
+
+```toml
+[project]
+# ... existing project configurations ...
+
+[tasks]
+# Workspace-level tasks
+build-all = "cargo build --all"
+clean-all = "cargo clean --all"
+```
+
+### 5. Run Workspace Tasks
+
+Execute defined workspace tasks:
+
+```bash
+de workspace run build-all
+de workspace run clean-all --release
+```
+
+This allows you to run commands that apply to the entire workspace, such as building all projects or cleaning all build artifacts.
+
+### 7. Execute Arbitrary Commands
 
 Run any command within the context of a project's environment:
 
@@ -155,7 +180,7 @@ de exec-all -- python my_script.py -- --some-arg value
 
 This command is useful for performing bulk operations across multiple projects in a workspace.
 
-### 6. Start/Stop Docker Compose Projects
+### 8. Start/Stop Docker Compose Projects
 
 Start all Docker Compose projects in a workspace:
 
@@ -399,14 +424,29 @@ The update command will:
 
 #### Task Management
 
-Manage tasks defined in your project's `de.toml` file.
+Manage tasks defined in your project's `de.toml` file and your workspace configuration.
 
 ```bash
-# List all available tasks
+# List all available tasks (from project and workspace)
 de task list
 
 # Check if a specific task is defined
 de task check <task-name>
+
+# Add a new task to the current project (raw command)
+de task add my-task "echo Hello from project!"
+
+# Add a new task to the current project (Docker Compose service command)
+de task add my-service-task "npm run dev" --service web
+
+# Add a new task to the active workspace
+de task add --workspace my-workspace-task "echo Hello from workspace!"
+
+# Remove a task from the current project
+de task remove my-task
+
+# Remove a task from the active workspace
+de task remove --workspace my-workspace-task
 ```
 
 #### Command Shims

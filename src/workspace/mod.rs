@@ -15,7 +15,7 @@ pub use utils::{add_project_to_workspace, spin_down_workspace, spin_up_workspace
 #[derive(Debug)]
 pub struct Workspace {
     config: WorkspaceConfig,
-    config_path: PathBuf,
+    pub config_path: PathBuf,
 }
 
 impl Workspace {
@@ -27,6 +27,7 @@ impl Workspace {
         let config = WorkspaceConfig {
             name,
             projects: Default::default(),
+            tasks: Default::default(),
         };
 
         Ok(Self {
@@ -82,6 +83,10 @@ impl Workspace {
 
     pub fn config(&self) -> &WorkspaceConfig {
         &self.config
+    }
+
+    pub fn config_mut(&mut self) -> &mut WorkspaceConfig {
+        &mut self.config
     }
 
     pub fn save(&self) -> eyre::Result<()> {

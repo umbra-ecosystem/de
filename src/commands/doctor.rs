@@ -453,7 +453,10 @@ fn check_workspace_details(workspace: &Workspace, result: &mut DiagnosticResult)
 fn check_for_conflicts(workspace: &Workspace, result: &mut DiagnosticResult) {
     let config = workspace.config();
     let project_names: std::collections::HashSet<_> = config.projects.keys().collect();
+    let workspace_task_names: std::collections::HashSet<_> = config.tasks.keys().collect();
 
+    // Collect all project task names
+    let mut all_project_task_names: std::collections::HashSet<Slug> = std::collections::HashSet::new();
     for (project_id, workspace_project) in &config.projects {
         if !workspace_project.dir.exists() {
             continue;
@@ -472,18 +475,46 @@ fn check_for_conflicts(workspace: &Workspace, result: &mut DiagnosticResult) {
 
         if let Some(tasks) = project.tasks() {
             for task_name in tasks.keys() {
-                if project_names.contains(task_name) {
-                    result.add_warning(
-                        format!(
-                            "Task '{}' in project '{}' conflicts with a project name.",
-                            task_name, project_id
-                        ),
-                        Some(
-                            "Consider renaming the task or project to avoid ambiguity.".to_string(),
-                        ),
-                    );
-                }
+                all_project_task_names.insert(task_name.clone());
             }
+        }
+    }
+
+    // Check for conflicts between project task names and project names
+    for task_name in &all_project_task_names {
+        if project_names.contains(task_name) {
+            result.add_warning(
+                format!(
+                    "Project task '{}' conflicts with a project name.",
+                    task_name
+                ),
+                Some("Consider renaming the task or project to avoid ambiguity.".to_string()),
+            );
+        }
+    }
+
+    // Check for conflicts between workspace task names and project names
+    for task_name in &workspace_task_names {
+        if project_names.contains(task_name) {
+            result.add_warning(
+                format!(
+                    "Workspace task '{}' conflicts with a project name.",
+                    task_name
+                ),
+                Some("Consider renaming the task or project to avoid ambiguity.".to_string()),
+            );
+        }
+    }
+
+    // Highlight workspace tasks that override project tasks
+    for task_name in &workspace_task_names {
+        if all_project_task_names.contains(task_name) {
+            result.add_info(
+                format!(
+                    "Workspace task '{}' overrides a project task with the same name.",
+                    task_name
+                ),
+            );
         }
     }
 }

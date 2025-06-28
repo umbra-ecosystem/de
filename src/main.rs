@@ -11,7 +11,7 @@ use clap::Parser;
 use eyre::{Context, eyre};
 
 use crate::{
-    cli::{Cli, Commands, SelfCommands, ShimCommands, TaskCommands},
+    cli::{Cli, Commands, SelfCommands, ShimCommands, TaskCommands, WorkspaceCommands},
     workspace::Workspace,
 };
 
@@ -72,6 +72,17 @@ fn main() -> eyre::Result<()> {
             TaskCommands::List => {
                 commands::task::list()?;
             }
+            TaskCommands::Add {
+                task,
+                task_command,
+                service,
+                workspace,
+            } => {
+                commands::task::add(task, task_command, service, workspace)?;
+            }
+            TaskCommands::Remove { task, workspace } => {
+                commands::task::remove(task, workspace)?;
+            }
         },
         Commands::Shim { command } => match command {
             ShimCommands::Add { command } => {
@@ -93,6 +104,15 @@ fn main() -> eyre::Result<()> {
         Commands::Self_ { command } => match command {
             SelfCommands::Update => {
                 commands::self_::update()?;
+            }
+        },
+        Commands::Workspace { command } => match command {
+            WorkspaceCommands::Run {
+                task,
+                workspace,
+                args,
+            } => {
+                commands::workspace::run(workspace, task, args)?;
             }
         },
         Commands::Doctor { workspace } => {

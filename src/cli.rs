@@ -126,6 +126,12 @@ pub enum Commands {
         command: SelfCommands,
     },
 
+    /// Manage workspace-level operations.
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommands,
+    },
+
     /// Diagnose and check the health of your de environment.
     Doctor {
         /// The name of the workspace to diagnose. Defaults to the active workspace.
@@ -149,6 +155,33 @@ pub enum TaskCommands {
 
     /// List all tasks defined in the project.
     List,
+
+    /// Add a task to the project or workspace configuration.
+    Add {
+        /// The name of the task to add.
+        task: Slug,
+
+        /// The command to execute for the task.
+        task_command: String,
+
+        /// The Docker Compose service to execute the command in (for project tasks).
+        #[clap(long)]
+        service: Option<String>,
+
+        /// Add the task to the workspace configuration instead of the project.
+        #[clap(long)]
+        workspace: bool,
+    },
+
+    /// Remove a task from the project or workspace configuration.
+    Remove {
+        /// The name of the task to remove.
+        task: Slug,
+
+        /// Remove the task from the workspace configuration instead of the project.
+        #[clap(long)]
+        workspace: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -179,4 +212,21 @@ pub enum ShimCommands {
 pub enum SelfCommands {
     /// Update the de CLI itself.
     Update,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum WorkspaceCommands {
+    /// Run a task defined in the workspace configuration.
+    Run {
+        /// The name of the task to run.
+        task: Slug,
+
+        /// The name of the workspace to run the task in. Defaults to the active workspace.
+        #[clap(short, long)]
+        workspace: Option<Slug>,
+
+        /// Additional arguments to pass to the task command.
+        #[clap(allow_hyphen_values = true, hide = true)]
+        args: Vec<String>,
+    },
 }

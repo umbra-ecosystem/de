@@ -10,6 +10,7 @@ mod start;
 mod status;
 mod stop;
 mod update;
+pub mod workspace;
 
 pub mod shim;
 pub mod task;

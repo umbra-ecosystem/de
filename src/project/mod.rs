@@ -1,6 +1,6 @@
 pub mod config;
 mod task;
-pub use task::Task;
+pub use task::{Task, RawTask};
 
 use ::config::FileFormat;
 use eyre::{Context, eyre};
@@ -103,6 +103,10 @@ impl Project {
 impl Project {
     pub fn manifest(&self) -> &ProjectManifest {
         &self.manifest
+    }
+
+    pub fn manifest_mut(&mut self) -> &mut ProjectManifest {
+        &mut self.manifest
     }
 
     pub fn tasks(&self) -> Option<&BTreeMap<Slug, Task>> {

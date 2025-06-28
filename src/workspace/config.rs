@@ -7,6 +7,13 @@ use crate::types::Slug;
 pub struct WorkspaceConfig {
     pub name: Slug,
     pub projects: BTreeMap<Slug, WorkspaceProject>,
+    #[serde(default)]
+    pub tasks: BTreeMap<Slug, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceTask {
+    pub command: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
