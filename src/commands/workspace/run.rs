@@ -24,21 +24,13 @@ pub fn run(workspace_name: Option<Slug>, task_name: Slug, args: Vec<String>) -> 
         )
     })?;
 
-    let mut command_parts = shell_words::split(task_command)
-        .map_err(|e| eyre!("Failed to parse task command: {}", e))?;
-
-    let program = command_parts.remove(0);
-    let mut task_args = command_parts;
-    task_args.extend(args);
+    let mut parts = task_command.split_whitespace();
+    let program = parts.next().ok_or_else(|| eyre!("Empty command"))?;
+    let task_args = parts.collect::<Vec<_>>();
 
     let mut cmd = Command::new(&program);
     cmd.args(&task_args);
-    cmd.current_dir(
-        workspace
-            .config_path
-            .parent()
-            .unwrap_or_else(|| std::path::Path::new("/")),
-    ); // Run from workspace config directory
+    cmd.args(&args);
 
     let status = cmd.status()?;
     if !status.success() {
