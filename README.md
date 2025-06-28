@@ -15,6 +15,7 @@
 
 - **Task & Command Execution**
   - ⚡ Define and run both shell commands and Docker Compose service tasks
+  - 🚀 Execute arbitrary commands within a project's environment
   - 🔗 Create command shims/aliases for easy access
   - ✅ Check and list available tasks
 
@@ -110,7 +111,29 @@ de run dev
 de run build --release  # Pass additional arguments
 ```
 
-### 4. Start/Stop Docker Compose Projects
+### 4. Execute Arbitrary Commands
+
+Run any command within the context of a project's environment:
+
+```bash
+de exec <command> -- <args>
+```
+
+For example, to run `npm install` in a project:
+
+```bash
+de exec npm install
+```
+
+Or to run a specific script with arguments:
+
+```bash
+de exec python my_script.py -- --some-arg value
+```
+
+This command is useful for one-off operations or when you need to interact directly with the project's environment without defining a specific task in `de.toml`.
+
+### 5. Start/Stop Docker Compose Projects
 
 Start all Docker Compose projects in a workspace:
 

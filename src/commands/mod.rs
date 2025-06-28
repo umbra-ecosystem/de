@@ -1,4 +1,5 @@
 mod doctor;
+mod exec;
 mod init;
 mod list;
 mod run;
@@ -13,6 +14,7 @@ pub mod shim;
 pub mod task;
 
 pub use doctor::doctor;
+pub use exec::exec;
 pub use init::init;
 pub use list::list;
 pub use run::run;

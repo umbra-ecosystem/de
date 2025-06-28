@@ -112,6 +112,20 @@ pub enum Commands {
         /// The name of the workspace to show status for. Defaults to the active workspace.
         workspace: Option<Slug>,
     },
+
+    /// Execute a command in a project's context.
+    Exec {
+        /// The name of the project to execute the command in.
+        project: Slug,
+
+        /// The name of the workspace to execute the command in. Defaults to the active workspace.
+        #[clap(short, long)]
+        workspace: Option<Slug>,
+
+        /// The command to execute.
+        #[clap(last = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

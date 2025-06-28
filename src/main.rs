@@ -91,6 +91,13 @@ fn main() -> eyre::Result<()> {
         Commands::Status { workspace } => {
             commands::status(workspace)?;
         }
+        Commands::Exec {
+            project,
+            workspace,
+            command,
+        } => {
+            commands::exec(project, workspace, command)?;
+        }
     }
 
     Ok(())
