@@ -165,12 +165,16 @@ pub enum TaskCommands {
         task_command: String,
 
         /// The Docker Compose service to execute the command in (for project tasks).
-        #[clap(long)]
+        #[clap(short, long)]
         service: Option<String>,
 
+        /// The name of the project to add the task to. Defaults to the current project.
+        #[clap(short, long)]
+        project: Option<Slug>,
+
         /// Add the task to the workspace configuration instead of the project.
-        #[clap(long)]
-        workspace: bool,
+        #[clap(short, long)]
+        workspace: Option<Option<Slug>>,
     },
 
     /// Remove a task from the project or workspace configuration.
@@ -178,9 +182,13 @@ pub enum TaskCommands {
         /// The name of the task to remove.
         task: Slug,
 
+        /// The name of the project to remove the task from. Defaults to the current project.
+        #[clap(short, long)]
+        project: Option<Slug>,
+
         /// Remove the task from the workspace configuration instead of the project.
-        #[clap(long)]
-        workspace: bool,
+        #[clap(short, long)]
+        workspace: Option<Option<Slug>>,
     },
 }
 

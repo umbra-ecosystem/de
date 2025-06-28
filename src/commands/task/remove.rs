@@ -1,31 +1,61 @@
-use eyre::{eyre, Result, Context};
+use eyre::{Context, eyre};
 
-use crate::{project::Project, types::Slug, workspace::Workspace};
+use crate::{
+    types::Slug,
+    utils::{get_project_for_cli, get_workspace_for_cli},
+};
 
-pub fn remove(task_name: Slug, is_workspace_task: bool) -> Result<()> {
-    if is_workspace_task {
-        let mut workspace = Workspace::active()
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to get active workspace")?
-            .ok_or_else(|| eyre!("No active workspace found. Cannot remove workspace task."))?;
+pub fn remove(
+    task_name: Slug,
+    project_name: Option<Slug>,
+    workspace_name: Option<Option<Slug>>,
+) -> eyre::Result<()> {
+    if workspace_name.is_some() {
+        let mut workspace = get_workspace_for_cli(workspace_name)?;
 
         if workspace.config_mut().tasks.remove(&task_name).is_some() {
-            workspace.save().wrap_err("Failed to save workspace configuration")?;
-            println!("Task '{}' removed from workspace '{}'.", task_name, workspace.config().name);
+            workspace
+                .save()
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to save workspace configuration")?;
+            println!(
+                "Task '{}' removed from workspace '{}'.",
+                task_name,
+                workspace.config().name
+            );
         } else {
-            println!("Task '{}' not found in workspace '{}'.", task_name, workspace.config().name);
+            println!(
+                "Task '{}' not found in workspace '{}'.",
+                task_name,
+                workspace.config().name
+            );
         }
     } else {
-        let mut project = Project::current()
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to get current project")?
-            .ok_or_else(|| eyre!("No current project found. Cannot remove project task."))?;
+        let mut project = get_project_for_cli(project_name, workspace_name)?;
 
-        if project.manifest_mut().tasks.get_or_insert_with(Default::default).remove(&task_name).is_some() {
-            project.manifest().save(project.manifest_path()).wrap_err("Failed to save project configuration")?;
-            println!("Task '{}' removed from project '{}'.", task_name, project.manifest().project().name);
+        if project
+            .manifest_mut()
+            .tasks
+            .get_or_insert_with(Default::default)
+            .remove(&task_name)
+            .is_some()
+        {
+            project
+                .manifest()
+                .save(project.manifest_path())
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to save project configuration")?;
+            println!(
+                "Task '{}' removed from project '{}'.",
+                task_name,
+                project.manifest().project().name
+            );
         } else {
-            println!("Task '{}' not found in project '{}'.", task_name, project.manifest().project().name);
+            println!(
+                "Task '{}' not found in project '{}'.",
+                task_name,
+                project.manifest().project().name
+            );
         }
     }
 

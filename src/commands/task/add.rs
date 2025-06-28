@@ -1,38 +1,64 @@
-use eyre::{eyre, Result, Context};
+use eyre::{Context, eyre};
 
-use crate::{project::{Project, Task, RawTask}, types::Slug, workspace::Workspace};
+use crate::{
+    project::{RawTask, Task},
+    types::Slug,
+    utils::{get_project_for_cli, get_workspace_for_cli},
+};
 
-pub fn add(task_name: Slug, command: String, service: Option<String>, is_workspace_task: bool) -> Result<()> {
-    if is_workspace_task {
-        let mut workspace = Workspace::active()
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to get active workspace")?
-            .ok_or_else(|| eyre!("No active workspace found. Cannot add workspace task."))?;
+pub fn add(
+    task_name: Slug,
+    command: String,
+    service: Option<String>,
+    project_name: Option<Slug>,
+    workspace_name: Option<Option<Slug>>,
+) -> eyre::Result<()> {
+    if workspace_name.is_some() {
+        let mut workspace = get_workspace_for_cli(workspace_name)?;
 
         if service.is_some() {
-            return Err(eyre!("Workspace tasks do not support specifying a service."));
+            return Err(eyre!(
+                "Workspace tasks do not support specifying a service."
+            ));
         }
 
-        workspace.config_mut().tasks.insert(task_name.clone(), command);
-        workspace.save().wrap_err("Failed to save workspace configuration")?;
+        workspace
+            .config_mut()
+            .tasks
+            .insert(task_name.clone(), command);
+        workspace
+            .save()
+            .wrap_err("Failed to save workspace configuration")?;
 
-        println!("Task '{}' added to workspace '{}'.", task_name, workspace.config().name);
+        println!(
+            "Task '{}' added to workspace '{}'.",
+            task_name,
+            workspace.config().name
+        );
     } else {
-        let mut project = Project::current()
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to get current project")?
-            .ok_or_else(|| eyre!("No current project found. Cannot add project task."))?;
+        let mut project = get_project_for_cli(project_name, workspace_name)?;
 
-        let task = if let Some(svc) = service {
-            Task::Compose { service: svc, command }
+        let task = if let Some(service) = service {
+            Task::Compose { service, command }
         } else {
             Task::Raw(RawTask::Flat(command))
         };
 
-        project.manifest_mut().tasks.get_or_insert_with(Default::default).insert(task_name.clone(), task);
-        project.manifest().save(project.manifest_path()).wrap_err("Failed to save project configuration")?;
+        project
+            .manifest_mut()
+            .tasks
+            .get_or_insert_with(Default::default)
+            .insert(task_name.clone(), task);
+        project
+            .manifest()
+            .save(project.manifest_path())
+            .wrap_err("Failed to save project configuration")?;
 
-        println!("Task '{}' added to project '{}'.", task_name, project.manifest().project().name);
+        println!(
+            "Task '{}' added to project '{}'.",
+            task_name,
+            project.manifest().project().name
+        );
     }
 
     Ok(())

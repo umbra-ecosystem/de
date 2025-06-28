@@ -76,12 +76,17 @@ fn main() -> eyre::Result<()> {
                 task,
                 task_command,
                 service,
+                project,
                 workspace,
             } => {
-                commands::task::add(task, task_command, service, workspace)?;
+                commands::task::add(task, task_command, service, project, workspace)?;
             }
-            TaskCommands::Remove { task, workspace } => {
-                commands::task::remove(task, workspace)?;
+            TaskCommands::Remove {
+                task,
+                project,
+                workspace,
+            } => {
+                commands::task::remove(task, project, workspace)?;
             }
         },
         Commands::Shim { command } => match command {

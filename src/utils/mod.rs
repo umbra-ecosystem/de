@@ -1,8 +1,10 @@
+mod cli;
 mod shim;
 pub mod unix;
 
 use crate::constants::{ORGANIZATION_NAME, PROJECT_NAME};
 
+pub use cli::{get_project_for_cli, get_workspace_for_cli};
 pub use shim::{
     check_shim_installation_in_shell_config, generate_shim_bash_script, get_shims_dir,
     shim_export_line,
