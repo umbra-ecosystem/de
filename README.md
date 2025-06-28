@@ -293,6 +293,7 @@ de doctor
 - Validates project and workspace configuration
 - Reports missing files, misconfigurations, and actionable suggestions
 - Checks if Docker Compose services referenced in tasks exist
+- Warns if a task name conflicts with a project name in the same workspace
 
 #### Status
 

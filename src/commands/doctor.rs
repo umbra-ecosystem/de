@@ -444,6 +444,47 @@ fn check_workspace_details(workspace: &Workspace, result: &mut DiagnosticResult)
         if valid_projects > 0 && invalid_projects == 0 {
             result.add_success("All project directories found".to_string());
         }
+
+        // Check for task name conflicts
+        check_for_conflicts(workspace, result);
+    }
+}
+
+fn check_for_conflicts(workspace: &Workspace, result: &mut DiagnosticResult) {
+    let config = workspace.config();
+    let project_names: std::collections::HashSet<_> = config.projects.keys().collect();
+
+    for (project_id, workspace_project) in &config.projects {
+        if !workspace_project.dir.exists() {
+            continue;
+        }
+
+        let project = match Project::from_dir(&workspace_project.dir) {
+            Ok(project) => project,
+            Err(e) => {
+                result.add_error(
+                    format!("Failed to load project {}: {}", project_id, e),
+                    None,
+                );
+                continue;
+            }
+        };
+
+        if let Some(tasks) = project.tasks() {
+            for task_name in tasks.keys() {
+                if project_names.contains(task_name) {
+                    result.add_warning(
+                        format!(
+                            "Task '{}' in project '{}' conflicts with a project name.",
+                            task_name, project_id
+                        ),
+                        Some(
+                            "Consider renaming the task or project to avoid ambiguity.".to_string(),
+                        ),
+                    );
+                }
+            }
+        }
     }
 }
 

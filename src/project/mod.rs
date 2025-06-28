@@ -6,6 +6,7 @@ use ::config::FileFormat;
 use eyre::{Context, eyre};
 use std::{
     borrow::Cow,
+    collections::BTreeMap,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -102,6 +103,10 @@ impl Project {
 impl Project {
     pub fn manifest(&self) -> &ProjectManifest {
         &self.manifest
+    }
+
+    pub fn tasks(&self) -> Option<&BTreeMap<Slug, Task>> {
+        self.manifest.tasks.as_ref()
     }
 
     pub fn manifest_path(&self) -> &PathBuf {
