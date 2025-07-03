@@ -67,6 +67,7 @@ fn main() -> eyre::Result<()> {
                 workspace,
             } => commands::task::remove(task, project, workspace),
         },
+        #[cfg(target_family = "unix")]
         Commands::Shim { command } => match command {
             ShimCommands::Add { command } => commands::shim::add(command),
             ShimCommands::Remove { command } => commands::shim::remove(command),

@@ -1,4 +1,4 @@
-use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{fs, path::Path};
 
 use crate::{
     types::Slug,
@@ -34,6 +34,8 @@ pub fn add(command: Slug) -> eyre::Result<()> {
 
 #[cfg(target_family = "unix")]
 fn apply_executable_permissions(shim_file: &Path) -> eyre::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
     let mut permissions = fs::metadata(shim_file)?.permissions();
     permissions.set_mode(permissions.mode() | 0o111); // Add execute permissions for owner, group, others
 

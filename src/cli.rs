@@ -114,6 +114,7 @@ pub enum Commands {
     },
 
     /// Manage shims for de commands.
+    #[cfg(target_family = "unix")]
     Shim {
         #[command(subcommand)]
         command: ShimCommands,
