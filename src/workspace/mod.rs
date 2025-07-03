@@ -22,7 +22,7 @@ impl Workspace {
     pub fn new(name: Slug) -> eyre::Result<Self> {
         let config_path = Self::path_from_name(&name)
             .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to create path for workspace {}", name))?;
+            .wrap_err_with(|| format!("Failed to create path for workspace {name}"))?;
 
         let config = WorkspaceConfig {
             name,
@@ -57,7 +57,7 @@ impl Workspace {
     pub fn path_from_name(name: &Slug) -> eyre::Result<PathBuf> {
         let project_dirs = get_project_dirs()?;
 
-        let filename = format!("{}.toml", name);
+        let filename = format!("{name}.toml");
         let path = project_dirs
             .config_local_dir()
             .join("workspaces")
@@ -132,7 +132,7 @@ impl Workspace {
         let workspace_name = project.manifest().project().workspace.clone();
         let workspace = Self::load_from_name(&workspace_name)
             .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?
+            .wrap_err_with(|| format!("Failed to load workspace {workspace_name}"))?
             .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
 
         Ok(Some(workspace))
@@ -147,9 +147,9 @@ impl Workspace {
             return Ok(None);
         };
 
-        let workspace = Self::load_from_name(&workspace_name)
+        let workspace = Self::load_from_name(workspace_name)
             .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?;
+            .wrap_err_with(|| format!("Failed to load workspace {workspace_name}"))?;
 
         Ok(workspace)
     }

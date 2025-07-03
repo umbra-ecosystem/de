@@ -161,7 +161,7 @@ impl Project {
                     )
                 })?;
 
-            return Ok(Some(canonical_path));
+            Ok(Some(canonical_path))
         }
 
         if let Some(docker_compose) = self.manifest().project().docker_compose.as_deref() {
@@ -169,7 +169,7 @@ impl Project {
         }
 
         let docker_compose_path = self.dir().join("docker-compose.yml");
-        return canonicalize(self, &docker_compose_path);
+        canonicalize(self, &docker_compose_path)
     }
 
     /// Runs `docker-compose up -d` for the project, starting all services defined in the Docker Compose file.

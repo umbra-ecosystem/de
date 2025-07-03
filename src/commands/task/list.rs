@@ -32,7 +32,7 @@ pub fn list() -> eyre::Result<()> {
             }
             println!("Tasks in workspace '{}':", workspace.config().name);
             for (name, command) in &workspace.config().tasks {
-                println!("  - {}: {}", name, command);
+                println!("  - {name}: {command}");
             }
             found_tasks = true;
         }

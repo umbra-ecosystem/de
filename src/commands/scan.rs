@@ -24,7 +24,7 @@ pub fn scan(target_dir: Option<PathBuf>, workspace: Option<Slug>) -> eyre::Resul
         let entry = match entry {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("Error reading entry: {}", e);
+                eprintln!("Error reading entry: {e}");
                 continue;
             }
         };

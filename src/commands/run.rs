@@ -16,7 +16,7 @@ pub fn run(task_name: Slug, args: Vec<String>) -> eyre::Result<()> {
         .wrap_err("Failed to get active workspace")?
     {
         if workspace.config().tasks.contains_key(&task_name) {
-            println!("Running workspace task '{}'...", task_name);
+            println!("Running workspace task '{task_name}'...");
             return super::workspace::run(None, task_name, args);
         }
     }
@@ -36,10 +36,10 @@ pub fn run_project_task(
         .manifest()
         .tasks
         .as_ref()
-        .and_then(|tasks| tasks.get(&task_name))
+        .and_then(|tasks| tasks.get(task_name))
     {
         let mut command = task
-            .command(&project)
+            .command(project)
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to build command for task")?;
 

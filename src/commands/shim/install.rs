@@ -72,7 +72,7 @@ fn check_shim_installation(config_files: &[PathBuf], install_dir: &Path) -> eyre
 
 /// Add the installation directory to the user's shell configuration file
 fn add_to_shell_config(config_file_path: &Path, install_dir: &Path) -> eyre::Result<()> {
-    let shim_export = shim_export_line(&install_dir)?;
+    let shim_export = shim_export_line(install_dir)?;
 
     let mut file = fs::OpenOptions::new()
         .create(true)

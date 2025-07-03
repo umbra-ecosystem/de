@@ -19,7 +19,7 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
         tracing::info!("Loading workspace '{}'", workspace_name);
         Workspace::load_from_name(&workspace_name)
             .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to load workspace {}", workspace_name))?
+            .wrap_err_with(|| format!("Failed to load workspace {workspace_name}"))?
             .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?
     } else {
         match Workspace::active()? {
@@ -44,7 +44,7 @@ pub fn workspace_status(
 ) -> eyre::Result<WorkspaceStatus> {
     let ws_config = workspace.config();
     tracing::info!("Loaded workspace '{}'", ws_config.name);
-    formatter.heading(&format!("Workspace: {}", ws_config.name.to_string()));
+    formatter.heading(&format!("Workspace: {}", ws_config.name));
     println!(); // Add a newline after the heading
     formatter.heading("Projects:");
 
@@ -135,7 +135,7 @@ impl ProjectStatus {
             Ok(project) => {
                 tracing::debug!("Loaded project manifest for '{}'", project_name);
 
-                let current = current_project.as_ref().map_or(false, |p| {
+                let current = current_project.as_ref().is_some_and(|p| {
                     &p.manifest().project().workspace == workspace_name
                         && &p.manifest().project().name == project_name
                 });
@@ -392,7 +392,7 @@ impl GitStatus {
                 let ab_part = &ab[idx..];
                 if let Some(a_idx) = ab_part.find("ahead ") {
                     let rest = &ab_part[a_idx + 6..];
-                    if let Some(end) = rest.find(|c: char| !c.is_digit(10)) {
+                    if let Some(end) = rest.find(|c: char| !c.is_ascii_digit()) {
                         ahead = rest[..end].parse::<u32>().ok();
                     } else {
                         ahead = rest.parse::<u32>().ok();
@@ -400,7 +400,7 @@ impl GitStatus {
                 }
                 if let Some(b_idx) = ab_part.find("behind ") {
                     let rest = &ab_part[b_idx + 7..];
-                    if let Some(end) = rest.find(|c: char| !c.is_digit(10)) {
+                    if let Some(end) = rest.find(|c: char| !c.is_ascii_digit()) {
                         behind = rest[..end].parse::<u32>().ok();
                     } else {
                         behind = rest.parse::<u32>().ok();
@@ -430,10 +430,10 @@ impl GitStatus {
             out.push('?');
         }
         if let Some(a) = self.ahead {
-            out.push_str(&format!(" (ahead {})", a));
+            out.push_str(&format!(" (ahead {a})"));
         }
         if let Some(b) = self.behind {
-            out.push_str(&format!(" (behind {})", b));
+            out.push_str(&format!(" (behind {b})"));
         }
         if self.dirty {
             out.push_str(&format!(", {}", style("dirty").fg(theme.warning_color)));

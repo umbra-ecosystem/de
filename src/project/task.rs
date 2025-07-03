@@ -32,7 +32,7 @@ impl Task {
     pub fn command_str(&self) -> String {
         match self {
             Task::Compose { service, command } => {
-                format!("docker-compose exec {} {}", service, command)
+                format!("docker-compose exec {service} {command}")
             }
             Task::Raw(shell_task) => shell_task.command_str().to_string(),
         }

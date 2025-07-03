@@ -91,9 +91,9 @@ fn main() -> eyre::Result<()> {
 
     if let Err(err) = result {
         if let Some(cause) = err.source() {
-            eprintln!("Error: {}\n\nCause: {}", err, cause);
+            eprintln!("Error: {err}\n\nCause: {cause}");
         } else {
-            eprintln!("Error: {}", err);
+            eprintln!("Error: {err}");
         }
         std::process::exit(1);
     }

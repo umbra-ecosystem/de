@@ -8,7 +8,7 @@ use eyre::{WrapErr, eyre};
 
 pub fn add(command: Slug) -> eyre::Result<()> {
     let shims_dir = get_shims_dir()?;
-    let shim_path = shims_dir.join(format!("{}", command));
+    let shim_path = shims_dir.join(format!("{command}"));
 
     let shim_program = generate_shim_bash_script(command.as_str());
     std::fs::create_dir_all(&shims_dir)

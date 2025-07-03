@@ -33,7 +33,7 @@ pub fn list() -> eyre::Result<()> {
 
     println!("Shims in directory '{}':", shims_dir.display());
     for shim in shims {
-        println!(" - {}", shim);
+        println!(" - {shim}");
     }
 
     Ok(())

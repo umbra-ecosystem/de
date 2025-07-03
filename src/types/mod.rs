@@ -55,8 +55,8 @@ impl Slug {
         // Ensure start with ascii and remove any leading or trailing hyphens/underscores that might have been introduced
         sanitized_name = sanitized_name
             .trim_start_matches(|c: char| !c.is_ascii_lowercase())
-            .trim_start_matches(|c| c == '-' || c == '_')
-            .trim_end_matches(|c| c == '-' || c == '_')
+            .trim_start_matches(['-', '_'])
+            .trim_end_matches(['-', '_'])
             .to_string();
 
         // Handle case where sanitization results in an empty string (e.g., input was "!!!").
@@ -90,8 +90,7 @@ impl FromStr for Slug {
                 .map(|s| format!(" \nSuggested valid name: '{s}'"))
                 .unwrap_or_else(|| " \nNo valid suggestion available.".to_string());
             return Err(format!(
-                "This must start with an alphabetic character. It starts with '{}'.{}",
-                first_char, suggestion
+                "This must start with an alphabetic character. It starts with '{first_char}'.{suggestion}"
             ));
         }
 
@@ -102,9 +101,8 @@ impl FromStr for Slug {
                     .map(|s| format!(" \nSuggested valid name: '{s}'"))
                     .unwrap_or_else(|| " \nNo valid suggestion available.".to_string());
                 return Err(format!(
-                    "This contains invalid character: '{}'. \
-Only lowercase alphanumeric characters, hyphens, and underscores are allowed.{}",
-                    ch, suggestion
+                    "This contains invalid character: '{ch}'. \
+Only lowercase alphanumeric characters, hyphens, and underscores are allowed.{suggestion}"
                 ));
             }
         }

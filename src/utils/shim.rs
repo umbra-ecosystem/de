@@ -12,7 +12,7 @@ pub fn shim_export_line(shims_dir: &Path) -> eyre::Result<String> {
     let shims_dir_str = shims_dir
         .to_str()
         .ok_or_else(|| eyre::eyre!("Failed to convert shims directory path to string"))?;
-    Ok(format!("export PATH=\"{}:$PATH\"", shims_dir_str))
+    Ok(format!("export PATH=\"{shims_dir_str}:$PATH\""))
 }
 
 pub fn check_shim_installation_in_shell_config(

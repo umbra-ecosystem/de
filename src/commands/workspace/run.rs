@@ -28,7 +28,7 @@ pub fn run(workspace_name: Option<Slug>, task_name: Slug, args: Vec<String>) -> 
     let program = parts.next().ok_or_else(|| eyre!("Empty command"))?;
     let task_args = parts.collect::<Vec<_>>();
 
-    let mut cmd = Command::new(&program);
+    let mut cmd = Command::new(program);
     cmd.args(&task_args);
     cmd.args(&args);
 

@@ -67,7 +67,7 @@ fn update_all_workspaces() -> eyre::Result<()> {
         if let Some(workspace_name) = workspace_name {
             let workspace = Workspace::load_from_name(&workspace_name)
                 .map_err(|e| eyre!(e))
-                .wrap_err_with(|| format!("Failed to load workspace '{}'", workspace_name))?
+                .wrap_err_with(|| format!("Failed to load workspace '{workspace_name}'"))?
                 .ok_or_else(|| eyre!("Workspace '{}' not found.", workspace_name))?;
 
             let (updated, removed) = update_workspace_internal(workspace)?;
@@ -80,9 +80,9 @@ fn update_all_workspaces() -> eyre::Result<()> {
         }
     }
 
-    println!("Updated {} projects across all workspaces", updated_count);
+    println!("Updated {updated_count} projects across all workspaces");
     if removed_count > 0 {
-        println!("Removed {} stale project registrations", removed_count);
+        println!("Removed {removed_count} stale project registrations");
     }
 
     Ok(())
@@ -92,16 +92,15 @@ fn update_all_workspaces() -> eyre::Result<()> {
 fn update_workspace(workspace: Workspace) -> eyre::Result<()> {
     let workspace_name = workspace.config().name.clone();
 
-    println!("Updating workspace '{}'...", workspace_name);
+    println!("Updating workspace '{workspace_name}'...");
 
     let (updated_count, removed_count) = update_workspace_internal(workspace)?;
 
     println!(
-        "Updated {} projects in workspace '{}'",
-        updated_count, workspace_name
+        "Updated {updated_count} projects in workspace '{workspace_name}'"
     );
     if removed_count > 0 {
-        println!("Removed {} stale project registrations", removed_count);
+        println!("Removed {removed_count} stale project registrations");
     }
 
     Ok(())
@@ -164,8 +163,7 @@ fn update_workspace_internal(mut workspace: Workspace) -> eyre::Result<(usize, u
             }
             Err(e) => {
                 eprintln!(
-                    "  Failed to loading project '{}' (failed to load: {})",
-                    project_name, e
+                    "  Failed to loading project '{project_name}' (failed to load: {e})"
                 );
             }
         }
@@ -203,7 +201,7 @@ fn update_current_project() -> eyre::Result<()> {
     )
     .wrap_err("Failed to update project registration")?;
 
-    println!("Updated project '{}' registration", project_name);
+    println!("Updated project '{project_name}' registration");
 
     Ok(())
 }

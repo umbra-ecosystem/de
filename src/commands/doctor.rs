@@ -46,7 +46,7 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
 
     // Check system dependencies
     formatter.heading("System Dependencies:");
-    let system_result = check_system_dependencies(&formatter, &theme);
+    let system_result = check_system_dependencies(&formatter);
     println!();
 
     // Check project configuration
@@ -66,8 +66,7 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
 
     // Check workspace configuration
     formatter.heading("Workspace Configuration:");
-    let workspace_result =
-        check_workspace_configuration(&formatter, &theme, workspace_name.as_ref());
+    let workspace_result = check_workspace_configuration(&formatter, workspace_name.as_ref());
 
     // Calculate totals and print status
     let total_errors = system_result.errors
@@ -121,7 +120,7 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
     Ok(())
 }
 
-fn check_system_dependencies(formatter: &Formatter, theme: &Theme) -> DiagnosticResult {
+fn check_system_dependencies(formatter: &Formatter) -> DiagnosticResult {
     let mut result = DiagnosticResult::new();
 
     // Check Docker
@@ -129,7 +128,7 @@ fn check_system_dependencies(formatter: &Formatter, theme: &Theme) -> Diagnostic
         Ok(version) => result.add_success(formatter, format!("Docker: {}", version.trim())),
         Err(e) => result.add_error(
             formatter,
-            format!("Docker: {}", e),
+            format!("Docker: {e}"),
             Some("Install from https://docs.docker.com/get-docker/".to_string()),
         ),
     }
@@ -139,7 +138,7 @@ fn check_system_dependencies(formatter: &Formatter, theme: &Theme) -> Diagnostic
         Ok(version) => result.add_success(formatter, format!("Docker Compose: {}", version.trim())),
         Err(e) => result.add_error(
             formatter,
-            format!("Docker Compose: {}", e),
+            format!("Docker Compose: {e}"),
             Some("Install from https://docs.docker.com/compose/install/".to_string()),
         ),
     }
@@ -156,7 +155,7 @@ fn check_project_configuration(formatter: &Formatter, theme: &Theme) -> Diagnost
                 formatter,
                 format!("Project: {}", project.manifest().project().name),
             );
-            check_project_details(formatter, &theme, &project, &mut result);
+            check_project_details(formatter, theme, &project, &mut result);
         }
         Ok(None) => {
             result.add_warning(
@@ -166,7 +165,7 @@ fn check_project_configuration(formatter: &Formatter, theme: &Theme) -> Diagnost
             );
         }
         Err(e) => {
-            result.add_error(formatter, format!("Project check failed: {}", e), None);
+            result.add_error(formatter, format!("Project check failed: {e}"), None);
         }
     }
 
@@ -175,7 +174,6 @@ fn check_project_configuration(formatter: &Formatter, theme: &Theme) -> Diagnost
 
 fn check_workspace_configuration(
     formatter: &Formatter,
-    theme: &Theme,
     workspace_name: Option<&Slug>,
 ) -> DiagnosticResult {
     let mut result = DiagnosticResult::new();
@@ -207,7 +205,7 @@ fn check_workspace_configuration(
             }
         }
         Err(e) => {
-            result.add_error(formatter, format!("Workspace check failed: {}", e), None);
+            result.add_error(formatter, format!("Workspace check failed: {e}"), None);
         }
     }
 
@@ -309,11 +307,7 @@ fn check_project_details(
     match project.docker_compose_path() {
         Ok(Some(compose_path)) => {
             if let Err(e) = validate_docker_compose(&compose_path) {
-                result.add_error(
-                    formatter,
-                    format!("Docker Compose file invalid: {}", e),
-                    None,
-                );
+                result.add_error(formatter, format!("Docker Compose file invalid: {e}"), None);
             } else {
                 result.add_success(
                     formatter,
@@ -375,11 +369,7 @@ fn check_project_details(
             result.add_info(formatter, theme.dim("Docker Compose: not configured"));
         }
         Err(e) => {
-            result.add_error(
-                formatter,
-                format!("Docker Compose check failed: {}", e),
-                None,
-            );
+            result.add_error(formatter, format!("Docker Compose check failed: {e}"), None);
         }
     }
 
@@ -397,7 +387,7 @@ fn check_project_details(
             Some("Add tasks to your de.toml".to_string()),
         );
     } else {
-        result.add_success(formatter, format!("Tasks: {} defined", task_count));
+        result.add_success(formatter, format!("Tasks: {task_count} defined"));
     }
 
     // Check if Compose tasks reference missing services or if no Compose file exists
@@ -410,8 +400,7 @@ fn check_project_details(
                         result.add_error(
                             formatter,
                             format!(
-                                "Task '{}' references missing Docker Compose service '{}'",
-                                task_name, service
+                                "Task '{task_name}' references missing Docker Compose service '{service}'"
                             ),
                             Some(
                                 "Check your de.toml and docker-compose.yml for consistency"
@@ -428,8 +417,7 @@ fn check_project_details(
                     result.add_error(
                         formatter,
                         format!(
-                            "Task '{}' references Docker Compose service '{}' but no Docker Compose file is configured or found",
-                            task_name, service
+                            "Task '{task_name}' references Docker Compose service '{service}' but no Docker Compose file is configured or found"
                         ),
                         Some(
                             "Add a docker-compose.yml or configure the docker_compose path in de.toml".to_string(),
@@ -464,7 +452,7 @@ fn check_workspace_details(
             Some("Run 'de scan' to discover projects or 'de init' to create new ones".to_string()),
         );
     } else {
-        result.add_success(formatter, format!("Projects: {} registered", project_count));
+        result.add_success(formatter, format!("Projects: {project_count} registered"));
 
         // Check if projects still exist
         let mut valid_projects = 0;
@@ -490,7 +478,7 @@ fn check_workspace_details(
         if invalid_projects > 0 {
             result.add_warning(
                 formatter,
-                format!("{} project(s) have missing directories", invalid_projects),
+                format!("{invalid_projects} project(s) have missing directories"),
                 Some("Run 'de update' to clean up workspace configuration".to_string()),
             );
         }
@@ -526,7 +514,7 @@ fn check_for_conflicts(
             Err(e) => {
                 result.add_error(
                     formatter,
-                    format!("Failed to load project {}: {}", project_id, e),
+                    format!("Failed to load project {project_id}: {e}"),
                     None,
                 );
                 continue;
@@ -545,10 +533,7 @@ fn check_for_conflicts(
         if project_names.contains(task_name) {
             result.add_warning(
                 formatter,
-                format!(
-                    "Project task '{}' conflicts with a project name.",
-                    task_name
-                ),
+                format!("Project task '{task_name}' conflicts with a project name."),
                 Some("Consider renaming the task or project to avoid ambiguity.".to_string()),
             );
         }
@@ -559,10 +544,7 @@ fn check_for_conflicts(
         if project_names.contains(task_name) {
             result.add_warning(
                 formatter,
-                format!(
-                    "Workspace task '{}' conflicts with a project name.",
-                    task_name
-                ),
+                format!("Workspace task '{task_name}' conflicts with a project name."),
                 Some("Consider renaming the task or project to avoid ambiguity.".to_string()),
             );
         }
@@ -574,8 +556,7 @@ fn check_for_conflicts(
             result.add_info(
                 formatter,
                 format!(
-                    "Workspace task '{}' overrides a project task with the same name.",
-                    task_name
+                    "Workspace task '{task_name}' overrides a project task with the same name."
                 ),
             );
         }

@@ -15,7 +15,7 @@ pub fn check(task: Slug) -> eyre::Result<()> {
         .and_then(|tasks| tasks.get(&task))
         .ok_or_else(|| eyre!("Task '{}' not found in project", task))?;
 
-    println!("Task '{}' exists in the current project.", task);
+    println!("Task '{task}' exists in the current project.");
 
     Ok(())
 }
