@@ -1,13 +1,16 @@
+use console::style;
 use eyre::eyre;
 use std::process::Command;
 
-use crate::{project::Project, types::Slug, workspace::Workspace};
+use crate::{
+    project::Project, types::Slug, utils::formatter::Formatter, utils::theme::Theme,
+    workspace::Workspace,
+};
 
 #[derive(Debug)]
 struct DiagnosticResult {
     errors: u32,
     warnings: u32,
-    details: Vec<String>,
 }
 
 impl DiagnosticResult {
@@ -15,42 +18,35 @@ impl DiagnosticResult {
         Self {
             errors: 0,
             warnings: 0,
-            details: Vec::new(),
         }
     }
 
-    fn add_success(&mut self, message: String) {
-        self.details.push(format!("  ✓ {}", message));
+    fn add_success(&mut self, formatter: &Formatter, message: String) {
+        formatter.success(&message);
     }
 
-    fn add_error(&mut self, message: String, suggestion: Option<String>) {
+    fn add_error(&mut self, formatter: &Formatter, message: String, suggestion: Option<String>) {
         self.errors += 1;
-        self.details.push(format!("  ✗ {}", message));
-        if let Some(suggestion) = suggestion {
-            self.details.push(format!("    → {}", suggestion));
-        }
+        formatter.error(&message, suggestion.as_deref());
     }
 
-    fn add_warning(&mut self, message: String, suggestion: Option<String>) {
+    fn add_warning(&mut self, formatter: &Formatter, message: String, suggestion: Option<String>) {
         self.warnings += 1;
-        self.details.push(format!("  ! {}", message));
-        if let Some(suggestion) = suggestion {
-            self.details.push(format!("    → {}", suggestion));
-        }
+        formatter.warning(&message, suggestion.as_deref());
     }
 
-    fn add_info(&mut self, message: String) {
-        self.details.push(format!("  - {}", message));
+    fn add_info(&mut self, formatter: &Formatter, message: String) {
+        formatter.info(&message);
     }
 }
 
 pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
+    let formatter = Formatter::new();
+    let theme = crate::utils::theme::Theme::new();
+
     // Check system dependencies
-    println!("System Dependencies:");
-    let system_result = check_system_dependencies();
-    for detail in &system_result.details {
-        println!("{}", detail);
-    }
+    formatter.heading("System Dependencies:");
+    let system_result = check_system_dependencies(&formatter, &theme);
     println!();
 
     // Check project configuration
@@ -60,11 +56,8 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
         .map(|workspace_name| matches!(project, Ok(Some(project)) if &project.manifest().project().workspace == workspace_name))
         .unwrap_or(true)
     {
-        println!("Project Configuration:");
-        let project_result = check_project_configuration();
-        for detail in &project_result.details {
-            println!("{}", detail);
-        }
+        formatter.heading("Project Configuration:");
+        let project_result = check_project_configuration(&formatter, &theme);
         println!();
         Some(project_result)
     } else {
@@ -72,11 +65,9 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
     };
 
     // Check workspace configuration
-    println!("Workspace Configuration:");
-    let workspace_result = check_workspace_configuration(workspace_name.as_ref());
-    for detail in &workspace_result.details {
-        println!("{}", detail);
-    }
+    formatter.heading("Workspace Configuration:");
+    let workspace_result =
+        check_workspace_configuration(&formatter, &theme, workspace_name.as_ref());
 
     // Calculate totals and print status
     let total_errors = system_result.errors
@@ -93,30 +84,51 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
         + workspace_result.warnings;
 
     println!();
-    println!("Status:");
+    formatter.heading("Status:");
     if total_errors == 0 && total_warnings == 0 {
-        println!("  All systems operational");
+        formatter.success(
+            &style("All systems operational")
+                .fg(theme.success_color)
+                .to_string(),
+        );
     } else {
         if total_errors > 0 {
-            println!("  {} error(s) found", total_errors);
+            formatter.error(
+                &format!(
+                    "{} error(s) found",
+                    style(total_errors).fg(theme.error_color).bold()
+                ),
+                None,
+            );
         }
         if total_warnings > 0 {
-            println!("  {} warning(s) found", total_warnings);
+            formatter.warning(
+                &format!(
+                    "{} warning(s) found",
+                    style(total_warnings).fg(theme.warning_color).bold()
+                ),
+                None,
+            );
         }
+
         println!();
-        println!("Run 'de doctor' again after addressing issues to verify fixes.");
+        println!(
+            "Run {} again after addressing issues to verify fixes.",
+            style("de doctor").fg(theme.accent_color)
+        );
     }
 
     Ok(())
 }
 
-fn check_system_dependencies() -> DiagnosticResult {
+fn check_system_dependencies(formatter: &Formatter, theme: &Theme) -> DiagnosticResult {
     let mut result = DiagnosticResult::new();
 
     // Check Docker
     match check_docker() {
-        Ok(version) => result.add_success(format!("Docker: {}", version.trim())),
+        Ok(version) => result.add_success(formatter, format!("Docker: {}", version.trim())),
         Err(e) => result.add_error(
+            formatter,
             format!("Docker: {}", e),
             Some("Install from https://docs.docker.com/get-docker/".to_string()),
         ),
@@ -124,8 +136,9 @@ fn check_system_dependencies() -> DiagnosticResult {
 
     // Check Docker Compose
     match check_docker_compose() {
-        Ok(version) => result.add_success(format!("Docker Compose: {}", version.trim())),
+        Ok(version) => result.add_success(formatter, format!("Docker Compose: {}", version.trim())),
         Err(e) => result.add_error(
+            formatter,
             format!("Docker Compose: {}", e),
             Some("Install from https://docs.docker.com/compose/install/".to_string()),
         ),
@@ -134,29 +147,37 @@ fn check_system_dependencies() -> DiagnosticResult {
     result
 }
 
-fn check_project_configuration() -> DiagnosticResult {
+fn check_project_configuration(formatter: &Formatter, theme: &Theme) -> DiagnosticResult {
     let mut result = DiagnosticResult::new();
 
     match Project::current() {
         Ok(Some(project)) => {
-            result.add_success(format!("Project: {}", project.manifest().project().name));
-            check_project_details(&project, &mut result);
+            result.add_success(
+                formatter,
+                format!("Project: {}", project.manifest().project().name),
+            );
+            check_project_details(formatter, &theme, &project, &mut result);
         }
         Ok(None) => {
             result.add_warning(
+                formatter,
                 "Not in a de project directory".to_string(),
                 Some("Run 'de init' to initialize a project here".to_string()),
             );
         }
         Err(e) => {
-            result.add_error(format!("Project check failed: {}", e), None);
+            result.add_error(formatter, format!("Project check failed: {}", e), None);
         }
     }
 
     result
 }
 
-fn check_workspace_configuration(workspace_name: Option<&Slug>) -> DiagnosticResult {
+fn check_workspace_configuration(
+    formatter: &Formatter,
+    theme: &Theme,
+    workspace_name: Option<&Slug>,
+) -> DiagnosticResult {
     let mut result = DiagnosticResult::new();
 
     let workspace = if let Some(name) = workspace_name {
@@ -167,24 +188,26 @@ fn check_workspace_configuration(workspace_name: Option<&Slug>) -> DiagnosticRes
 
     match workspace {
         Ok(Some(workspace)) => {
-            result.add_success(format!("Workspace: {}", workspace.config().name));
-            check_workspace_details(&workspace, &mut result);
+            result.add_success(formatter, format!("Workspace: {}", workspace.config().name));
+            check_workspace_details(formatter, &workspace, &mut result);
         }
         Ok(None) => {
             if workspace_name.is_some() {
                 result.add_error(
+                    formatter,
                     "Workspace not found".to_string(),
                     Some("Check if the workspace name is correct or run 'de init' to create a new workspace".to_string()
                 ));
             } else {
                 result.add_warning(
+                    formatter,
                     "No active workspace found".to_string(),
                     Some("Initialize a project or set an active workspace".to_string()),
                 );
             }
         }
         Err(e) => {
-            result.add_error(format!("Workspace check failed: {}", e), None);
+            result.add_error(formatter, format!("Workspace check failed: {}", e), None);
         }
     }
 
@@ -252,13 +275,19 @@ fn check_docker_compose() -> eyre::Result<String> {
     Ok(version)
 }
 
-fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
+fn check_project_details(
+    formatter: &Formatter,
+    theme: &Theme,
+    project: &Project,
+    result: &mut DiagnosticResult,
+) {
     use crate::project::Task;
     use std::process::Command;
 
     // Check if project directory exists
     if !project.dir().exists() {
         result.add_error(
+            formatter,
             format!("Project directory missing: {}", project.dir().display()),
             None,
         );
@@ -266,7 +295,11 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
 
     // Check if de.toml exists and is readable
     if !project.manifest_path().exists() {
-        result.add_error("Project manifest (de.toml) missing".to_string(), None);
+        result.add_error(
+            formatter,
+            "Project manifest (de.toml) missing".to_string(),
+            None,
+        );
     }
 
     // Track Compose services for later check
@@ -276,12 +309,19 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
     match project.docker_compose_path() {
         Ok(Some(compose_path)) => {
             if let Err(e) = validate_docker_compose(&compose_path) {
-                result.add_error(format!("Docker Compose file invalid: {}", e), None);
+                result.add_error(
+                    formatter,
+                    format!("Docker Compose file invalid: {}", e),
+                    None,
+                );
             } else {
-                result.add_success(format!(
-                    "Docker Compose file: {}",
-                    compose_path.file_name().unwrap().to_string_lossy()
-                ));
+                result.add_success(
+                    formatter,
+                    format!(
+                        "Docker Compose file: {}",
+                        compose_path.file_name().unwrap().to_string_lossy()
+                    ),
+                );
 
                 // Try to get list of services from docker-compose config --services
                 let output = Command::new("docker-compose")
@@ -332,10 +372,14 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
             }
         }
         Ok(None) => {
-            result.add_info("Docker Compose: not configured".to_string());
+            result.add_info(formatter, theme.dim("Docker Compose: not configured"));
         }
         Err(e) => {
-            result.add_error(format!("Docker Compose check failed: {}", e), None);
+            result.add_error(
+                formatter,
+                format!("Docker Compose check failed: {}", e),
+                None,
+            );
         }
     }
 
@@ -348,11 +392,12 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
         .unwrap_or(0);
     if task_count == 0 {
         result.add_warning(
+            formatter,
             "No tasks defined".to_string(),
             Some("Add tasks to your de.toml".to_string()),
         );
     } else {
-        result.add_success(format!("Tasks: {} defined", task_count));
+        result.add_success(formatter, format!("Tasks: {} defined", task_count));
     }
 
     // Check if Compose tasks reference missing services or if no Compose file exists
@@ -363,6 +408,7 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
                 if let Task::Compose { service, .. } = task {
                     if !service_set.contains(&service) {
                         result.add_error(
+                            formatter,
                             format!(
                                 "Task '{}' references missing Docker Compose service '{}'",
                                 task_name, service
@@ -380,6 +426,7 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
             for (task_name, task) in tasks {
                 if let Task::Compose { service, .. } = task {
                     result.add_error(
+                        formatter,
                         format!(
                             "Task '{}' references Docker Compose service '{}' but no Docker Compose file is configured or found",
                             task_name, service
@@ -396,23 +443,28 @@ fn check_project_details(project: &Project, result: &mut DiagnosticResult) {
     // Check .env file
     let env_file = project.dir().join(".env");
     if env_file.exists() {
-        result.add_success("Environment file: .env".to_string());
+        result.add_success(formatter, "Environment file: .env".to_string());
     } else {
-        result.add_info("Environment file: not found".to_string());
+        result.add_info(formatter, theme.dim("Environment file: not found"));
     }
 }
 
-fn check_workspace_details(workspace: &Workspace, result: &mut DiagnosticResult) {
+fn check_workspace_details(
+    formatter: &Formatter,
+    workspace: &Workspace,
+    result: &mut DiagnosticResult,
+) {
     let config = workspace.config();
     let project_count = config.projects.len();
 
     if project_count == 0 {
         result.add_warning(
+            formatter,
             "Workspace has no projects".to_string(),
             Some("Run 'de scan' to discover projects or 'de init' to create new ones".to_string()),
         );
     } else {
-        result.add_success(format!("Projects: {} registered", project_count));
+        result.add_success(formatter, format!("Projects: {} registered", project_count));
 
         // Check if projects still exist
         let mut valid_projects = 0;
@@ -424,6 +476,7 @@ fn check_workspace_details(workspace: &Workspace, result: &mut DiagnosticResult)
             } else {
                 invalid_projects += 1;
                 result.add_error(
+                    formatter,
                     format!(
                         "Missing: {} ({})",
                         project_id,
@@ -436,27 +489,33 @@ fn check_workspace_details(workspace: &Workspace, result: &mut DiagnosticResult)
 
         if invalid_projects > 0 {
             result.add_warning(
+                formatter,
                 format!("{} project(s) have missing directories", invalid_projects),
                 Some("Run 'de update' to clean up workspace configuration".to_string()),
             );
         }
 
         if valid_projects > 0 && invalid_projects == 0 {
-            result.add_success("All project directories found".to_string());
+            result.add_success(formatter, "All project directories found".to_string());
         }
 
         // Check for task name conflicts
-        check_for_conflicts(workspace, result);
+        check_for_conflicts(formatter, workspace, result);
     }
 }
 
-fn check_for_conflicts(workspace: &Workspace, result: &mut DiagnosticResult) {
+fn check_for_conflicts(
+    formatter: &Formatter,
+    workspace: &Workspace,
+    result: &mut DiagnosticResult,
+) {
     let config = workspace.config();
     let project_names: std::collections::HashSet<_> = config.projects.keys().collect();
     let workspace_task_names: std::collections::HashSet<_> = config.tasks.keys().collect();
 
     // Collect all project task names
-    let mut all_project_task_names: std::collections::HashSet<Slug> = std::collections::HashSet::new();
+    let mut all_project_task_names: std::collections::HashSet<Slug> =
+        std::collections::HashSet::new();
     for (project_id, workspace_project) in &config.projects {
         if !workspace_project.dir.exists() {
             continue;
@@ -466,6 +525,7 @@ fn check_for_conflicts(workspace: &Workspace, result: &mut DiagnosticResult) {
             Ok(project) => project,
             Err(e) => {
                 result.add_error(
+                    formatter,
                     format!("Failed to load project {}: {}", project_id, e),
                     None,
                 );
@@ -484,6 +544,7 @@ fn check_for_conflicts(workspace: &Workspace, result: &mut DiagnosticResult) {
     for task_name in &all_project_task_names {
         if project_names.contains(task_name) {
             result.add_warning(
+                formatter,
                 format!(
                     "Project task '{}' conflicts with a project name.",
                     task_name
@@ -497,6 +558,7 @@ fn check_for_conflicts(workspace: &Workspace, result: &mut DiagnosticResult) {
     for task_name in &workspace_task_names {
         if project_names.contains(task_name) {
             result.add_warning(
+                formatter,
                 format!(
                     "Workspace task '{}' conflicts with a project name.",
                     task_name
@@ -510,6 +572,7 @@ fn check_for_conflicts(workspace: &Workspace, result: &mut DiagnosticResult) {
     for task_name in &workspace_task_names {
         if all_project_task_names.contains(task_name) {
             result.add_info(
+                formatter,
                 format!(
                     "Workspace task '{}' overrides a project task with the same name.",
                     task_name

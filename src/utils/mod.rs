@@ -1,5 +1,7 @@
-mod cli;
-mod shim;
+pub mod cli;
+pub mod shim;
+pub mod formatter;
+pub mod theme;
 pub mod unix;
 
 use crate::constants::{ORGANIZATION_NAME, PROJECT_NAME};

@@ -6,6 +6,7 @@ use crate::{
     project::Project,
     types::Slug,
     workspace::{Workspace, spin_up_workspace},
+    utils::formatter::Formatter,
 };
 
 pub fn start(workspace_name: Option<Slug>) -> eyre::Result<()> {
@@ -35,7 +36,8 @@ pub fn start(workspace_name: Option<Slug>) -> eyre::Result<()> {
 
     // We ignore the error here because we want to proceed even if the status check fails
     println!();
-    let _ = workspace_status(&workspace);
+    let formatter = Formatter::new();
+    let _ = workspace_status(&workspace, &formatter);
 
     Ok(())
 }

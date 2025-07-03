@@ -1,14 +1,19 @@
+use crate::{
+    project::Project,
+    types::Slug,
+    utils::formatter::Formatter,
+    utils::theme::Theme,
+    workspace::{Workspace, WorkspaceProject},
+};
+use console::style;
 use eyre::{WrapErr, eyre};
 use std::path::Path;
 use std::process::Command;
 
-use crate::project::Project;
-use crate::types::Slug;
-use crate::workspace::{Workspace, WorkspaceProject};
-
 /// Show the status of the active workspace and its projects.
 pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
     tracing::info!("Starting status command");
+    let formatter = Formatter::new();
 
     let workspace = if let Some(workspace_name) = workspace_name {
         tracing::info!("Loading workspace '{}'", workspace_name);
@@ -21,23 +26,27 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
             Some(ws) => ws,
             None => {
                 tracing::warn!("No active workspace found");
-                println!("No active workspace found.");
+                formatter.warning("No active workspace found.", None);
                 return Ok(());
             }
         }
     };
 
-    workspace_status(&workspace)?;
+    workspace_status(&workspace, &formatter)?;
 
     tracing::info!("Finished status command");
     Ok(())
 }
 
-pub fn workspace_status(workspace: &Workspace) -> eyre::Result<WorkspaceStatus> {
+pub fn workspace_status(
+    workspace: &Workspace,
+    formatter: &Formatter,
+) -> eyre::Result<WorkspaceStatus> {
     let ws_config = workspace.config();
     tracing::info!("Loaded workspace '{}'", ws_config.name);
-    println!("Workspace: {}", ws_config.name);
-    println!("Projects:");
+    formatter.heading(&format!("Workspace: {}", ws_config.name.to_string()));
+    println!(); // Add a newline after the heading
+    formatter.heading("Projects:");
 
     let current_project = Project::current()
         .map_err(|e| eyre!(e))
@@ -58,10 +67,10 @@ pub fn workspace_status(workspace: &Workspace) -> eyre::Result<WorkspaceStatus> 
         .collect();
 
     for status in &statuses {
-        status.print();
+        status.print(formatter);
     }
 
-    print_status_summary(&statuses);
+    print_status_summary(&statuses, formatter);
 
     Ok(WorkspaceStatus { statuses })
 }
@@ -166,22 +175,44 @@ impl ProjectStatus {
     }
 
     /// Print the status for this project.
-    fn print(&self) {
-        println!(
-            "  - {} [{}]{}",
-            self.slug,
-            if self.present { "present" } else { "missing" },
-            if self.current { " - current" } else { "" }
+    fn print(&self, formatter: &Formatter) {
+        let theme = Theme::new();
+        formatter.line(
+            &format!(
+                "{} [{}] {}",
+                style(&self.slug).bold(),
+                if self.present {
+                    style("present").fg(theme.success_color)
+                } else {
+                    style("missing").fg(theme.error_color)
+                },
+                if self.current {
+                    style("(current)").fg(theme.success_color).to_string()
+                } else {
+                    "".to_string()
+                }
+            ),
+            2,
         );
         println!("      Git: {}", self.git.format());
         if let Some(ref docker_services) = self.docker_services {
             if !docker_services.is_empty() {
                 println!("      Docker Compose services:");
                 for svc in docker_services {
-                    if let Some(ref ports) = svc.ports {
-                        println!("        {}: {} {}", svc.name, svc.status, ports);
+                    let status_style = if svc.status.contains("Up") {
+                        style(&svc.status).fg(theme.success_color)
                     } else {
-                        println!("        {}: {}", svc.name, svc.status);
+                        style(&svc.status).fg(theme.error_color)
+                    };
+                    if let Some(ref ports) = svc.ports {
+                        println!(
+                            "        {}: {} {}",
+                            style(&svc.name).bold(),
+                            status_style,
+                            theme.dim(ports),
+                        );
+                    } else {
+                        println!("        {}: {}", style(&svc.name).bold(), status_style);
                     }
                 }
             }
@@ -199,7 +230,8 @@ struct GitStatus {
 }
 
 /// Print a concise, actionable summary of project and service status.
-fn print_status_summary(statuses: &[ProjectStatus]) {
+fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) {
+    let theme = Theme::new();
     let dirty = statuses
         .iter()
         .filter(|s| s.git.is_repo && s.git.dirty)
@@ -227,30 +259,66 @@ fn print_status_summary(statuses: &[ProjectStatus]) {
     );
 
     println!();
-    println!("Status Summary:");
+    formatter.heading("Status Summary:");
     let mut any = false;
     if dirty > 0 {
-        println!("  Uncommitted changes: {}    (run: git commit)", dirty);
+        formatter.line(
+            &format!(
+                "{} Uncommitted changes: {} (run: {})",
+                formatter.warning_symbol(),
+                dirty,
+                style("git commit").fg(theme.accent_color)
+            ),
+            2,
+        );
         any = true;
     }
     if behind > 0 {
-        println!("  To pull: {}                (run: git pull)", behind);
+        formatter.line(
+            &format!(
+                "{} To pull: {} (run: {})",
+                formatter.info_symbol(),
+                behind,
+                style("git pull").fg(theme.accent_color)
+            ),
+            2,
+        );
         any = true;
     }
     if ahead > 0 {
-        println!("  To push: {}                (run: git push)", ahead);
+        formatter.line(
+            &format!(
+                "{} To push: {} (run: {})",
+                formatter.info_symbol(),
+                ahead,
+                style("git push").fg(theme.accent_color)
+            ),
+            2,
+        );
         any = true;
     }
     if downed_services_total > 0 {
-        println!(
-            "  Downed services: {}        (run: docker-compose up -d)",
-            downed_services_total
+        formatter.line(
+            &format!(
+                "{} Downed services: {} (run: {})",
+                formatter.error_symbol(),
+                downed_services_total,
+                style("docker-compose up -d").fg(theme.accent_color)
+            ),
+            2,
         );
         any = true;
     }
 
     if !any {
-        println!("  All projects and services are up to date.");
+        formatter.line(
+            &format!(
+                "{} {}",
+                formatter.success_symbol(),
+                style("All projects and services are up to date.").fg(theme.success_color)
+            ),
+            2,
+        );
     }
 }
 
@@ -351,12 +419,13 @@ impl GitStatus {
     }
 
     fn format(&self) -> String {
+        let theme = Theme::new();
         if !self.is_repo {
-            return "not a git repo".to_string();
+            return theme.dim("not a git repo");
         }
         let mut out = String::new();
         if let Some(branch) = &self.branch {
-            out.push_str(branch);
+            out.push_str(&style(branch).bold().to_string());
         } else {
             out.push('?');
         }
@@ -367,9 +436,9 @@ impl GitStatus {
             out.push_str(&format!(" (behind {})", b));
         }
         if self.dirty {
-            out.push_str(", dirty");
+            out.push_str(&format!(", {}", style("dirty").fg(theme.warning_color)));
         } else {
-            out.push_str(", clean");
+            out.push_str(&format!(", {}", style("clean").fg(theme.success_color)));
         }
         out
     }

@@ -3,6 +3,7 @@ use crate::{
     config::Config,
     types::Slug,
     workspace::{Workspace, spin_down_workspace},
+    utils::formatter::Formatter,
 };
 use dialoguer::Confirm;
 use eyre::{Context, eyre};
@@ -20,7 +21,10 @@ pub fn stop(workspace_name: Option<Slug>) -> eyre::Result<()> {
             .ok_or_else(|| eyre!("No workspace is currently active"))?
     };
 
-    let workspace_status = workspace_status(&workspace)
+    let workspace_status = {
+        let formatter = Formatter::new();
+        workspace_status(&workspace, &formatter)
+    }
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get workspace status")?;
 
