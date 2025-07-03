@@ -16,6 +16,7 @@
 - **Task & Command Execution**
   - ⚡ Define and run both shell commands and Docker Compose service tasks
   - 🚀 Execute arbitrary commands within a project's environment
+  - 🏃🏽‍♀️ Fallthrough for direct task execution without the `run` subcommand
   - 🔗 Create command shims/aliases for easy access
   - ✅ Check and list available tasks
 
@@ -111,7 +112,51 @@ de run dev
 de run build --release  # Pass additional arguments
 ```
 
-### 4. Define Workspace Tasks
+### 4. Command Fallthrough (Direct Task Execution)
+
+`de` supports direct task execution without the `run` subcommand for a more streamlined workflow. If a command is not a built-in `de` command, it will be treated as a task to be executed.
+
+The fallthrough logic works as follows:
+
+1.  **Workspace Project Task**: If the command matches a project name in the current workspace, `de` will attempt to execute the subsequent argument as a task within that project.
+2.  **Current Project Task**: If the command is not a project name, `de` will attempt to execute it as a task in the current project.
+
+This allows for a more natural and concise way to run your common tasks.
+
+#### Examples
+
+Given the following project `de.toml`:
+
+```toml
+[project]
+name = "my-api"
+workspace = "my-workspace"
+
+[tasks]
+test = "cargo test"
+start = { service = "api", command = "cargo watch -x run" }
+```
+
+Instead of `de run test`, you can simply run:
+
+```bash
+de test
+```
+
+Instead of `de run start`, you can run:
+
+```bash
+de start
+```
+
+If you have another project named `my-frontend` in the same workspace, you could run its tasks like this:
+
+```bash
+de my-frontend build
+```
+This would execute the `build` task within the `my-frontend` project.
+
+### 5. Define Workspace Tasks
 
 Edit the `de.toml` file in your workspace configuration directory (usually `~/.config/de/workspaces/<workspace-name>.toml`) to define workspace-level tasks:
 
@@ -125,7 +170,7 @@ build-all = "cargo build --all"
 clean-all = "cargo clean --all"
 ```
 
-### 5. Run Workspace Tasks
+### 6. Run Workspace Tasks
 
 Execute defined workspace tasks:
 
@@ -158,7 +203,7 @@ de exec python my_script.py -- --some-arg value
 
 This command is useful for one-off operations or when you need to interact directly with the project's environment without defining a specific task in `de.toml`.
 
-### 5. Execute Arbitrary Commands Across All Projects
+### 8. Execute Arbitrary Commands Across All Projects
 
 Run any command within the context of all projects in a workspace:
 
@@ -180,7 +225,7 @@ de exec-all -- python my_script.py -- --some-arg value
 
 This command is useful for performing bulk operations across multiple projects in a workspace.
 
-### 8. Start/Stop Docker Compose Projects
+### 9. Start/Stop Docker Compose Projects
 
 Start all Docker Compose projects in a workspace:
 
@@ -196,7 +241,7 @@ de stop
 de stop --workspace my-workspace
 ```
 
-### 7. List Projects
+### 10. List Projects
 
 View all projects in your current workspace:
 
@@ -210,7 +255,7 @@ Or list projects in a specific workspace:
 de list --workspace my-workspace
 ```
 
-### 6. Check Project and Environment Health
+### 11. Check Project and Environment Health
 
 Diagnose and check the health of your `de` environment:
 
@@ -220,7 +265,7 @@ de doctor
 
 This command will check for common issues, missing files, and misconfigurations in your workspace and projects.
 
-### 7. Show Workspace and Project Status
+### 12. Show Workspace and Project Status
 
 Get a concise, actionable summary of the dynamic state of all projects in the current workspace:
 

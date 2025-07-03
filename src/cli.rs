@@ -237,7 +237,7 @@ pub enum WorkspaceCommands {
         workspace: Option<Slug>,
 
         /// Additional arguments to pass to the task command.
-        #[clap(allow_hyphen_values = true, hide = true)]
+        #[clap(hide = true)]
         args: Vec<String>,
     },
 }
