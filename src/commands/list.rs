@@ -11,7 +11,7 @@ pub fn list(workspace: Workspace) -> eyre::Result<()> {
     let name = &workspace.config().name;
 
     if workspace.config().projects.is_empty() {
-        formatter.warning(&format!("No projects found in workspace '{name}'"), None);
+        formatter.warning(&format!("No projects found in workspace '{name}'"), None)?;
         return Ok(());
     }
 
@@ -50,9 +50,9 @@ pub fn list(workspace: Workspace) -> eyre::Result<()> {
 
     projects_to_display.sort_by(|a, b| a.id.cmp(&b.id));
 
-    formatter.heading(&format!("Projects in workspace {name}:"));
+    formatter.heading(&format!("Projects in workspace {name}:"))?;
     for project in &projects_to_display {
-        print_project_display(project, &formatter, &theme);
+        print_project_display(project, &formatter, &theme)?;
     }
 
     Ok(())
@@ -65,7 +65,7 @@ struct ProjectDisplay {
     current: bool,
 }
 
-fn print_project_display(project: &ProjectDisplay, formatter: &Formatter, theme: &Theme) {
+fn print_project_display(project: &ProjectDisplay, formatter: &Formatter, theme: &Theme) -> eyre::Result<()> {
     let status_symbol = if project.present {
         formatter.success_symbol()
     } else {
@@ -78,10 +78,14 @@ fn print_project_display(project: &ProjectDisplay, formatter: &Formatter, theme:
         "".to_string()
     };
 
-    println!(
-        "  {} {}{}",
-        status_symbol,
-        style(&project.name).bold(),
-        current_indicator
-    );
+    formatter.line(
+        &format!(
+            "  {} {}{}",
+            status_symbol,
+            style(&project.name).bold(),
+            current_indicator
+        ),
+        0,
+    )?;
+    Ok(())
 }

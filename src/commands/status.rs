@@ -26,7 +26,7 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
             Some(ws) => ws,
             None => {
                 tracing::warn!("No active workspace found");
-                formatter.warning("No active workspace found.", None);
+                formatter.warning("No active workspace found.", None)?;
                 return Ok(());
             }
         }
@@ -44,9 +44,9 @@ pub fn workspace_status(
 ) -> eyre::Result<WorkspaceStatus> {
     let ws_config = workspace.config();
     tracing::info!("Loaded workspace '{}'", ws_config.name);
-    formatter.heading(&format!("Workspace: {}", ws_config.name));
+    formatter.heading(&format!("Workspace: {}", ws_config.name))?;
     println!(); // Add a newline after the heading
-    formatter.heading("Projects:");
+    formatter.heading("Projects:")?;
 
     let current_project = Project::current()
         .map_err(|e| eyre!(e))
@@ -67,10 +67,10 @@ pub fn workspace_status(
         .collect();
 
     for status in &statuses {
-        status.print(formatter);
+        status.print(formatter)?;
     }
 
-    print_status_summary(&statuses, formatter);
+    print_status_summary(&statuses, formatter)?;
 
     Ok(WorkspaceStatus { statuses })
 }
@@ -175,7 +175,7 @@ impl ProjectStatus {
     }
 
     /// Print the status for this project.
-    fn print(&self, formatter: &Formatter) {
+    fn print(&self, formatter: &Formatter) -> eyre::Result<()> {
         let theme = Theme::new();
         formatter.line(
             &format!(
@@ -193,7 +193,7 @@ impl ProjectStatus {
                 }
             ),
             2,
-        );
+        )?;
         println!("      Git: {}", self.git.format());
         if let Some(ref docker_services) = self.docker_services {
             if !docker_services.is_empty() {
@@ -217,6 +217,7 @@ impl ProjectStatus {
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -230,7 +231,7 @@ struct GitStatus {
 }
 
 /// Print a concise, actionable summary of project and service status.
-fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) {
+fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) -> eyre::Result<()> {
     let theme = Theme::new();
     let dirty = statuses
         .iter()
@@ -259,7 +260,7 @@ fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) {
     );
 
     println!();
-    formatter.heading("Status Summary:");
+    formatter.heading("Status Summary:")?;
     let mut any = false;
     if dirty > 0 {
         formatter.line(
@@ -270,7 +271,7 @@ fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) {
                 style("git commit").fg(theme.accent_color)
             ),
             2,
-        );
+        )?;
         any = true;
     }
     if behind > 0 {
@@ -282,7 +283,7 @@ fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) {
                 style("git pull").fg(theme.accent_color)
             ),
             2,
-        );
+        )?;
         any = true;
     }
     if ahead > 0 {
@@ -294,7 +295,7 @@ fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) {
                 style("git push").fg(theme.accent_color)
             ),
             2,
-        );
+        )?;
         any = true;
     }
     if downed_services_total > 0 {
@@ -306,7 +307,7 @@ fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) {
                 style("docker-compose up -d").fg(theme.accent_color)
             ),
             2,
-        );
+        )?;
         any = true;
     }
 
@@ -318,8 +319,9 @@ fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) {
                 style("All projects and services are up to date.").fg(theme.success_color)
             ),
             2,
-        );
+        )?;
     }
+    Ok(())
 }
 
 impl GitStatus {

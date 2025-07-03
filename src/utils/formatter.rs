@@ -1,14 +1,17 @@
 use crate::utils::theme::Theme;
-use console::style;
+use console::{style, Term};
+use std::io::Result;
 
 pub struct Formatter {
     theme: Theme,
+    term: Term,
 }
 
 impl Formatter {
     pub fn new() -> Self {
         Self {
             theme: Theme::new(),
+            term: Term::stdout(),
         }
     }
 
@@ -32,33 +35,35 @@ impl Formatter {
         style("→").fg(self.theme.accent_color).to_string()
     }
 
-    pub fn success(&self, message: &str) {
-        println!("  {} {}", self.success_symbol(), message);
+    pub fn success(&self, message: &str) -> Result<()> {
+        self.term.write_line(&format!("  {} {}", self.success_symbol(), message))
     }
 
-    pub fn error(&self, message: &str, suggestion: Option<&str>) {
-        println!("  {} {}", self.error_symbol(), message);
+    pub fn error(&self, message: &str, suggestion: Option<&str>) -> Result<()> {
+        self.term.write_line(&format!("  {} {}", self.error_symbol(), message))?;
         if let Some(suggestion) = suggestion {
-            println!("    {} {}", self.arrow_symbol(), self.theme.dim(suggestion));
+            self.term.write_line(&format!("    {} {}", self.arrow_symbol(), self.theme.dim(suggestion)))?;
         }
+        Ok(())
     }
 
-    pub fn warning(&self, message: &str, suggestion: Option<&str>) {
-        println!("  {} {}", self.warning_symbol(), message);
+    pub fn warning(&self, message: &str, suggestion: Option<&str>) -> Result<()> {
+        self.term.write_line(&format!("  {} {}", self.warning_symbol(), message))?;
         if let Some(suggestion) = suggestion {
-            println!("    {} {}", self.arrow_symbol(), self.theme.dim(suggestion));
+            self.term.write_line(&format!("    {} {}", self.arrow_symbol(), self.theme.dim(suggestion)))?;
         }
+        Ok(())
     }
 
-    pub fn info(&self, message: &str) {
-        println!("  {} {}", self.info_symbol(), message);
+    pub fn info(&self, message: &str) -> Result<()> {
+        self.term.write_line(&format!("  {} {}", self.info_symbol(), message))
     }
 
-    pub fn heading(&self, text: &str) {
-        println!("{}", style(text).bold());
+    pub fn heading(&self, text: &str) -> Result<()> {
+        self.term.write_line(&format!("{}", style(text).bold()))
     }
 
-    pub fn line(&self, text: &str, indent: usize) {
-        println!("{:indent$}{}", "", text, indent = indent);
+    pub fn line(&self, text: &str, indent: usize) -> Result<()> {
+        self.term.write_line(&format!("{:indent$}{}", "", text, indent = indent))
     }
 }
