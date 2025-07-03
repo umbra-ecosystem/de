@@ -26,13 +26,23 @@ impl DiagnosticResult {
         Ok(())
     }
 
-    fn add_error(&mut self, formatter: &Formatter, message: String, suggestion: Option<String>) -> eyre::Result<()> {
+    fn add_error(
+        &mut self,
+        formatter: &Formatter,
+        message: String,
+        suggestion: Option<String>,
+    ) -> eyre::Result<()> {
         self.errors += 1;
         formatter.error(&message, suggestion.as_deref())?;
         Ok(())
     }
 
-    fn add_warning(&mut self, formatter: &Formatter, message: String, suggestion: Option<String>) -> eyre::Result<()> {
+    fn add_warning(
+        &mut self,
+        formatter: &Formatter,
+        message: String,
+        suggestion: Option<String>,
+    ) -> eyre::Result<()> {
         self.warnings += 1;
         formatter.warning(&message, suggestion.as_deref())?;
         Ok(())
@@ -50,7 +60,7 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
 
     // Check system dependencies
     formatter.heading("System Dependencies:")?;
-    let system_result = check_system_dependencies(&formatter, &theme)?;
+    let system_result = check_system_dependencies(&formatter)?;
     println!();
 
     // Check project configuration
@@ -124,7 +134,7 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
     Ok(())
 }
 
-fn check_system_dependencies(formatter: &Formatter, theme: &Theme) -> eyre::Result<DiagnosticResult> {
+fn check_system_dependencies(formatter: &Formatter) -> eyre::Result<DiagnosticResult> {
     let mut result = DiagnosticResult::new();
 
     // Check Docker
@@ -139,7 +149,9 @@ fn check_system_dependencies(formatter: &Formatter, theme: &Theme) -> eyre::Resu
 
     // Check Docker Compose
     match check_docker_compose() {
-        Ok(version) => result.add_success(formatter, format!("Docker Compose: {}", version.trim()))?,
+        Ok(version) => {
+            result.add_success(formatter, format!("Docker Compose: {}", version.trim()))?
+        }
         Err(e) => result.add_error(
             formatter,
             format!("Docker Compose: {e}"),
@@ -150,7 +162,10 @@ fn check_system_dependencies(formatter: &Formatter, theme: &Theme) -> eyre::Resu
     Ok(result)
 }
 
-fn check_project_configuration(formatter: &Formatter, theme: &Theme) -> eyre::Result<DiagnosticResult> {
+fn check_project_configuration(
+    formatter: &Formatter,
+    theme: &Theme,
+) -> eyre::Result<DiagnosticResult> {
     let mut result = DiagnosticResult::new();
 
     match Project::current() {
@@ -160,17 +175,17 @@ fn check_project_configuration(formatter: &Formatter, theme: &Theme) -> eyre::Re
                 format!("Project: {}", project.manifest().project().name),
             )?;
             check_project_details(formatter, theme, &project, &mut result)?;
-        },
+        }
         Ok(None) => {
             result.add_warning(
                 formatter,
                 "Not in a de project directory".to_string(),
                 Some("Run 'de init' to initialize a project here".to_string()),
             )?;
-        },
+        }
         Err(e) => {
             result.add_error(formatter, format!("Project check failed: {e}"), None)?;
-        },
+        }
     }
 
     Ok(result)
