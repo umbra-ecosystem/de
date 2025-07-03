@@ -17,9 +17,6 @@ use crate::{
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
-    unsafe {
-        std::env::set_var("RUST_BACKTRACE", "0");
-    }
 
     let cli = Cli::parse();
 
