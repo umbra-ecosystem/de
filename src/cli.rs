@@ -143,6 +143,9 @@ pub enum Commands {
         /// The name of the workspace to show status for. Defaults to the active workspace.
         workspace: Option<Slug>,
     },
+
+    #[command(external_subcommand)]
+    Fallthrough(Vec<String>),
 }
 
 #[derive(Debug, Subcommand)]

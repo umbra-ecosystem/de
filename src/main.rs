@@ -126,6 +126,9 @@ fn main() -> eyre::Result<()> {
         Commands::Status { workspace } => {
             commands::status(workspace)?;
         }
+        Commands::Fallthrough(args) => {
+            commands::fallthrough(args)?;
+        }
     }
 
     Ok(())

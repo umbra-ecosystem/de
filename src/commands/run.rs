@@ -3,37 +3,11 @@ use eyre::{Context, eyre};
 use crate::{project::Project, types::Slug, workspace::Workspace};
 
 pub fn run(task_name: Slug, args: Vec<String>) -> eyre::Result<()> {
-    let project = Project::current()
+    if let Some(project) = Project::current()
         .map_err(|e| eyre!(e))
-        .wrap_err("Failed to get current project")?;
-
-    if let Some(project) = project {
-        if let Some(task) = project
-            .manifest()
-            .tasks
-            .as_ref()
-            .and_then(|tasks| tasks.get(&task_name))
-        {
-            let mut command = task
-                .command(&project)
-                .map_err(|e| eyre!(e))
-                .wrap_err("Failed to build command for task")?;
-
-            if !args.is_empty() {
-                command.args(args);
-            }
-
-            let status = command
-                .status()
-                .map_err(|e| eyre!(e))
-                .wrap_err("Failed to execute task command")?;
-
-            if !status.success() {
-                return Err(eyre!("Task '{}' failed with status: {}", task_name, status));
-            }
-
-            return Ok(());
-        }
+        .wrap_err("Failed to get current project")?
+    {
+        run_project_task(&project, &task_name, &args)?;
     }
 
     // If project task not found, try workspace task
@@ -47,5 +21,43 @@ pub fn run(task_name: Slug, args: Vec<String>) -> eyre::Result<()> {
         }
     }
 
-    Err(eyre!("Task '{}' not found in project or active workspace", task_name))
+    Err(eyre!(
+        "Task '{}' not found in project or active workspace",
+        task_name
+    ))
+}
+
+pub fn run_project_task(
+    project: &Project,
+    task_name: &Slug,
+    args: &Vec<String>,
+) -> eyre::Result<bool> {
+    if let Some(task) = project
+        .manifest()
+        .tasks
+        .as_ref()
+        .and_then(|tasks| tasks.get(&task_name))
+    {
+        let mut command = task
+            .command(&project)
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to build command for task")?;
+
+        if !args.is_empty() {
+            command.args(args);
+        }
+
+        let status = command
+            .status()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to execute task command")?;
+
+        if !status.success() {
+            return Err(eyre!("Task '{}' failed with status: {}", task_name, status));
+        }
+
+        return Ok(true);
+    }
+
+    Ok(false)
 }
