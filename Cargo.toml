@@ -7,6 +7,7 @@ repository = "https://github.com/umbra-ecosystem/de"
 
 [dependencies]
 clap = { version = "4.5.40", features = ["derive"] }
+color-eyre = "0.6.5"
 config = "0.15.11"
 dialoguer = "0.11.0"
 directories = "6.0.0"
