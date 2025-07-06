@@ -44,8 +44,8 @@ fn main() -> eyre::Result<()> {
 
                 commands::list(workspace)
             } else {
-                let current_workspace = workspace::Workspace::current()?
-                    .ok_or_else(|| eyre!("No current workspace found"))?;
+                let current_workspace = workspace::Workspace::active()?
+                    .ok_or_else(|| eyre!("No active workspace found"))?;
                 commands::list(current_workspace)
             }
         }
