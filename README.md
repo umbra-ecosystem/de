@@ -10,6 +10,8 @@
 - **Workspace & Project Management**
   - 🏗️ Initialize and organize projects with declarative configuration
   - 🌐 Group related projects into named workspaces
+  - ✨ Manage active workspaces with `de workspace set` and `de workspace unset`
+  - ℹ️ Get detailed information about workspaces with `de workspace info`
   - 🔍 Automatically discover and register projects
   - 🔄 Synchronize and update workspace/project registrations
 
@@ -110,6 +112,8 @@ Execute defined tasks from anywhere in your project. If a task is not found in t
 de run test
 de run dev
 de run build --release  # Pass additional arguments
+de run --project my-api test # Run a task in a specific project
+de run --workspace my-workspace build-all # Run a task in a specific workspace
 ```
 
 ### 4. Command Fallthrough (Direct Task Execution)
@@ -243,7 +247,7 @@ de stop --workspace my-workspace
 
 ### 10. List Projects
 
-View all projects in your current workspace:
+View all projects in your current workspace (or the active workspace if set):
 
 ```bash
 de list
@@ -451,6 +455,24 @@ Use `update` when workspace configurations need to be synchronized:
 - After moving or deleting project directories
 - After renaming projects in their `de.toml` files
 - After migrating projects between workspaces
+
+#### Workspace Commands
+
+Manage your workspaces and active workspace.
+
+```bash
+# Set the active workspace
+de workspace set my-workspace
+
+# Unset the active workspace
+de workspace unset
+
+# Get information about the active workspace
+de workspace info
+
+# Get information about a specific workspace
+de workspace info my-workspace
+```
 
 #### Self-Update
 
