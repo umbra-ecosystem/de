@@ -258,4 +258,11 @@ pub enum WorkspaceCommands {
 
     /// Unset the active workspace.
     Unset {},
+
+    /// Get information about a workspace.
+    Info {
+        /// The name of the workspace to get information about. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
 }

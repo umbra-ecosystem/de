@@ -92,6 +92,7 @@ fn main() -> eyre::Result<()> {
             } => commands::workspace::run(workspace, task, args),
             WorkspaceCommands::Set { workspace } => commands::workspace::set(workspace),
             WorkspaceCommands::Unset {} => commands::workspace::unset(),
+            WorkspaceCommands::Info { workspace } => commands::workspace::info(workspace),
         },
         Commands::Doctor { workspace } => commands::doctor(workspace),
         Commands::Status { workspace } => commands::status(workspace),
