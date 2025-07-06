@@ -12,6 +12,7 @@ use eyre::{Context, eyre};
 
 use crate::{
     cli::{Cli, Commands, SelfCommands, ShimCommands, TaskCommands, WorkspaceCommands},
+    utils::theme::Theme,
     workspace::Workspace,
 };
 
@@ -28,7 +29,12 @@ fn main() -> eyre::Result<()> {
         } => commands::init(path, name, workspace),
         Commands::Start { workspace } => commands::start(workspace),
         Commands::Stop { workspace } => commands::stop(workspace),
-        Commands::Run { command, args } => commands::run(command, args),
+        Commands::Run {
+            command,
+            project,
+            workspace,
+            args,
+        } => commands::run(command, args, project, workspace),
         Commands::Exec {
             project,
             workspace,
@@ -91,11 +97,17 @@ fn main() -> eyre::Result<()> {
     };
 
     if let Err(err) = result {
+        let theme = Theme::new();
+
+        let error_prefix = theme.error("Error:");
+        let cause_prefix = theme.dim("Caused by:");
+
         if let Some(cause) = err.source() {
-            eprintln!("Error: {err}\n\nCause: {cause}");
+            eprintln!("{error_prefix} {err}\n{cause_prefix} {cause}");
         } else {
-            eprintln!("Error: {err}");
+            eprintln!("{error_prefix} {err}");
         }
+
         std::process::exit(1);
     }
 

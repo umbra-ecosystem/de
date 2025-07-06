@@ -49,8 +49,16 @@ pub enum Commands {
         /// The command to run listed in config file.
         command: Slug,
 
+        /// The name of the project to run the command in. Defaults to the current project.
+        #[arg(short, long)]
+        project: Option<Slug>,
+
+        /// The name of the workspace to run the command in. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
         /// Additional arguments to pass to the command.
-        #[arg(allow_hyphen_values = true, hide = true)]
+        #[arg(hide = true)]
         args: Vec<String>,
     },
 

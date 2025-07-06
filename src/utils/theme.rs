@@ -19,6 +19,10 @@ impl Theme {
         }
     }
 
+    pub fn error(&self, s: &str) -> String {
+        console::style(s).red().to_string()
+    }
+
     pub fn dim(&self, s: &str) -> String {
         console::style(s).dim().to_string()
     }
