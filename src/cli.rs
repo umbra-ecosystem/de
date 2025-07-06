@@ -249,4 +249,13 @@ pub enum WorkspaceCommands {
         #[clap(hide = true)]
         args: Vec<String>,
     },
+
+    /// Set the active workspace.
+    Set {
+        /// The name of the workspace to set as active.
+        workspace: Slug,
+    },
+
+    /// Unset the active workspace.
+    Unset {},
 }

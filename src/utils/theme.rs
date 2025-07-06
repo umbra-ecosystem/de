@@ -19,8 +19,12 @@ impl Theme {
         }
     }
 
+    pub fn info(&self, s: &str) -> String {
+        console::style(s).fg(self.info_color).to_string()
+    }
+
     pub fn error(&self, s: &str) -> String {
-        console::style(s).red().to_string()
+        console::style(s).fg(self.error_color).to_string()
     }
 
     pub fn dim(&self, s: &str) -> String {
