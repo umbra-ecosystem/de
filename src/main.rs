@@ -103,7 +103,7 @@ fn main() -> eyre::Result<()> {
                 target_branch,
                 fallback,
                 on_dirty,
-            } => commands::git::switch::switch(target_branch, fallback, on_dirty),
+            } => commands::git::switch::switch(Some(target_branch), fallback, on_dirty),
         },
         Commands::Fallthrough(args) => commands::fallthrough(args),
     };
