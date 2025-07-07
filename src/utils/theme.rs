@@ -23,6 +23,14 @@ impl Theme {
         console::style(s).fg(self.info_color).to_string()
     }
 
+    pub fn success(&self, s: &str) -> String {
+        console::style(s).fg(self.success_color).to_string()
+    }
+
+    pub fn warn(&self, s: &str) -> String {
+        console::style(s).fg(self.warning_color).to_string()
+    }
+
     pub fn error(&self, s: &str) -> String {
         console::style(s).fg(self.error_color).to_string()
     }

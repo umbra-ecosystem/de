@@ -153,8 +153,43 @@ pub enum Commands {
         workspace: Option<Slug>,
     },
 
+    /// Manage git repositories in the workspace.
+    Git {
+        #[command(subcommand)]
+        command: GitCommands,
+    },
+
     #[command(external_subcommand)]
     Fallthrough(Vec<String>),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GitCommands {
+    /// Switch branches in all projects in the workspace.
+    Switch {
+        /// The branch to switch to.
+        target_branch: String,
+
+        /// The branch to fallback to if the target branch does not exist.
+        #[arg(short, long)]
+        fallback: Option<String>,
+
+        /// What to do if there are uncommitted changes.
+        #[arg(long)]
+        on_dirty: Option<OnDirtyAction>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum OnDirtyAction {
+    /// Prompt the user for action.
+    Prompt,
+    /// Stash changes and proceed.
+    Stash,
+    /// Force checkout (discard all changes).
+    Force,
+    /// Abort the operation.
+    Abort,
 }
 
 #[derive(Debug, Subcommand)]

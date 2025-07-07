@@ -2,6 +2,7 @@ mod doctor;
 mod exec;
 mod exec_all;
 mod fallthrough;
+pub mod git;
 mod init;
 mod list;
 mod run;

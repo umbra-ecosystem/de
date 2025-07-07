@@ -11,7 +11,9 @@ use clap::Parser;
 use eyre::{Context, eyre};
 
 use crate::{
-    cli::{Cli, Commands, SelfCommands, ShimCommands, TaskCommands, WorkspaceCommands},
+    cli::{
+        Cli, Commands, GitCommands, SelfCommands, ShimCommands, TaskCommands, WorkspaceCommands,
+    },
     utils::theme::Theme,
     workspace::Workspace,
 };
@@ -50,8 +52,8 @@ fn main() -> eyre::Result<()> {
 
                 commands::list(workspace)
             } else {
-                let current_workspace = workspace::Workspace::active()?
-                    .ok_or_else(|| eyre!("No active workspace found"))?;
+                let current_workspace =
+                    Workspace::active()?.ok_or_else(|| eyre!("No active workspace found"))?;
                 commands::list(current_workspace)
             }
         }
@@ -96,6 +98,13 @@ fn main() -> eyre::Result<()> {
         },
         Commands::Doctor { workspace } => commands::doctor(workspace),
         Commands::Status { workspace } => commands::status(workspace),
+        Commands::Git { command } => match command {
+            GitCommands::Switch {
+                target_branch,
+                fallback,
+                on_dirty,
+            } => commands::git::switch::switch(target_branch, fallback, on_dirty),
+        },
         Commands::Fallthrough(args) => commands::fallthrough(args),
     };
 
