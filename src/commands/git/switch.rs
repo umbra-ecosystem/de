@@ -1,4 +1,8 @@
-use std::{collections::HashSet, path::Path, process::Command};
+use std::{
+    collections::HashSet,
+    path::Path,
+    process::{Command, exit},
+};
 
 use chrono::{DateTime, Utc};
 use dialoguer::{Select, theme::ColorfulTheme};
@@ -15,14 +19,14 @@ pub fn switch(
     let workspace =
         Workspace::active()?.ok_or_else(|| eyre::eyre!("No active workspace found."))?;
 
+    let target_branch = get_target_branch(&workspace, query)?;
+
     let dirty_projects = get_dirty_projects(&workspace)?;
     let action = on_dirty.unwrap_or(OnDirtyAction::Prompt);
 
     if !dirty_projects.is_empty() {
         handle_dirty_projects(&dirty_projects, &action, &theme)?;
     }
-
-    let target_branch = get_target_branch(&workspace, query)?;
 
     println!(
         "{}",
@@ -159,6 +163,7 @@ fn get_target_branch_from_query(workspace: &Workspace, query: String) -> Result<
         .collect();
 
     if matches.len() == 1 {
+        println!("Found one matching branch: {}", matches[0].name);
         return Ok(matches[0].name.clone());
     } else if matches.is_empty() {
         return Err(eyre::eyre!("No branch found matching query '{}'", query));
@@ -235,7 +240,7 @@ fn get_project_branches(dir: &Path) -> Result<Vec<Branch>, eyre::Error> {
         }
 
         // Split into date and branch name
-        if let Some((date_str, branch_name)) = line.split_once(' ') {
+        if let Some((date_str, branch_name)) = line.split_at_checked(25) {
             let branch_name = branch_name.trim();
 
             // Remove "origin/HEAD" and similar symbolic refs
