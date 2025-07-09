@@ -28,6 +28,7 @@ impl Workspace {
             name,
             projects: Default::default(),
             tasks: Default::default(),
+            default_branch: Default::default(),
         };
 
         Ok(Self {

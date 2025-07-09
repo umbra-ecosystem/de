@@ -9,6 +9,8 @@ pub struct WorkspaceConfig {
     pub projects: BTreeMap<Slug, WorkspaceProject>,
     #[serde(default)]
     pub tasks: BTreeMap<Slug, String>,
+    #[serde(default)]
+    pub default_branch: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

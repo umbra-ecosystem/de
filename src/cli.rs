@@ -285,14 +285,28 @@ pub enum WorkspaceCommands {
         args: Vec<String>,
     },
 
-    /// Set the active workspace.
+    /// Set or get a property on the workspace (e.g., active, default-branch).
     Set {
-        /// The name of the workspace to set as active.
-        workspace: Slug,
+        /// The name of the workspace to modify. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// The property key to set or get (e.g., "active", "default-branch").
+        key: String,
+
+        /// The value to set for the property. If omitted, prints the current value.
+        value: Option<String>,
     },
 
-    /// Unset the active workspace.
-    Unset {},
+    /// Unset a property on the workspace.
+    Unset {
+        /// The name of the workspace to modify. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// The property key to unset.
+        key: String,
+    },
 
     /// Get information about a workspace.
     Info {

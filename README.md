@@ -10,7 +10,7 @@
 - **Workspace & Project Management**
   - 🏗️ Initialize and organize projects with declarative configuration
   - 🌐 Group related projects into named workspaces
-  - ✨ Manage active workspaces with `de workspace set` and `de workspace unset`
+  - ✨ Manage workspace properties with `de workspace set`, `de workspace unset`, and get values with `de workspace set <key>`
   - ℹ️ Get detailed information about workspaces with `de workspace info`
   - 🔍 Automatically discover and register projects
   - 🔄 Synchronize and update workspace/project registrations
@@ -462,10 +462,21 @@ Manage your workspaces and active workspace.
 
 ```bash
 # Set the active workspace
-de workspace set my-workspace
+de workspace set --key active --value true
 
-# Unset the active workspace
-de workspace unset
+# Set the default branch for the active workspace
+de workspace set default-branch main
+
+# Get the default branch for the active workspace
+de workspace set default-branch
+
+# Unset the default branch for the active workspace
+de workspace unset default-branch
+
+# Set/get/unset properties for a specific workspace
+de workspace set --workspace my-workspace default-branch main
+de workspace set --workspace my-workspace default-branch
+de workspace unset --workspace my-workspace default-branch
 
 # Get information about the active workspace
 de workspace info
