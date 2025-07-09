@@ -26,10 +26,13 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         }
     };
 
-    formatter.heading(&format!(
-        "Preparing all projects for new work on base branch '{}':",
-        branch
-    ))?;
+    println!(
+        "{}",
+        theme.info(&format!(
+            "Resetting workspace to base branch '{}'...",
+            branch
+        ))
+    );
 
     let mut projects_with_issues = Vec::new();
     let mut projects_ready = Vec::new();
@@ -204,26 +207,36 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
 
     println!();
     formatter.heading("Summary:")?;
-    println!(
-        "{} {} project(s) ready for new feature branch.",
-        formatter.success_symbol(),
-        projects_ready.len()
-    );
+
     if aborted {
         println!(
-            "{} Command aborted by user. Some projects may not have been processed.",
-            formatter.error_symbol()
+            "{}",
+            theme.error("Command aborted by user. Some projects may not have been processed.")
         );
     }
+
     if !projects_with_issues.is_empty() {
         println!(
-            "{} {} project(s) could not be prepared:",
-            formatter.error_symbol(),
-            projects_with_issues.len()
+            "{}",
+            theme.error(&format!(
+                "{} project(s) could not be prepared:",
+                projects_with_issues.len()
+            ))
         );
-        for project_name in projects_with_issues {
+        for project_name in projects_with_issues.clone() {
             println!("  - {}", theme.error(&project_name));
         }
+    }
+
+    if !aborted && projects_ready.is_empty() && projects_with_issues.is_empty() {
+        println!("{}", theme.warn("No projects were prepared."));
+    }
+
+    if !aborted && !projects_ready.is_empty() && projects_with_issues.is_empty() {
+        println!(
+            "{}",
+            theme.success("All projects are ready for new feature branch.")
+        );
     }
 
     Ok(())
