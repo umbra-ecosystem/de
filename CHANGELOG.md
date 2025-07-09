@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Fuzzy branch selection and `de git switch` command for managing branches across all workspace projects.
+- `de git base-reset` command to reset all workspace projects to the base branch, with interactive handling of uncommitted changes.
 - Ability to set and unset arbitrary workspace properties (such as `default-branch`) via `de workspace set` and `de workspace unset`.
 - Support for querying the value of a workspace property with `de workspace set <key>`.
 - Improved CLI documentation and examples for workspace management.

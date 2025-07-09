@@ -33,6 +33,7 @@
 - **Diagnostics & Status**
   - 🩺 Diagnose environment, dependencies, and configuration with `de doctor`
   - 📊 Get a concise, actionable summary of Git and Docker Compose status with `de status`
+  - 🧹 Easily reset all workspace projects to the base branch with `de git base-reset`
 
 ## Installation
 
@@ -229,7 +230,25 @@ de exec-all -- python my_script.py -- --some-arg value
 
 This command is useful for performing bulk operations across multiple projects in a workspace.
 
-### 9. Start/Stop Docker Compose Projects
+### 9. Reset All Projects to Base Branch
+
+Reset all projects in your workspace to the base branch (e.g., `dev` or your configured default):
+
+```bash
+de git base-reset
+```
+
+This command will:
+- Fetch the latest changes from remotes for each project
+- Detect and prompt for uncommitted changes (with options to stash, force reset, skip, or abort)
+- Check out the base branch and hard reset to the remote version
+- Clean untracked files
+
+You can use this to quickly prepare your workspace for a new feature branch or to ensure all projects are in sync with the base branch.
+
+---
+
+### 10. Start/Stop Docker Compose Projects
 
 Start all Docker Compose projects in a workspace:
 
