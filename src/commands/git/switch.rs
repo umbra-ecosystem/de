@@ -1,8 +1,4 @@
-use std::{
-    collections::HashSet,
-    path::Path,
-    process::{Command, exit},
-};
+use std::{collections::HashSet, path::Path, process::Command};
 
 use chrono::{DateTime, Utc};
 use dialoguer::{Select, theme::ColorfulTheme};
@@ -106,7 +102,7 @@ pub fn switch(
         }
     }
 
-    println!("\n{}", theme.info("Synchronization complete."));
+    println!();
 
     if !projects_with_issues.is_empty() {
         println!(
