@@ -44,21 +44,18 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         }
 
         // Print project header with name, path, and branch (colorized)
-        use console::Style;
         println!();
-        let accent = Style::new().fg(theme.accent_color);
-        let dim = Style::new().dim();
         println!(
             "Project: {} {}{}{}",
-            accent.apply_to(project_name),
-            dim.apply_to("("),
-            dim.apply_to(&project.dir.display().to_string()),
-            dim.apply_to(")")
+            theme.accent(project_name.as_str()),
+            theme.dim("("),
+            theme.dim(&project.dir.display().to_string()),
+            theme.dim(")")
         );
         if let Ok(current_branch) = get_current_branch(&project.dir) {
             println!(
                 "  Current branch: {}",
-                accent.apply_to(current_branch.as_str())
+                theme.accent(current_branch.as_str())
             );
         }
 
@@ -81,70 +78,53 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         let mut abort_all = false;
 
         if dirty {
-            // Prompt if needed, otherwise print action
-            if on_dirty == OnDirtyAction::Prompt {
-                println!(
-                    "  {}",
-                    theme.warn("Uncommitted changes detected — prompting user")
-                );
-                let choices = &[
-                    "Stash changes and proceed",
-                    "Force reset (discard all changes)",
-                    "Skip this project",
-                    "Abort all (stop processing)",
-                ];
-                let selection = Select::with_theme(&ColorfulTheme::default())
-                    .with_prompt("What do you want to do?")
-                    .default(0)
-                    .items(choices)
-                    .interact()?;
-                match selection {
-                    0 => action = OnDirtyAction::Stash,
-                    1 => action = OnDirtyAction::Force,
-                    2 => {
-                        println!(
-                            "  {} {}",
-                            theme.warn("Uncommitted changes detected —"),
-                            theme.info("skipped by user")
-                        );
-                        skip_project = true;
+            // Not prompting, just print the action
+            match action {
+                OnDirtyAction::Prompt => {
+                    println!("  {}", theme.warn("Uncommitted changes detected — "));
+
+                    let choices = &[
+                        "Stash changes and proceed",
+                        "Force reset (discard all changes)",
+                        "Skip this project",
+                        "Abort all (stop processing)",
+                    ];
+
+                    let selection = Select::with_theme(&ColorfulTheme::default())
+                        .with_prompt("What do you want to do?")
+                        .default(0)
+                        .items(choices)
+                        .interact()?;
+
+                    match selection {
+                        0 => action = OnDirtyAction::Stash,
+                        1 => action = OnDirtyAction::Force,
+                        2 => skip_project = true,
+                        3 => abort_all = true,
+                        _ => unreachable!(),
                     }
-                    3 => {
-                        println!(
-                            "  {} {}",
-                            theme.error("Uncommitted changes detected —"),
-                            theme.info("aborted by user")
-                        );
-                        abort_all = true;
-                    }
-                    _ => unreachable!(),
                 }
-            } else {
-                // Not prompting, just print the action
-                match action {
-                    OnDirtyAction::Stash => {
-                        println!(
-                            "  {} {}",
-                            theme.warn("Uncommitted changes detected —"),
-                            theme.info("stashing changes")
-                        );
-                    }
-                    OnDirtyAction::Force => {
-                        println!(
-                            "  {} {}",
-                            theme.warn("Uncommitted changes detected —"),
-                            theme.info("discarding all local changes")
-                        );
-                    }
-                    OnDirtyAction::Abort => {
-                        println!(
-                            "  {} {}",
-                            theme.error("Uncommitted changes detected —"),
-                            theme.info("aborted by user")
-                        );
-                        abort_all = true;
-                    }
-                    OnDirtyAction::Prompt => {}
+                OnDirtyAction::Stash => {
+                    println!(
+                        "  {} {}",
+                        theme.warn("Uncommitted changes detected —"),
+                        theme.info("stashing changes")
+                    );
+                }
+                OnDirtyAction::Force => {
+                    println!(
+                        "  {} {}",
+                        theme.warn("Uncommitted changes detected —"),
+                        theme.info("discarding all local changes")
+                    );
+                }
+                OnDirtyAction::Abort => {
+                    println!(
+                        "  {} {}",
+                        theme.error("Uncommitted changes detected —"),
+                        theme.info("aborted by user")
+                    );
+                    abort_all = true;
                 }
             }
         }
@@ -161,7 +141,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         if dirty {
             match action {
                 OnDirtyAction::Stash => {
-                    println!("  {}", theme.dim("Stashing changes..."));
+                    println!("  Stashing changes...");
                     if let Err(e) = run_git_command(&["stash", "push", "-u"], &project.dir) {
                         println!(
                             "  {} {}",
@@ -172,7 +152,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                     }
                 }
                 OnDirtyAction::Force => {
-                    println!("  {}", theme.warn("Discarding all local changes..."));
+                    println!("  Discarding all local changes...");
                     if let Err(e) = run_git_command(&["reset", "--hard"], &project.dir) {
                         println!(
                             "  {} {}",
@@ -272,9 +252,10 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         // 6. Final status
         if !has_issue {
             println!(
-                "  {} {}",
+                "  {} {} {}",
                 theme.success("Ready for"),
-                theme.info("new feature branch.")
+                theme.info("new feature branch."),
+                ""
             );
             projects_ready.push(project_name.to_string());
         } else {

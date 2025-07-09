@@ -35,6 +35,10 @@ impl Theme {
         console::style(s).fg(self.error_color).to_string()
     }
 
+    pub fn accent(&self, s: &str) -> String {
+        console::style(s).fg(self.accent_color).to_string()
+    }
+
     pub fn dim(&self, s: &str) -> String {
         console::style(s).dim().to_string()
     }
