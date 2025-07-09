@@ -38,23 +38,39 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
     let mut projects_ready = Vec::new();
 
     let mut aborted = false;
-    'project_loop: for (project_name, project) in workspace.config().projects.iter() {
+    for (project_name, project) in workspace.config().projects.iter() {
         if aborted {
             break;
         }
 
-        // Print project header with name, path, and branch
+        // Print project header with name, path, and branch (colorized)
+        use console::Style;
         println!();
-        println!("Project: {} ({})", project_name, project.dir.display());
+        let accent = Style::new().fg(theme.accent_color);
+        let dim = Style::new().dim();
+        println!(
+            "Project: {} {}{}{}",
+            accent.apply_to(project_name),
+            dim.apply_to("("),
+            dim.apply_to(&project.dir.display().to_string()),
+            dim.apply_to(")")
+        );
         if let Ok(current_branch) = get_current_branch(&project.dir) {
-            println!("  Current branch: {}", current_branch);
+            println!(
+                "  Current branch: {}",
+                accent.apply_to(current_branch.as_str())
+            );
         }
 
         // 1. Fetch all remotes
         println!("  Fetching remotes...");
         let mut has_issue = false;
         if let Err(e) = run_git_command(&["fetch", "--all", "--prune"], &project.dir) {
-            println!("  {}", theme.error(&format!("FETCH FAILED: {}", e)));
+            println!(
+                "  {} {}",
+                theme.error("FETCH FAILED:"),
+                theme.info(&e.to_string())
+            );
             has_issue = true;
         }
 
@@ -67,7 +83,10 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         if dirty {
             // Prompt if needed, otherwise print action
             if on_dirty == OnDirtyAction::Prompt {
-                println!("  Uncommitted changes detected.");
+                println!(
+                    "  {}",
+                    theme.warn("Uncommitted changes detected — prompting user")
+                );
                 let choices = &[
                     "Stash changes and proceed",
                     "Force reset (discard all changes)",
@@ -83,11 +102,19 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                     0 => action = OnDirtyAction::Stash,
                     1 => action = OnDirtyAction::Force,
                     2 => {
-                        println!("  Uncommitted changes detected — skipped by user.");
+                        println!(
+                            "  {} {}",
+                            theme.warn("Uncommitted changes detected —"),
+                            theme.info("skipped by user")
+                        );
                         skip_project = true;
                     }
                     3 => {
-                        println!("  Uncommitted changes detected — aborted by user.");
+                        println!(
+                            "  {} {}",
+                            theme.error("Uncommitted changes detected —"),
+                            theme.info("aborted by user")
+                        );
                         abort_all = true;
                     }
                     _ => unreachable!(),
@@ -96,13 +123,25 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 // Not prompting, just print the action
                 match action {
                     OnDirtyAction::Stash => {
-                        println!("  Uncommitted changes detected — stashing changes.")
+                        println!(
+                            "  {} {}",
+                            theme.warn("Uncommitted changes detected —"),
+                            theme.info("stashing changes")
+                        );
                     }
                     OnDirtyAction::Force => {
-                        println!("  Uncommitted changes detected — discarding all local changes.")
+                        println!(
+                            "  {} {}",
+                            theme.warn("Uncommitted changes detected —"),
+                            theme.info("discarding all local changes")
+                        );
                     }
                     OnDirtyAction::Abort => {
-                        println!("  Uncommitted changes detected — aborted by user.");
+                        println!(
+                            "  {} {}",
+                            theme.error("Uncommitted changes detected —"),
+                            theme.info("aborted by user")
+                        );
                         abort_all = true;
                     }
                     OnDirtyAction::Prompt => {}
@@ -122,27 +161,35 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         if dirty {
             match action {
                 OnDirtyAction::Stash => {
-                    println!("  Stashing changes...");
+                    println!("  {}", theme.dim("Stashing changes..."));
                     if let Err(e) = run_git_command(&["stash", "push", "-u"], &project.dir) {
-                        println!("  {}", theme.error(&format!("STASH FAILED: {}", e)));
+                        println!(
+                            "  {} {}",
+                            theme.error("STASH FAILED:"),
+                            theme.info(&e.to_string())
+                        );
                         has_issue = true;
                     }
                 }
                 OnDirtyAction::Force => {
-                    println!("  Discarding all local changes...");
+                    println!("  {}", theme.warn("Discarding all local changes..."));
                     if let Err(e) = run_git_command(&["reset", "--hard"], &project.dir) {
-                        println!("  {}", theme.error(&format!("RESET FAILED: {}", e)));
+                        println!(
+                            "  {} {}",
+                            theme.error("RESET FAILED:"),
+                            theme.info(&e.to_string())
+                        );
                         has_issue = true;
                     }
                 }
                 OnDirtyAction::Abort | OnDirtyAction::Prompt => {}
             }
         } else {
-            println!("  Working directory clean.");
+            println!("  {}", theme.success("Working directory clean."));
         }
 
         // 3. Checkout the base branch
-        println!("  Checking out branch '{}'...", branch);
+        println!("  Checking out branch {}...", theme.info(branch.as_str()));
         if !branch_exists(&branch, &project.dir)? {
             // Try to check out from remote if not present locally
             let remote_branch = format!("origin/{}", branch);
@@ -150,40 +197,60 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 if let Err(e) =
                     run_git_command(&["checkout", "-B", &branch, &remote_branch], &project.dir)
                 {
-                    println!("  {}", theme.error(&format!("CHECKOUT FAILED: {}", e)));
+                    println!(
+                        "  {} {}",
+                        theme.error("CHECKOUT FAILED:"),
+                        theme.info(&e.to_string())
+                    );
                     has_issue = true;
                 } else {
                     println!(
-                        "  {}",
-                        theme.success(&format!("Checked out '{}' from remote.", branch))
+                        "  {} {} {}",
+                        theme.success("Checked out"),
+                        theme.info(branch.as_str()),
+                        theme.success("from remote.")
                     );
                 }
             } else {
                 println!(
-                    "  {}",
-                    theme.error(&format!(
-                        "Branch '{}' not found locally or on remote.",
-                        branch
-                    ))
+                    "  {} {}",
+                    theme.error("Branch"),
+                    theme.info(branch.as_str()),
                 );
+                println!("    {}", theme.error("not found locally or on remote."));
                 has_issue = true;
             }
         } else {
             if let Err(e) = run_git_command(&["checkout", &branch], &project.dir) {
-                println!("  {}", theme.error(&format!("CHECKOUT FAILED: {}", e)));
+                println!(
+                    "  {} {}",
+                    theme.error("CHECKOUT FAILED:"),
+                    theme.info(&e.to_string())
+                );
                 has_issue = true;
             } else {
-                println!("  {}", theme.success(&format!("Checked out '{}'.", branch)));
+                println!(
+                    "  {} {}",
+                    theme.success("Checked out"),
+                    theme.info(branch.as_str())
+                );
             }
         }
 
         // 4. Reset hard to remote branch
-        println!("  Resetting to origin/{}...", branch);
+        println!(
+            "  Resetting to {}...",
+            theme.info(&format!("origin/{}", branch))
+        );
         if let Err(e) = run_git_command(
             &["reset", "--hard", &format!("origin/{}", branch)],
             &project.dir,
         ) {
-            println!("  {}", theme.error(&format!("RESET FAILED: {}", e)));
+            println!(
+                "  {} {}",
+                theme.error("RESET FAILED:"),
+                theme.info(&e.to_string())
+            );
             has_issue = true;
         } else {
             println!("  {}", theme.success("Reset complete."));
@@ -192,7 +259,11 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         // 5. Clean untracked files
         println!("  Cleaning untracked files...");
         if let Err(e) = run_git_command(&["clean", "-fd"], &project.dir) {
-            println!("  {}", theme.error(&format!("CLEAN FAILED: {}", e)));
+            println!(
+                "  {} {}",
+                theme.error("CLEAN FAILED:"),
+                theme.info(&e.to_string())
+            );
             has_issue = true;
         } else {
             println!("  {}", theme.success("Clean complete."));
@@ -200,7 +271,11 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
 
         // 6. Final status
         if !has_issue {
-            println!("  {}", theme.success("Ready for new feature branch."));
+            println!(
+                "  {} {}",
+                theme.success("Ready for"),
+                theme.info("new feature branch.")
+            );
             projects_ready.push(project_name.to_string());
         } else {
             projects_with_issues.push(project_name.to_string());
