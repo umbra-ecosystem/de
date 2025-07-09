@@ -178,6 +178,16 @@ pub enum GitCommands {
         #[arg(long)]
         on_dirty: Option<OnDirtyAction>,
     },
+
+    /// Reset all projects to a clean state on a base branch before starting new work.
+    BaseReset {
+        /// The base branch to reset to. Defaults to the workspace's default branch or 'dev'.
+        base_branch: Option<String>,
+
+        /// What to do if there are uncommitted changes.
+        #[arg(long, value_enum, default_value_t = OnDirtyAction::Prompt)]
+        on_dirty: OnDirtyAction,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]

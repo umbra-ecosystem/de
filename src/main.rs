@@ -110,6 +110,10 @@ fn main() -> eyre::Result<()> {
                 fallback,
                 on_dirty,
             } => commands::git::switch::switch(Some(target_branch), fallback, on_dirty),
+            GitCommands::BaseReset {
+                base_branch,
+                on_dirty,
+            } => commands::git::base_reset(base_branch, on_dirty),
         },
         Commands::Fallthrough(args) => commands::fallthrough(args),
     };
