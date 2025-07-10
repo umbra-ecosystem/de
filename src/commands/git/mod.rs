@@ -28,7 +28,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
 
     println!(
         "{}",
-        theme.info(&format!(
+        theme.highlight(&format!(
             "Resetting workspace to base branch '{}'...",
             branch
         ))
@@ -66,7 +66,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
             println!(
                 "  {} {}",
                 theme.error("FETCH FAILED:"),
-                theme.info(&e.to_string())
+                theme.highlight(&e.to_string())
             );
             has_issue = true;
         }
@@ -108,21 +108,21 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                     println!(
                         "  {} {}",
                         theme.warn("Uncommitted changes detected —"),
-                        theme.info("stashing changes")
+                        theme.highlight("stashing changes")
                     );
                 }
                 OnDirtyAction::Force => {
                     println!(
                         "  {} {}",
                         theme.warn("Uncommitted changes detected —"),
-                        theme.info("discarding all local changes")
+                        theme.highlight("discarding all local changes")
                     );
                 }
                 OnDirtyAction::Abort => {
                     println!(
                         "  {} {}",
                         theme.error("Uncommitted changes detected —"),
-                        theme.info("aborted by user")
+                        theme.highlight("aborted by user")
                     );
                     abort_all = true;
                 }
@@ -146,7 +146,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                         println!(
                             "  {} {}",
                             theme.error("STASH FAILED:"),
-                            theme.info(&e.to_string())
+                            theme.highlight(&e.to_string())
                         );
                         has_issue = true;
                     }
@@ -157,7 +157,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                         println!(
                             "  {} {}",
                             theme.error("RESET FAILED:"),
-                            theme.info(&e.to_string())
+                            theme.highlight(&e.to_string())
                         );
                         has_issue = true;
                     }
@@ -169,7 +169,10 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         }
 
         // 3. Checkout the base branch
-        println!("  Checking out branch {}...", theme.info(branch.as_str()));
+        println!(
+            "  Checking out branch {}...",
+            theme.highlight(branch.as_str())
+        );
         if !branch_exists(&branch, &project.dir)? {
             // Try to check out from remote if not present locally
             let remote_branch = format!("origin/{}", branch);
@@ -180,14 +183,14 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                     println!(
                         "  {} {}",
                         theme.error("CHECKOUT FAILED:"),
-                        theme.info(&e.to_string())
+                        theme.highlight(&e.to_string())
                     );
                     has_issue = true;
                 } else {
                     println!(
                         "  {} {} {}",
                         theme.success("Checked out"),
-                        theme.info(branch.as_str()),
+                        theme.highlight(branch.as_str()),
                         theme.success("from remote.")
                     );
                 }
@@ -195,7 +198,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 println!(
                     "  {} {}",
                     theme.error("Branch"),
-                    theme.info(branch.as_str()),
+                    theme.highlight(branch.as_str()),
                 );
                 println!("    {}", theme.error("not found locally or on remote."));
                 has_issue = true;
@@ -205,14 +208,14 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 println!(
                     "  {} {}",
                     theme.error("CHECKOUT FAILED:"),
-                    theme.info(&e.to_string())
+                    theme.highlight(&e.to_string())
                 );
                 has_issue = true;
             } else {
                 println!(
                     "  {} {}",
                     theme.success("Checked out"),
-                    theme.info(branch.as_str())
+                    theme.highlight(branch.as_str())
                 );
             }
         }
@@ -220,7 +223,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         // 4. Reset hard to remote branch
         println!(
             "  Resetting to {}...",
-            theme.info(&format!("origin/{}", branch))
+            theme.highlight(&format!("origin/{}", branch))
         );
         if let Err(e) = run_git_command(
             &["reset", "--hard", &format!("origin/{}", branch)],
@@ -229,7 +232,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
             println!(
                 "  {} {}",
                 theme.error("RESET FAILED:"),
-                theme.info(&e.to_string())
+                theme.highlight(&e.to_string())
             );
             has_issue = true;
         } else {
@@ -242,7 +245,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
             println!(
                 "  {} {}",
                 theme.error("CLEAN FAILED:"),
-                theme.info(&e.to_string())
+                theme.highlight(&e.to_string())
             );
             has_issue = true;
         } else {
@@ -254,7 +257,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
             println!(
                 "  {} {} {}",
                 theme.success("Ready for"),
-                theme.info("new feature branch."),
+                theme.highlight("new feature branch."),
                 ""
             );
             projects_ready.push(project_name.to_string());

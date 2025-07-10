@@ -24,7 +24,7 @@ pub fn info(workspace_name: Option<Slug>) -> eyre::Result<()> {
 
     formatter.heading(&format!(
         "Workspace: {}",
-        theme.info(workspace.config().name.as_str())
+        theme.highlight(workspace.config().name.as_str())
     ))?;
 
     if let Some(path) = workspace.config_path.to_str() {

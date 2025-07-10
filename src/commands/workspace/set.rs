@@ -23,7 +23,7 @@ pub fn set(workspace_name: Option<Slug>, key: String, value: Option<String>) -> 
                 let theme = Theme::new();
                 println!(
                     "Switched to workspace: {}",
-                    theme.info(workspace.config().name.as_str())
+                    theme.highlight(workspace.config().name.as_str())
                 );
             } else {
                 // Print if this workspace is active

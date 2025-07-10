@@ -26,7 +26,7 @@ pub fn switch(
 
     println!(
         "{}",
-        theme.info(&format!(
+        theme.highlight(&format!(
             "Synchronizing workspace to branch \'{}\' (fallback: \'{}\')...",
             target_branch,
             fallback.as_deref().unwrap_or("default")
@@ -41,10 +41,10 @@ pub fn switch(
         let stashed =
             dirty_projects.contains(&project_name.to_string()) && action == OnDirtyAction::Stash;
 
-        messages.push(theme.info(&format!("  - Project: {}", project_name)));
+        messages.push(theme.highlight(&format!("  - Project: {}", project_name)));
 
         if stashed {
-            messages.push(theme.info("    Stashing changes..."));
+            messages.push(theme.highlight("    Stashing changes..."));
             if let Err(e) = run_git_command(&["stash", "push", "-u"], &project.dir) {
                 messages.push(theme.error(&format!("    STASH FAILED: {}", e)));
                 has_issue = true;
@@ -56,7 +56,8 @@ pub fn switch(
         });
 
         let checkout_branch = if branch_exists(&target_branch, &project.dir)? {
-            messages.push(theme.info(&format!("    Target branch \'{}\' found.", target_branch)));
+            messages
+                .push(theme.highlight(&format!("    Target branch \'{}\' found.", target_branch)));
             &target_branch
         } else {
             messages.push(theme.warn(&format!(
@@ -81,7 +82,7 @@ pub fn switch(
         }
 
         if stashed {
-            messages.push(theme.info("    Restoring stashed changes..."));
+            messages.push(theme.highlight("    Restoring stashed changes..."));
             if let Err(e) = run_git_command(&["stash", "pop"], &project.dir) {
                 messages.push(theme.error(&format!("    STASH POP FAILED: {}", e)));
                 has_issue = true;

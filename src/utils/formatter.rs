@@ -28,7 +28,7 @@ impl Formatter {
     }
 
     pub fn info_symbol(&self) -> String {
-        style("-").fg(self.theme.info_color).to_string()
+        style("-").fg(self.theme.highlight_color).to_string()
     }
 
     pub fn arrow_symbol(&self) -> String {
