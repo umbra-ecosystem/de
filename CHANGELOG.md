@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Fuzzy branch selection and `de git switch` command for managing branches across all workspace projects.
 - `de git base-reset` command to reset all workspace projects to the base branch, with interactive handling of uncommitted changes.
 - Ability to set and unset arbitrary workspace properties (such as `default-branch`) via `de workspace set` and `de workspace unset`.
@@ -17,10 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved CLI documentation and examples for workspace management.
 
 ### Changed
+
 - Refactored workspace property management to use key/value pairs, making it extensible for future properties.
 - Improved output and error handling for workspace commands.
+- Added theming and styling to task listing output for better readability.
 
 ### Removed
+
 - Unused imports and minor internal code cleanups.
 
 ---
@@ -28,11 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.1] - 2025-07-06
 
 ### Added
+
 - `de workspace info` command for detailed workspace information.
 - `de workspace set` and `de workspace unset` commands for managing the active workspace.
 - Ability to specify project and workspace options for the `run` command, improving flexibility and error output.
 
 ### Changed
+
 - The `list` command now uses the active workspace by default for more intuitive behavior.
 
 ---
@@ -40,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2025-07-04
 
 ### Added
+
 - Workspace-level task support and related CLI commands.
 - `de exec-all` command to run commands in all projects of a workspace.
 - `de exec` command to run arbitrary commands in a project context.
@@ -55,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Warnings for task name conflicts with project names in doctor command.
 
 ### Changed
+
 - Refactored doctor command for improved formatting and clarity.
 - Formatter methods now return `Result` and propagate errors.
 - Updated to use modern Rust format string syntax.
@@ -66,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Compose tasks are now validated against available services.
 
 ### Removed
+
 - Dropped support for aarch64-pc-windows-msvc build target.
 - Removed unsafe block for setting RUST_BACKTRACE.
 
@@ -74,6 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2025-06-25
 
 ### Added
+
 - Initial project structure and implementation of `de init`.
 - Project tasks and `de run` command.
 - `de list` command to show projects in a workspace.
@@ -93,6 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - dotenvy dependency and .env loading in project initialization.
 
 ### Changed
+
 - Refactored workspace and manifest config structure.
 - Improved manifest handling and project naming logic.
 - Project config now uses Slug as project ID.
@@ -112,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed Windows target from build configuration.
 
 ### Removed
+
 - Removed smol and switched updater to blocking mode.
 - Removed debug print statements.
 
