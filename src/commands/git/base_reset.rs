@@ -114,10 +114,9 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         let mut abort_all = false;
 
         if dirty {
-            // Not prompting, just print the action
             match action {
                 OnDirtyAction::Prompt => {
-                    println!("  {}", theme.warn("Uncommitted changes detected — "));
+                    println!("  {}", theme.warn("Uncommitted changes detected!"));
 
                     let choices = &[
                         "Stash changes and proceed",
