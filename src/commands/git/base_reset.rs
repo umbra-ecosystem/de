@@ -1,4 +1,3 @@
-
 use crate::{
     cli::OnDirtyAction, utils::formatter::Formatter, utils::theme::Theme, workspace::Workspace,
 };
@@ -68,6 +67,44 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 theme.highlight(&e.to_string())
             );
             has_issue = true;
+        }
+
+        // 1b. Check for unpushed commits
+        if let Ok(current_branch) = get_current_branch(&project.dir) {
+            if let Ok(true) = has_unpushed_commits(&current_branch, &project.dir) {
+                println!("  {}", theme.warn("You have unpushed commits!"));
+                let choices = &[
+                    "Push commits now",
+                    "Skip this project",
+                    "Abort all (stop processing)",
+                    "Proceed anyway (dangerous!)",
+                ];
+                let selection = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("What do you want to do?")
+                    .default(0)
+                    .items(choices)
+                    .interact()?;
+                match selection {
+                    0 => {
+                        // Try to push
+                        if let Err(e) = run_git_command(&["push"], &project.dir) {
+                            println!(
+                                "  {} {}",
+                                theme.error("PUSH FAILED:"),
+                                theme.highlight(&e.to_string())
+                            );
+                            has_issue = true;
+                        }
+                    }
+                    1 => continue,
+                    2 => {
+                        aborted = true;
+                        break;
+                    }
+                    3 => {} // Proceed anyway
+                    _ => unreachable!(),
+                }
+            }
         }
 
         // 2. Check for uncommitted changes
@@ -363,6 +400,20 @@ fn branch_exists(branch: &str, dir: &std::path::Path) -> Result<bool> {
         .arg(format!("origin/{}", branch))
         .output()?;
     Ok(!output.stdout.is_empty() || !remote_output.stdout.is_empty())
+}
+
+fn has_unpushed_commits(branch: &str, dir: &std::path::Path) -> Result<bool> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .arg("rev-list")
+        .arg("--count")
+        .arg(&format!("origin/{}..{}", branch, branch))
+        .output()?;
+    if !output.status.success() {
+        return Err(eyre::eyre!("Failed to check for unpushed commits"));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim() != "0")
 }
 
 fn get_default_branch(dir: &std::path::Path) -> Result<String> {

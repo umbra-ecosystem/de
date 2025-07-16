@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `de git base-reset` now checks for unpushed commits in each repository before resetting, and prompts the user to push, skip, abort, or proceed.
+
 ## [0.3.0] - 2025-07-10
 
 ### Added
