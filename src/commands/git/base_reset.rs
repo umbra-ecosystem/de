@@ -28,7 +28,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
             .config()
             .default_branch
             .as_deref()
-            .ok_or_else(|| eyre!("No default branch set in workspace config"))?
+            .ok_or_else(|| eyre!("No default branch set in workspace config. Set default branch in workspace config or provide a base branch to command"))?
     };
 
     println!(
