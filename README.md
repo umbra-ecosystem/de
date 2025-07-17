@@ -238,6 +238,8 @@ Reset all projects in your workspace to the base branch (e.g., `dev` or your con
 de git base-reset
 ```
 
+By default, this command uses the workspace's `default_branch` property for branch operations. If no branch is specified, the configured default branch is used.
+
 This command will:
 - Fetch the latest changes from remotes for each project
 - Detect and prompt for uncommitted changes (with options to stash, force reset, skip, or abort)
