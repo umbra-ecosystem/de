@@ -4,7 +4,14 @@ use chrono::{DateTime, Utc};
 use dialoguer::{Select, theme::ColorfulTheme};
 use eyre::Result;
 
-use crate::{cli::OnDirtyAction, utils::theme::Theme, workspace::Workspace};
+use crate::{
+    cli::OnDirtyAction,
+    utils::{
+        git::{branch_exists, get_default_branch, run_git_command},
+        theme::Theme,
+    },
+    workspace::Workspace,
+};
 
 pub fn switch(
     query: Option<String>,
@@ -333,58 +340,4 @@ fn handle_dirty_projects(
     }
 
     Ok(())
-}
-
-fn run_git_command(args: &[&str], dir: &std::path::Path) -> Result<()> {
-    let mut command = Command::new("git");
-    command.arg("-C").arg(dir);
-    for arg in args {
-        command.arg(arg);
-    }
-    let output = command.output()?;
-    if !output.status.success() {
-        return Err(eyre::eyre!(
-            "Git command failed: {}\n{}\n{}",
-            args.join(" "),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-    Ok(())
-}
-
-fn branch_exists(branch: &str, dir: &std::path::Path) -> Result<bool> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .arg("branch")
-        .arg("--list")
-        .arg(branch)
-        .output()?;
-    let remote_output = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .arg("branch")
-        .arg("-r")
-        .arg("--list")
-        .arg(format!("origin/{}", branch))
-        .output()?;
-    Ok(!output.stdout.is_empty() || !remote_output.stdout.is_empty())
-}
-
-fn get_default_branch(dir: &std::path::Path) -> Result<String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .arg("rev-parse")
-        .arg("--abbrev-ref")
-        .arg("origin/HEAD")
-        .output()?;
-    if !output.status.success() {
-        return Err(eyre::eyre!("Failed to get default branch"));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string()
-        .replace("origin/", ""))
 }
