@@ -14,6 +14,8 @@ pub struct ProjectManifest {
     #[serde(default)]
     pub project: ProjectMetadata,
     #[serde(default)]
+    pub git: ProjectGitSettings,
+    #[serde(default)]
     pub tasks: Option<BTreeMap<Slug, Task>>,
 }
 
@@ -71,4 +73,29 @@ fn default_project_name() -> Slug {
 
 fn default_project_workspace() -> Slug {
     Slug::from_str("default").expect("default workspace name should be valid")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectGitSettings {
+    #[serde(default = "default_git_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_git_remote")]
+    pub default_remote: String,
+}
+
+impl Default for ProjectGitSettings {
+    fn default() -> Self {
+        Self {
+            enabled: default_git_enabled(),
+            default_remote: default_git_remote(),
+        }
+    }
+}
+
+fn default_git_enabled() -> bool {
+    true
+}
+
+fn default_git_remote() -> String {
+    "origin".to_string()
 }
