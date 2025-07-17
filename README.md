@@ -240,6 +240,8 @@ de git base-reset
 
 By default, this command uses the workspace's `default_branch` property for branch operations. If no branch is specified, the configured default branch is used.
 
+You can skip certain projects from all git commands (including base-reset and switch) by setting `git.enabled = false` in the project's manifest (`de.toml`). This is useful for excluding projects that do not use git or should not be affected by workspace-wide git operations.
+
 This command will:
 - Fetch the latest changes from remotes for each project
 - Detect and prompt for uncommitted changes (with options to stash, force reset, skip, or abort)
@@ -248,9 +250,60 @@ This command will:
 
 You can use this to quickly prepare your workspace for a new feature branch or to ensure all projects are in sync with the base branch.
 
+### 10. Switch Branches Across All Projects
+
+Switch all workspace projects to a specified branch, with fuzzy branch selection and interactive handling of dirty states:
+
+```bash
+de git switch [branch-name]
+```
+
+- If you provide a branch name, `de` will attempt to switch all projects to that branch.
+- If the branch name is ambiguous or partially matches multiple branches, you'll be prompted to select the correct branch interactively.
+- If a project has uncommitted changes, you can choose to stash, force checkout, skip, or abort for each project.
+- If a project does not have the branch, the workspace's `default_branch` will be used as a fallback.
+
+You can skip certain projects from this command by setting `git.enabled = false` in their manifest.
+
+**Example:**
+```bash
+de git switch feature/login
+```
+
+This will:
+- Fuzzy-match and select the correct branch across all projects
+- Stash or force checkout dirty projects as needed
+- Use the workspace's default branch as a fallback if the branch does not exist in a project
+
+### 11. Switch Branches Across All Projects
+
+Switch all workspace projects to a specified branch, with fuzzy branch selection and interactive handling of dirty states:
+
+```bash
+de git switch [branch-name]
+```
+
+- If you provide a branch name, `de` will attempt to switch all projects to that branch.
+- If the branch name is ambiguous or partially matches multiple branches, you'll be prompted to select the correct branch interactively.
+- If a project has uncommitted changes, you can choose to stash, force checkout, skip, or abort for each project.
+- If a project does not have the branch, the workspace's `default_branch` will be used as a fallback.
+
+You can skip certain projects from this command by setting `git.enabled = false` in their manifest.
+
+**Example:**
+
+```bash
+de git switch feature/login
+```
+
+This will:
+- Fuzzy-match and select the correct branch across all projects
+- Stash or force checkout dirty projects as needed
+- Use the workspace's default branch as a fallback if the branch does not exist in a project
+
 ---
 
-### 10. Start/Stop Docker Compose Projects
+### 12. Start/Stop Docker Compose Projects
 
 Start all Docker Compose projects in a workspace:
 
@@ -266,7 +319,7 @@ de stop
 de stop --workspace my-workspace
 ```
 
-### 10. List Projects
+### 13. List Projects
 
 View all projects in your current workspace (or the active workspace if set):
 
@@ -280,7 +333,7 @@ Or list projects in a specific workspace:
 de list --workspace my-workspace
 ```
 
-### 11. Check Project and Environment Health
+### 14. Check Project and Environment Health
 
 Diagnose and check the health of your `de` environment:
 
@@ -290,7 +343,7 @@ de doctor
 
 This command will check for common issues, missing files, and misconfigurations in your workspace and projects.
 
-### 12. Show Workspace and Project Status
+### 15. Show Workspace and Project Status
 
 Get a concise, actionable summary of the dynamic state of all projects in the current workspace:
 

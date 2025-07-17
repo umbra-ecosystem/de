@@ -1,5 +1,6 @@
 use crate::{
     cli::OnDirtyAction,
+    project::Project,
     utils::{
         formatter::Formatter,
         git::{
@@ -11,7 +12,7 @@ use crate::{
     workspace::Workspace,
 };
 use dialoguer::{Select, theme::ColorfulTheme};
-use eyre::{Result, eyre};
+use eyre::{Context, Result, eyre};
 
 pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Result<()> {
     let theme = Theme::new();
@@ -42,7 +43,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
     let mut projects_ready = Vec::new();
 
     let mut aborted = false;
-    for (project_name, project) in workspace.config().projects.iter() {
+    for (project_name, ws_project) in workspace.config().projects.iter() {
         if aborted {
             break;
         }
@@ -53,10 +54,20 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
             "Project: {} {}{}{}",
             theme.accent(project_name.as_str()),
             theme.dim("("),
-            theme.dim(&project.dir.display().to_string()),
+            theme.dim(&ws_project.dir.display().to_string()),
             theme.dim(")")
         );
-        if let Ok(current_branch) = get_current_branch(&project.dir) {
+
+        let project = Project::from_dir(&ws_project.dir)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
+
+        if !project.manifest().git.enabled {
+            println!(" Git is not enabled for this project. Skipping...");
+            continue;
+        }
+
+        if let Ok(current_branch) = get_current_branch(&ws_project.dir) {
             println!(
                 "  Current branch: {}",
                 theme.accent(current_branch.as_str())
@@ -66,7 +77,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         // 1. Fetch all remotes
         println!("  Fetching remotes...");
         let mut has_issue = false;
-        if let Err(e) = run_git_command(&["fetch", "--all", "--prune"], &project.dir) {
+        if let Err(e) = run_git_command(&["fetch", "--all", "--prune"], &ws_project.dir) {
             println!(
                 "  {} {}",
                 theme.error("FETCH FAILED:"),
@@ -76,8 +87,8 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         }
 
         // 1b. Check for unpushed commits
-        if let Ok(current_branch) = get_current_branch(&project.dir) {
-            if let Ok(true) = has_unpushed_commits(&current_branch, &project.dir) {
+        if let Ok(current_branch) = get_current_branch(&ws_project.dir) {
+            if let Ok(true) = has_unpushed_commits(&current_branch, &ws_project.dir) {
                 println!("  {}", theme.warn("You have unpushed commits!"));
                 let choices = &[
                     "Push commits now",
@@ -93,7 +104,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 match selection {
                     0 => {
                         // Try to push
-                        if let Err(e) = run_git_command(&["push"], &project.dir) {
+                        if let Err(e) = run_git_command(&["push"], &ws_project.dir) {
                             println!(
                                 "  {} {}",
                                 theme.error("PUSH FAILED:"),
@@ -114,7 +125,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         }
 
         // 2. Check for uncommitted changes
-        let dirty = is_project_dirty(&project.dir).unwrap_or(false);
+        let dirty = is_project_dirty(&ws_project.dir).unwrap_or(false);
         let mut action = on_dirty;
         let mut skip_project = false;
         let mut abort_all = false;
@@ -183,7 +194,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
             match action {
                 OnDirtyAction::Stash => {
                     println!("  Stashing changes...");
-                    if let Err(e) = run_git_command(&["stash", "push", "-u"], &project.dir) {
+                    if let Err(e) = run_git_command(&["stash", "push", "-u"], &ws_project.dir) {
                         println!(
                             "  {} {}",
                             theme.error("STASH FAILED:"),
@@ -194,7 +205,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 }
                 OnDirtyAction::Force => {
                     println!("  Discarding all local changes...");
-                    if let Err(e) = run_git_command(&["reset", "--hard"], &project.dir) {
+                    if let Err(e) = run_git_command(&["reset", "--hard"], &ws_project.dir) {
                         println!(
                             "  {} {}",
                             theme.error("RESET FAILED:"),
@@ -211,13 +222,14 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
 
         // 3. Checkout the base branch
         println!("  Checking out branch {}...", theme.highlight(branch));
-        if !branch_exists(&branch, &project.dir)? {
+        if !branch_exists(&branch, &ws_project.dir)? {
             // Try to check out from remote if not present locally
             let remote_branch = format!("origin/{}", branch);
-            if branch_exists(&remote_branch, &project.dir)? {
-                if let Err(e) =
-                    run_git_command(&["checkout", "-B", &branch, &remote_branch], &project.dir)
-                {
+            if branch_exists(&remote_branch, &ws_project.dir)? {
+                if let Err(e) = run_git_command(
+                    &["checkout", "-B", &branch, &remote_branch],
+                    &ws_project.dir,
+                ) {
                     println!(
                         "  {} {}",
                         theme.error("CHECKOUT FAILED:"),
@@ -238,7 +250,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 has_issue = true;
             }
         } else {
-            if let Err(e) = run_git_command(&["checkout", &branch], &project.dir) {
+            if let Err(e) = run_git_command(&["checkout", &branch], &ws_project.dir) {
                 println!(
                     "  {} {}",
                     theme.error("CHECKOUT FAILED:"),
@@ -261,7 +273,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         );
         if let Err(e) = run_git_command(
             &["reset", "--hard", &format!("origin/{}", branch)],
-            &project.dir,
+            &ws_project.dir,
         ) {
             println!(
                 "  {} {}",
@@ -275,7 +287,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
 
         // 5. Clean untracked files
         println!("  Cleaning untracked files...");
-        if let Err(e) = run_git_command(&["clean", "-fd"], &project.dir) {
+        if let Err(e) = run_git_command(&["clean", "-fd"], &ws_project.dir) {
             println!(
                 "  {} {}",
                 theme.error("CLEAN FAILED:"),

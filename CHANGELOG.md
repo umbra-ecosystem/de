@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added ability to skip certains projects from git commands using `git.enabled = false` in the project manifest.
+
 ### Changed
 
 - `de git base-reset` and `de git switch` now use the workspace's `default_branch` property for branch operations, making branch management consistent with workspace configuration.
