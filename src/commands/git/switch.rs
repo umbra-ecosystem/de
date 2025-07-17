@@ -3,6 +3,7 @@ use std::{collections::HashSet, path::Path, process::Command};
 use chrono::{DateTime, Utc};
 use dialoguer::{Select, theme::ColorfulTheme};
 use eyre::{Context, Result, eyre};
+use itertools::Itertools;
 
 use crate::{
     cli::OnDirtyAction,
@@ -178,6 +179,7 @@ fn get_target_branch_from_query(workspace: &Workspace, query: String) -> Result<
     let matches: Vec<_> = branches
         .iter()
         .filter(|b| b.name.to_lowercase().contains(&query.to_lowercase()))
+        .unique()
         .collect();
 
     if matches.len() == 1 {

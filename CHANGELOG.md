@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `de git base-reset` and `de git switch` now use the workspace's `default_branch` property for branch operations, making branch management consistent with workspace configuration.
 - `de git base-reset` now checks for unpushed commits in each repository before resetting, and prompts the user to push, skip, abort, or proceed.
+- Fixed `de git switch` to deduplication of branch names across projects, allowing for fuzzy matching.
 
 ## [0.3.0] - 2025-07-10
 
