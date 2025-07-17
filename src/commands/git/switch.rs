@@ -2,10 +2,11 @@ use std::{collections::HashSet, path::Path, process::Command};
 
 use chrono::{DateTime, Utc};
 use dialoguer::{Select, theme::ColorfulTheme};
-use eyre::Result;
+use eyre::{Context, Result, eyre};
 
 use crate::{
     cli::OnDirtyAction,
+    project::Project,
     utils::{
         git::{branch_exists, get_default_branch, run_git_command},
         theme::Theme,
@@ -42,7 +43,7 @@ pub fn switch(
 
     let mut projects_with_issues = Vec::new();
 
-    for (project_name, project) in workspace.config().projects.iter() {
+    for (project_name, ws_project) in workspace.config().projects.iter() {
         let mut messages = Vec::new();
         let mut has_issue = false;
         let stashed =
@@ -50,9 +51,18 @@ pub fn switch(
 
         messages.push(theme.highlight(&format!("  - Project: {}", project_name)));
 
+        let project = Project::from_dir(&ws_project.dir)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
+
+        if !project.manifest().git.enabled {
+            messages.push(theme.warn("    Git is not enabled for this project. Skipping..."));
+            continue;
+        }
+
         if stashed {
             messages.push(theme.highlight("    Stashing changes..."));
-            if let Err(e) = run_git_command(&["stash", "push", "-u"], &project.dir) {
+            if let Err(e) = run_git_command(&["stash", "push", "-u"], &ws_project.dir) {
                 messages.push(theme.error(&format!("    STASH FAILED: {}", e)));
                 has_issue = true;
             }
@@ -63,10 +73,10 @@ pub fn switch(
         } else if let Some(default_branch) = workspace.config().default_branch.as_deref() {
             default_branch.to_string()
         } else {
-            get_default_branch(&project.dir).unwrap_or_else(|_| "main".to_string())
+            get_default_branch(&ws_project.dir).unwrap_or_else(|_| "main".to_string())
         };
 
-        let checkout_branch = if branch_exists(&target_branch, &project.dir)? {
+        let checkout_branch = if branch_exists(&target_branch, &ws_project.dir)? {
             messages
                 .push(theme.highlight(&format!("    Target branch \'{}\' found.", target_branch)));
             &target_branch
@@ -85,7 +95,7 @@ pub fn switch(
         }
         args.push(checkout_branch);
 
-        if let Err(e) = run_git_command(&args, &project.dir) {
+        if let Err(e) = run_git_command(&args, &ws_project.dir) {
             messages.push(theme.error(&format!("    CHECKOUT FAILED: {}", e)));
             has_issue = true;
         } else {
@@ -94,13 +104,13 @@ pub fn switch(
 
         if stashed {
             messages.push(theme.highlight("    Restoring stashed changes..."));
-            if let Err(e) = run_git_command(&["stash", "pop"], &project.dir) {
+            if let Err(e) = run_git_command(&["stash", "pop"], &ws_project.dir) {
                 messages.push(theme.error(&format!("    STASH POP FAILED: {}", e)));
                 has_issue = true;
             }
         }
 
-        if is_project_dirty(&project.dir)? {
+        if is_project_dirty(&ws_project.dir)? {
             messages.push(theme.warn("    MERGE CONFLICT detected. Please resolve manually."));
             has_issue = true;
         }
@@ -286,8 +296,16 @@ fn get_project_branches(dir: &Path) -> Result<Vec<Branch>, eyre::Error> {
 
 fn get_dirty_projects(workspace: &Workspace) -> Result<Vec<String>> {
     let mut dirty_projects = Vec::new();
-    for (project_name, project) in workspace.config().projects.iter() {
-        if is_project_dirty(&project.dir)? {
+    for (project_name, ws_project) in workspace.config().projects.iter() {
+        let project = Project::from_dir(&ws_project.dir)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
+
+        if !project.manifest().git.enabled {
+            continue;
+        }
+
+        if is_project_dirty(&ws_project.dir)? {
             dirty_projects.push(project_name.to_string());
         }
     }
