@@ -57,14 +57,14 @@ pub fn switch(
             .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
 
         if !project.manifest().git.enabled {
-            messages.push(theme.warn("    Git is not enabled for this project. Skipping..."));
+            messages.push(theme.warn("  Git is not enabled for this project. Skipping..."));
             continue;
         }
 
         if stashed {
-            messages.push(theme.highlight("    Stashing changes..."));
+            messages.push(theme.highlight("  Stashing changes..."));
             if let Err(e) = run_git_command(&["stash", "push", "-u"], &ws_project.dir) {
-                messages.push(theme.error(&format!("    STASH FAILED: {}", e)));
+                messages.push(theme.error(&format!("  STASH FAILED: {}", e)));
                 has_issue = true;
             }
         }
@@ -79,11 +79,11 @@ pub fn switch(
 
         let checkout_branch = if branch_exists(&target_branch, &ws_project.dir)? {
             messages
-                .push(theme.highlight(&format!("    Target branch \'{}\' found.", target_branch)));
+                .push(theme.highlight(&format!("  Target branch \'{}\' found.", target_branch)));
             &target_branch
         } else {
             messages.push(theme.warn(&format!(
-                "    Target branch \'{}\' not found. Falling back to \'{}\'.",
+                "  Target branch \'{}\' not found. Falling back to \'{}\'.",
                 target_branch, fallback_branch
             )));
             &fallback_branch
@@ -92,27 +92,27 @@ pub fn switch(
         let mut args = vec!["checkout"];
         if action == OnDirtyAction::Force {
             args.push("--force");
-            messages.push(theme.warn("    Forcing checkout..."));
+            messages.push(theme.warn("  Forcing checkout..."));
         }
         args.push(checkout_branch);
 
         if let Err(e) = run_git_command(&args, &ws_project.dir) {
-            messages.push(theme.error(&format!("    CHECKOUT FAILED: {}", e)));
+            messages.push(theme.error(&format!("  CHECKOUT FAILED: {}", e)));
             has_issue = true;
         } else {
-            messages.push(theme.success(&format!("    Switched to \'{}\'.", checkout_branch)));
+            messages.push(theme.success(&format!("  Switched to \'{}\'.", checkout_branch)));
         }
 
         if stashed {
-            messages.push(theme.highlight("    Restoring stashed changes..."));
+            messages.push(theme.highlight("  Restoring stashed changes..."));
             if let Err(e) = run_git_command(&["stash", "pop"], &ws_project.dir) {
-                messages.push(theme.error(&format!("    STASH POP FAILED: {}", e)));
+                messages.push(theme.error(&format!("  STASH POP FAILED: {}", e)));
                 has_issue = true;
             }
         }
 
         if is_project_dirty(&ws_project.dir)? {
-            messages.push(theme.warn("    MERGE CONFLICT detected. Please resolve manually."));
+            messages.push(theme.warn("  MERGE CONFLICT detected. Please resolve manually."));
             has_issue = true;
         }
 
