@@ -240,7 +240,7 @@ de git base-reset
 
 By default, this command uses the workspace's `default_branch` property for branch operations. If no branch is specified, the configured default branch is used.
 
-You can skip certain projects from all git commands (including base-reset and switch) by setting `git.enabled = false` in the project's manifest (`de.toml`). This is useful for excluding projects that do not use git or should not be affected by workspace-wide git operations.
+You can skip certain projects from all git commands (including base-reset, switch, and status) by setting `git.enabled = false` in the project's manifest (`de.toml`). This is useful for excluding projects that do not use git or should not be affected by workspace-wide git operations.
 
 This command will:
 - Fetch the latest changes from remotes for each project

@@ -149,7 +149,11 @@ impl ProjectStatus {
                     .as_ref()
                     .and_then(|compose_path| get_downed_services(compose_path));
 
-                let git = GitStatus::gather(dir);
+                let git = if project.manifest().git.enabled {
+                    GitStatus::gather(dir)
+                } else {
+                    GitStatus::disabled()
+                };
 
                 ProjectStatus {
                     slug: project_name.clone(),
@@ -224,6 +228,7 @@ impl ProjectStatus {
 /// Git status for a project.
 struct GitStatus {
     is_repo: bool,
+    git_disabled: bool,
     branch: Option<String>,
     ahead: Option<u32>,
     behind: Option<u32>,
@@ -328,6 +333,18 @@ impl GitStatus {
     fn not_repo() -> Self {
         GitStatus {
             is_repo: false,
+            git_disabled: false,
+            branch: None,
+            ahead: None,
+            behind: None,
+            dirty: false,
+        }
+    }
+
+    fn disabled() -> Self {
+        GitStatus {
+            is_repo: false,
+            git_disabled: true,
             branch: None,
             ahead: None,
             behind: None,
@@ -413,6 +430,7 @@ impl GitStatus {
 
         GitStatus {
             is_repo: true,
+            git_disabled: false,
             branch,
             ahead,
             behind,
@@ -422,6 +440,9 @@ impl GitStatus {
 
     fn format(&self) -> String {
         let theme = Theme::new();
+        if self.git_disabled {
+            return theme.dim("git disabled");
+        }
         if !self.is_repo {
             return theme.dim("not a git repo");
         }

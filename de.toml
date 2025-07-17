@@ -2,5 +2,8 @@
 name = "de"
 workspace = "de"
 
+[git]
+enabled = true
+
 [tasks]
 testing-this = { service = "testing-this", command = "echo 'Testing this task'" }

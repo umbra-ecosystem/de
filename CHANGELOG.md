@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `de status` command now respects the `git.enabled = false` setting in project manifests, displaying "git disabled" for projects with git disabled instead of attempting to gather git status.
+
 ## [0.3.1] - 2025-07-17
 
 ### Added
