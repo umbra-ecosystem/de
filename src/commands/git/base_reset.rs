@@ -3,15 +3,15 @@ use crate::{
     utils::{
         formatter::Formatter,
         git::{
-            branch_exists, get_current_branch, get_default_branch, has_unpushed_commits,
-            is_project_dirty, run_git_command,
+            branch_exists, get_current_branch, has_unpushed_commits, is_project_dirty,
+            run_git_command,
         },
         theme::Theme,
     },
     workspace::Workspace,
 };
 use dialoguer::{Select, theme::ColorfulTheme};
-use eyre::Result;
+use eyre::{Result, eyre};
 
 pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Result<()> {
     let theme = Theme::new();
@@ -20,16 +20,14 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         Workspace::active()?.ok_or_else(|| eyre::eyre!("No active workspace found."))?;
 
     // Determine the branch to use
-    let branch = if let Some(branch) = base_branch {
+    let branch = if let Some(branch) = base_branch.as_deref() {
         branch
     } else {
-        // Use workspace default branch or fallback to "dev"
-        let first_project = workspace.config().projects.values().next();
-        if let Some(project) = first_project {
-            get_default_branch(&project.dir).unwrap_or_else(|_| "dev".to_string())
-        } else {
-            "dev".to_string()
-        }
+        workspace
+            .config()
+            .default_branch
+            .as_deref()
+            .ok_or_else(|| eyre!("No default branch set in workspace config"))?
     };
 
     println!(
@@ -212,10 +210,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         }
 
         // 3. Checkout the base branch
-        println!(
-            "  Checking out branch {}...",
-            theme.highlight(branch.as_str())
-        );
+        println!("  Checking out branch {}...", theme.highlight(branch));
         if !branch_exists(&branch, &project.dir)? {
             // Try to check out from remote if not present locally
             let remote_branch = format!("origin/{}", branch);
@@ -233,16 +228,12 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                     println!(
                         "  {} {} {}",
                         theme.success("Checked out"),
-                        theme.highlight(branch.as_str()),
+                        theme.highlight(branch),
                         theme.success("from remote.")
                     );
                 }
             } else {
-                println!(
-                    "  {} {}",
-                    theme.error("Branch"),
-                    theme.highlight(branch.as_str()),
-                );
+                println!("  {} {}", theme.error("Branch"), theme.highlight(branch),);
                 println!("    {}", theme.error("not found locally or on remote."));
                 has_issue = true;
             }
@@ -258,7 +249,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 println!(
                     "  {} {}",
                     theme.success("Checked out"),
-                    theme.highlight(branch.as_str())
+                    theme.highlight(branch)
                 );
             }
         }

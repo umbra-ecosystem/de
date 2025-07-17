@@ -58,9 +58,13 @@ pub fn switch(
             }
         }
 
-        let fallback_branch = fallback.clone().unwrap_or_else(|| {
+        let fallback_branch = if let Some(fallback) = fallback.as_deref() {
+            fallback.to_string()
+        } else if let Some(default_branch) = workspace.config().default_branch.as_deref() {
+            default_branch.to_string()
+        } else {
             get_default_branch(&project.dir).unwrap_or_else(|_| "main".to_string())
-        });
+        };
 
         let checkout_branch = if branch_exists(&target_branch, &project.dir)? {
             messages
