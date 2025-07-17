@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-07-17
+
 ### Added
 
 - Added ability to skip certains projects from git commands using `git.enabled = false` in the project manifest.
