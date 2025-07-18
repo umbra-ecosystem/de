@@ -1,9 +1,8 @@
-use std::str::FromStr;
 
 use eyre::{Context, eyre};
 
 use crate::{
-    commands::config::ConfigAction, config::Config, types::Slug, utils::theme::Theme,
+    commands::config::ConfigAction, types::Slug,
     workspace::Workspace,
 };
 
@@ -35,7 +34,7 @@ pub fn config(
     match key.as_str() {
         "default-branch" | "default_branch" => match action {
             ConfigAction::Show => match &workspace.config().default_branch {
-                Some(branch) => println!("{}", branch),
+                Some(branch) => println!("{branch}"),
                 None => println!(
                     "No default branch set for workspace '{}'.",
                     workspace.config().name

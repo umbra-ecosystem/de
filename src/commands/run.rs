@@ -9,7 +9,7 @@ pub fn run(
     workspace_name: Option<Slug>,
 ) -> eyre::Result<()> {
     let workspace = match workspace_name.as_ref() {
-        Some(workspace_name) => Workspace::load_from_name(&workspace_name)
+        Some(workspace_name) => Workspace::load_from_name(workspace_name)
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to load workspace")?,
         None => Workspace::active()

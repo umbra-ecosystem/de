@@ -34,7 +34,7 @@ pub fn branch_exists(branch: &str, dir: &std::path::Path) -> eyre::Result<bool> 
         .arg("branch")
         .arg("-r")
         .arg("--list")
-        .arg(format!("origin/{}", branch))
+        .arg(format!("origin/{branch}"))
         .output()?;
     Ok(!output.stdout.is_empty() || !remote_output.stdout.is_empty())
 }
@@ -86,7 +86,7 @@ pub fn has_unpushed_commits(branch: &str, dir: &std::path::Path) -> eyre::Result
         .arg(dir)
         .arg("rev-list")
         .arg("--count")
-        .arg(&format!("origin/{}..{}", branch, branch))
+        .arg(format!("origin/{branch}..{branch}"))
         .output()?;
     if !output.status.success() {
         return Err(eyre::eyre!("Failed to check for unpushed commits"));

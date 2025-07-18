@@ -34,8 +34,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
     println!(
         "{}",
         theme.highlight(&format!(
-            "Resetting workspace to base branch '{}'...",
-            branch
+            "Resetting workspace to base branch '{branch}'..."
         ))
     );
 
@@ -60,7 +59,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
 
         let project = Project::from_dir(&ws_project.dir)
             .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
+            .wrap_err_with(|| format!("Failed to load project '{project_name}'"))?;
 
         if !project.manifest().git.clone().unwrap_or_default().enabled {
             println!(" Git is not enabled for this project. Skipping...");
@@ -222,12 +221,12 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
 
         // 3. Checkout the base branch
         println!("  Checking out branch {}...", theme.highlight(branch));
-        if !branch_exists(&branch, &ws_project.dir)? {
+        if !branch_exists(branch, &ws_project.dir)? {
             // Try to check out from remote if not present locally
-            let remote_branch = format!("origin/{}", branch);
+            let remote_branch = format!("origin/{branch}");
             if branch_exists(&remote_branch, &ws_project.dir)? {
                 if let Err(e) = run_git_command(
-                    &["checkout", "-B", &branch, &remote_branch],
+                    &["checkout", "-B", branch, &remote_branch],
                     &ws_project.dir,
                 ) {
                     println!(
@@ -249,30 +248,28 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                 println!("    {}", theme.error("not found locally or on remote."));
                 has_issue = true;
             }
+        } else if let Err(e) = run_git_command(&["checkout", branch], &ws_project.dir) {
+            println!(
+                "  {} {}",
+                theme.error("CHECKOUT FAILED:"),
+                theme.highlight(&e.to_string())
+            );
+            has_issue = true;
         } else {
-            if let Err(e) = run_git_command(&["checkout", &branch], &ws_project.dir) {
-                println!(
-                    "  {} {}",
-                    theme.error("CHECKOUT FAILED:"),
-                    theme.highlight(&e.to_string())
-                );
-                has_issue = true;
-            } else {
-                println!(
-                    "  {} {}",
-                    theme.success("Checked out"),
-                    theme.highlight(branch)
-                );
-            }
+            println!(
+                "  {} {}",
+                theme.success("Checked out"),
+                theme.highlight(branch)
+            );
         }
 
         // 4. Reset hard to remote branch
         println!(
             "  Resetting to {}...",
-            theme.highlight(&format!("origin/{}", branch))
+            theme.highlight(&format!("origin/{branch}"))
         );
         if let Err(e) = run_git_command(
-            &["reset", "--hard", &format!("origin/{}", branch)],
+            &["reset", "--hard", &format!("origin/{branch}")],
             &ws_project.dir,
         ) {
             println!(
@@ -301,10 +298,9 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         // 6. Final status
         if !has_issue {
             println!(
-                "  {} {} {}",
+                "  {} {} ",
                 theme.success("Ready for"),
-                theme.highlight("new feature branch."),
-                ""
+                theme.highlight("new feature branch.")
             );
             projects_ready.push(project_name.to_string());
         } else {

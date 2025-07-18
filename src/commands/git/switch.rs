@@ -50,11 +50,11 @@ pub fn switch(
         let stashed =
             dirty_projects.contains(&project_name.to_string()) && action == OnDirtyAction::Stash;
 
-        messages.push(theme.highlight(&format!("  - Project: {}", project_name)));
+        messages.push(theme.highlight(&format!("  - Project: {project_name}")));
 
         let project = Project::from_dir(&ws_project.dir)
             .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
+            .wrap_err_with(|| format!("Failed to load project '{project_name}'"))?;
 
         if !project.manifest().git.clone().unwrap_or_default().enabled {
             messages.push(theme.warn("  Git is not enabled for this project. Skipping..."));
@@ -64,7 +64,7 @@ pub fn switch(
         if stashed {
             messages.push(theme.highlight("  Stashing changes..."));
             if let Err(e) = run_git_command(&["stash", "push", "-u"], &ws_project.dir) {
-                messages.push(theme.error(&format!("  STASH FAILED: {}", e)));
+                messages.push(theme.error(&format!("  STASH FAILED: {e}")));
                 has_issue = true;
             }
         }
@@ -79,12 +79,11 @@ pub fn switch(
 
         let checkout_branch = if branch_exists(&target_branch, &ws_project.dir)? {
             messages
-                .push(theme.highlight(&format!("  Target branch \'{}\' found.", target_branch)));
+                .push(theme.highlight(&format!("  Target branch \'{target_branch}\' found.")));
             &target_branch
         } else {
             messages.push(theme.warn(&format!(
-                "  Target branch \'{}\' not found. Falling back to \'{}\'.",
-                target_branch, fallback_branch
+                "  Target branch \'{target_branch}\' not found. Falling back to \'{fallback_branch}\'."
             )));
             &fallback_branch
         };
@@ -97,16 +96,16 @@ pub fn switch(
         args.push(checkout_branch);
 
         if let Err(e) = run_git_command(&args, &ws_project.dir) {
-            messages.push(theme.error(&format!("  CHECKOUT FAILED: {}", e)));
+            messages.push(theme.error(&format!("  CHECKOUT FAILED: {e}")));
             has_issue = true;
         } else {
-            messages.push(theme.success(&format!("  Switched to \'{}\'.", checkout_branch)));
+            messages.push(theme.success(&format!("  Switched to \'{checkout_branch}\'.")));
         }
 
         if stashed {
             messages.push(theme.highlight("  Restoring stashed changes..."));
             if let Err(e) = run_git_command(&["stash", "pop"], &ws_project.dir) {
-                messages.push(theme.error(&format!("  STASH POP FAILED: {}", e)));
+                messages.push(theme.error(&format!("  STASH POP FAILED: {e}")));
                 has_issue = true;
             }
         }
@@ -117,7 +116,7 @@ pub fn switch(
         }
 
         for message in messages {
-            println!("{}", message);
+            println!("{message}");
         }
 
         if has_issue {
@@ -184,7 +183,7 @@ fn get_target_branch_from_query(workspace: &Workspace, query: String) -> Result<
 
     if matches.len() == 1 {
         println!("Found one matching branch: {}", matches[0].name);
-        return Ok(matches[0].name.clone());
+        Ok(matches[0].name.clone())
     } else if matches.is_empty() {
         return Err(eyre::eyre!("No branch found matching query '{}'", query));
     } else {
@@ -301,7 +300,7 @@ fn get_dirty_projects(workspace: &Workspace) -> Result<Vec<String>> {
     for (project_name, ws_project) in workspace.config().projects.iter() {
         let project = Project::from_dir(&ws_project.dir)
             .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
+            .wrap_err_with(|| format!("Failed to load project '{project_name}'"))?;
 
         if !project.manifest().git.clone().unwrap_or_default().enabled {
             continue;
@@ -335,7 +334,7 @@ fn handle_dirty_projects(
     );
 
     for project_name in dirty_projects {
-        println!("  - {}", project_name);
+        println!("  - {project_name}");
     }
 
     match on_dirty {

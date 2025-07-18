@@ -62,7 +62,7 @@ impl Formatter {
         self.term
             .write_line(&format!("  {} {}", self.error_symbol(), heading))?;
         for message in messages {
-            self.term.write_line(&format!("    - {}", message))?;
+            self.term.write_line(&format!("    - {message}"))?;
         }
         if let Some(suggestion) = suggestion {
             self.term.write_line(&format!(

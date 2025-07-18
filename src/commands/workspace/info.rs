@@ -28,7 +28,7 @@ pub fn info(workspace_name: Option<Slug>) -> eyre::Result<()> {
     ))?;
 
     if let Some(path) = workspace.config_path.to_str() {
-        formatter.line(&format!("Path: {}", path), 2)?;
+        formatter.line(&format!("Path: {path}"), 2)?;
     }
 
     formatter.new_line()?;
@@ -48,7 +48,7 @@ pub fn info(workspace_name: Option<Slug>) -> eyre::Result<()> {
     formatter.new_line()?;
     formatter.heading(&format!("Tasks: {}", workspace.config().tasks.len()))?;
     for (name, command) in workspace.config().tasks.iter() {
-        formatter.info(&format!("{}: {}", name, command))?;
+        formatter.info(&format!("{name}: {command}"))?;
     }
 
     Ok(())

@@ -676,7 +676,7 @@ fn check_for_dependency_issues(
             let projects_str = projects.iter().map(|p| p.as_str()).join(", ");
             result.add_error(
                 formatter,
-                format!("Circular dependency detected: {}", projects_str),
+                format!("Circular dependency detected: {projects_str}"),
                 Some("Refactor your dependencies to remove circular references".to_string()),
             )?;
         }
