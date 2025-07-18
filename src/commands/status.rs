@@ -149,7 +149,7 @@ impl ProjectStatus {
                     .as_ref()
                     .and_then(|compose_path| get_downed_services(compose_path));
 
-                let git = if project.manifest().git.enabled {
+                let git = if project.manifest().git.clone().unwrap_or_default().enabled {
                     GitStatus::gather(dir)
                 } else {
                     GitStatus::disabled()

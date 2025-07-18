@@ -14,7 +14,7 @@ pub struct ProjectManifest {
     #[serde(default)]
     pub project: ProjectMetadata,
     #[serde(default)]
-    pub git: ProjectGitSettings,
+    pub git: Option<ProjectGitSettings>,
     #[serde(default)]
     pub tasks: Option<BTreeMap<Slug, Task>>,
 }

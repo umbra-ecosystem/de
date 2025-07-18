@@ -56,7 +56,7 @@ pub fn switch(
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
 
-        if !project.manifest().git.enabled {
+        if !project.manifest().git.clone().unwrap_or_default().enabled {
             messages.push(theme.warn("  Git is not enabled for this project. Skipping..."));
             continue;
         }
@@ -303,7 +303,7 @@ fn get_dirty_projects(workspace: &Workspace) -> Result<Vec<String>> {
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
 
-        if !project.manifest().git.enabled {
+        if !project.manifest().git.clone().unwrap_or_default().enabled {
             continue;
         }
 

@@ -62,7 +62,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
 
-        if !project.manifest().git.enabled {
+        if !project.manifest().git.clone().unwrap_or_default().enabled {
             println!(" Git is not enabled for this project. Skipping...");
             continue;
         }

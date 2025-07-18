@@ -422,7 +422,7 @@ complex-task = { command = "multi part command with args" }
 
 #### Project Dependencies
 
-The `depends_on` field allows you to specify which projects must be started before the current project when using `de up` or `de down` commands. This is particularly useful for microservices architectures where services have startup dependencies.
+The `depends_on` field allows you to specify which projects must be started before the current project when using `de start` or `de stop` commands. This is particularly useful for microservices architectures where services have startup dependencies.
 
 ```toml
 [project]
@@ -749,13 +749,13 @@ build = { service = "web", command = "npm run build" }
 ```
 
 **Startup Order:**
-When you run `de up`, the projects will start in this order:
+When you run `de start`, the projects will start in this order:
 1. `database` and `cache` (can start in parallel)
 2. `api` (waits for database and cache)
 3. `web` (waits for api)
 
 **Shutdown Order:**
-When you run `de down`, the projects will stop in reverse order:
+When you run `de stop`, the projects will stop in reverse order:
 1. `web` (stops first)
 2. `api` (stops after web)
 3. `database` and `cache` (stop last, can be parallel)
