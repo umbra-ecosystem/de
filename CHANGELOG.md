@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `de status` command now respects the `git.enabled = false` setting in project manifests, displaying "git disabled" for projects with git disabled instead of attempting to gather git status.
 - Project init no longer sets `[git]` section in manifests by default, instead uses default implicitly.
 - `de start` now starts project and its dependencies if no workspace is specified, otherwise starts the full workspace.
+- Merged `de workspace set` and `de workspace unset` into a single `de workspace config <key> <value>` command for setting workspace properties.
 
 ## [0.3.1] - 2025-07-17
 

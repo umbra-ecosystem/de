@@ -297,7 +297,7 @@ pub enum WorkspaceCommands {
     },
 
     /// Set or get a property on the workspace (e.g., active, default-branch).
-    Set {
+    Config {
         /// The name of the workspace to modify. Defaults to the active workspace.
         #[arg(short, long)]
         workspace: Option<Slug>,
@@ -307,16 +307,10 @@ pub enum WorkspaceCommands {
 
         /// The value to set for the property. If omitted, prints the current value.
         value: Option<String>,
-    },
 
-    /// Unset a property on the workspace.
-    Unset {
-        /// The name of the workspace to modify. Defaults to the active workspace.
+        /// Whether to unset the property instead of setting it.
         #[arg(short, long)]
-        workspace: Option<Slug>,
-
-        /// The property key to unset.
-        key: String,
+        unset: bool,
     },
 
     /// Get information about a workspace.
