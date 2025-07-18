@@ -160,6 +160,19 @@ pub enum Commands {
         command: GitCommands,
     },
 
+    /// Manage the configuration of the de CLI.
+    Config {
+        /// The property key to set or get (e.g., "active").
+        key: String,
+
+        /// The value to set for the property. If omitted, prints the current value.
+        value: Option<String>,
+
+        /// Whether to unset the property instead of setting it.
+        #[arg(short, long)]
+        unset: bool,
+    },
+
     #[command(external_subcommand)]
     Fallthrough(Vec<String>),
 }

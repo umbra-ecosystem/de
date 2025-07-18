@@ -113,6 +113,7 @@ fn main() -> eyre::Result<()> {
                 on_dirty,
             } => commands::git::base_reset(base_branch, on_dirty),
         },
+        Commands::Config { key, value, unset } => commands::config(key, value, unset),
         Commands::Fallthrough(args) => commands::fallthrough(args),
     };
 

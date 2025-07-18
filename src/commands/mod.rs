@@ -1,3 +1,4 @@
+mod config;
 mod doctor;
 mod exec;
 mod exec_all;
@@ -17,6 +18,7 @@ pub mod workspace;
 pub mod shim;
 pub mod task;
 
+pub use config::config;
 pub use doctor::doctor;
 pub use exec::exec;
 pub use exec_all::exec_all;
