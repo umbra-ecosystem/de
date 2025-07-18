@@ -25,6 +25,7 @@
 - **Docker Compose Integration**
   - 🚀 Start and stop all Docker Compose projects in a workspace
   - 📦 Manage services across multiple projects
+  - 🧩 Manage project dependencies with `depends_on` in `de.toml`
 
 - **Environment & Configuration**
   - 🔧 Load `.env` files and environment variable configuration
