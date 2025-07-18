@@ -312,7 +312,10 @@ Start Docker Compose projects:
 # Start the current project and its dependencies
 de start
 
-# Start all Docker Compose projects in a specific workspace
+# Start all projets in active workspace
+de start --workspace
+
+# Start all projects in a specific workspace
 de start --workspace my-workspace
 ```
 

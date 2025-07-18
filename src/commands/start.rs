@@ -6,24 +6,23 @@ use crate::{
     config::Config,
     project::Project,
     types::Slug,
-    utils::formatter::Formatter,
+    utils::{formatter::Formatter, get_workspace_for_cli},
     workspace::{Workspace, spin_up_workspace},
 };
 
-pub fn start(workspace_name: Option<Slug>) -> eyre::Result<()> {
-    if let Some(name) = workspace_name {
+pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
+    if let Some(workspace_name) = workspace_name {
         // Start entire workspace
-        let workspace = Workspace::load_from_name(&name)
+        let workspace = get_workspace_for_cli(Some(workspace_name))
             .map_err(|e| eyre!(e))
-            .wrap_err("Failed to load workspace")?
-            .ok_or_else(|| eyre!("Workspace {} not found", name))?;
+            .wrap_err("Failed to get workspace for CLI")?;
 
         spin_up_workspace(&workspace)
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to spin up workspace")?;
 
         Config::mutate_persisted(|config| {
-            config.set_active_workspace(Some(name));
+            config.set_active_workspace(Some(workspace.config().name.clone()));
         })?;
 
         // We ignore the error here because we want to proceed even if the status check fails
