@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-07-18
+
 ### Added
 
 - Added `depends_on` field to project manifests for controlling Docker Compose startup order
