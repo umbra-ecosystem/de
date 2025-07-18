@@ -1,4 +1,5 @@
 pub mod config;
+mod dependency;
 mod utils;
 
 use eyre::{Context, eyre};
@@ -10,6 +11,7 @@ use crate::{
 };
 
 pub use config::WorkspaceProject;
+pub use dependency::{DependencyGraph, DependencyGraphError};
 pub use utils::{add_project_to_workspace, spin_down_workspace, spin_up_workspace};
 
 #[derive(Debug)]
@@ -43,6 +45,22 @@ impl Workspace {
 
     pub fn remove_project(&mut self, id: &Slug) {
         self.config.projects.remove(id);
+    }
+
+    pub fn load_dependency_graph(&self) -> eyre::Result<DependencyGraph> {
+        let mut graph = DependencyGraph::new();
+
+        for (id, ws_project) in &self.config.projects {
+            let project = Project::from_dir(&ws_project.dir)
+                .map_err(|e| eyre!(e))
+                .wrap_err_with(|| {
+                    format!("Failed to load project from {}", ws_project.dir.display())
+                })?;
+
+            graph.add_project(id.clone(), project.manifest().project().depends_on.clone());
+        }
+
+        Ok(graph)
     }
 
     pub fn load_from_name(name: &Slug) -> eyre::Result<Option<Self>> {

@@ -53,6 +53,27 @@ impl Formatter {
         Ok(())
     }
 
+    pub fn error_group(
+        &self,
+        heading: &str,
+        messages: &[String],
+        suggestion: Option<&str>,
+    ) -> Result<()> {
+        self.term
+            .write_line(&format!("  {} {}", self.error_symbol(), heading))?;
+        for message in messages {
+            self.term.write_line(&format!("    - {}", message))?;
+        }
+        if let Some(suggestion) = suggestion {
+            self.term.write_line(&format!(
+                "      {} {}",
+                self.arrow_symbol(),
+                self.theme.dim(suggestion)
+            ))?;
+        }
+        Ok(())
+    }
+
     pub fn warning(&self, message: &str, suggestion: Option<&str>) -> Result<()> {
         self.term
             .write_line(&format!("  {} {}", self.warning_symbol(), message))?;

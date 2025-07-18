@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `depends_on` field to project manifests for controlling Docker Compose startup order
+- Projects now start in dependency order (dependencies first) and stop in reverse order (dependents first)
+- Added dependency validation to `de doctor` command to detect missing dependencies and circular dependencies
+- Added comprehensive dependency resolution system with topological sorting using Kahn's algorithm
+
 ### Changed
 
 - `de status` command now respects the `git.enabled = false` setting in project manifests, displaying "git disabled" for projects with git disabled instead of attempting to gather git status.

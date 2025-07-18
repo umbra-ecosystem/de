@@ -407,6 +407,7 @@ Projects are configured using `de.toml` files with the following structure:
 name = "project-name"
 workspace = "workspace-name"
 docker_compose = "docker-compose.yml"    # Optional: path to docker-compose file
+depends_on = ["database", "cache"]       # Optional: projects that must start before this one
 
 [tasks]
 # Simple shell command
@@ -417,6 +418,31 @@ service-task = { service = "service-name", command = "command in service" }
 
 # Complex shell command
 complex-task = { command = "multi part command with args" }
+```
+
+#### Project Dependencies
+
+The `depends_on` field allows you to specify which projects must be started before the current project when using `de up` or `de down` commands. This is particularly useful for microservices architectures where services have startup dependencies.
+
+```toml
+[project]
+name = "web-app"
+workspace = "my-workspace"
+depends_on = ["database", "redis", "api"]
+```
+
+**Features:**
+- **Startup Order**: Projects are started in dependency order (dependencies first)
+- **Shutdown Order**: Projects are stopped in reverse dependency order (dependents first)
+- **Cycle Detection**: Circular dependencies are detected and will cause an error
+- **Validation**: Missing dependencies are detected and reported
+- **Topological Sorting**: Uses Kahn's algorithm for efficient dependency resolution
+
+**Example dependency chain:**
+```
+database → api → web-app
+   ↓        ↓       ↓
+  (1)      (2)     (3)
 ```
 
 #### Task Types
@@ -669,24 +695,70 @@ build = "docker build -t my-blog ."
 deploy = "docker push my-blog:latest"
 ```
 
-### Microservices Workspace
+### Microservices Workspace with Dependencies
 
+Here's an example of a microservices workspace that demonstrates the `depends_on` feature:
+
+**Database Project (no dependencies):**
 ```toml
 [project]
-name = "user-service"
+name = "database"
 workspace = "microservices"
+docker_compose = "docker-compose.yml"
 
 [tasks]
-# Local development
-dev = "cargo watch -x run"
-test = "cargo test"
+migrate = { service = "db", command = "migrate up" }
+seed = { service = "db", command = "seed --env dev" }
+```
 
-# Docker tasks
-docker-build = "docker build -t user-service ."
-docker-test = { service = "user-service", command = "cargo test" }
+**Cache Project (no dependencies):**
+```toml
+[project]
+name = "cache"
+workspace = "microservices"
+docker_compose = "docker-compose.yml"
 
-# Integration tests with full stack
-integration = { service = "test-runner", command = "pytest tests/integration" }
+[tasks]
+flush = { service = "redis", command = "redis-cli flushall" }
+```
+
+**API Service (depends on database and cache):**
+```toml
+[project]
+name = "api"
+workspace = "microservices"
+docker_compose = "docker-compose.yml"
+depends_on = ["database", "cache"]
+
+[tasks]
+dev = { service = "api", command = "cargo watch -x run" }
+test = { service = "api", command = "cargo test" }
+```
+
+**Web Frontend (depends on API):**
+```toml
+[project]
+name = "web"
+workspace = "microservices"
+docker_compose = "docker-compose.yml"
+depends_on = ["api"]
+
+[tasks]
+dev = { service = "web", command = "npm run dev" }
+build = { service = "web", command = "npm run build" }
+```
+
+**Startup Order:**
+When you run `de up`, the projects will start in this order:
+1. `database` and `cache` (can start in parallel)
+2. `api` (waits for database and cache)
+3. `web` (waits for api)
+
+**Shutdown Order:**
+When you run `de down`, the projects will stop in reverse order:
+1. `web` (stops first)
+2. `api` (stops after web)
+3. `database` and `cache` (stop last, can be parallel)
 ```
 
 ## Contributing

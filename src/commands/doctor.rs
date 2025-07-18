@@ -1,10 +1,13 @@
 use console::style;
 use eyre::eyre;
+use itertools::Itertools;
 use std::process::Command;
 
 use crate::{
-    project::Project, types::Slug, utils::formatter::Formatter, utils::theme::Theme,
-    workspace::Workspace,
+    project::Project,
+    types::Slug,
+    utils::{formatter::Formatter, theme::Theme},
+    workspace::{DependencyGraphError, Workspace},
 };
 
 #[derive(Debug)]
@@ -34,6 +37,22 @@ impl DiagnosticResult {
     ) -> eyre::Result<()> {
         self.errors += 1;
         formatter.error(&message, suggestion.as_deref())?;
+        Ok(())
+    }
+
+    fn add_error_group(
+        &mut self,
+        formatter: &Formatter,
+        heading: String,
+        messages: Vec<String>,
+        suggestion: Option<String>,
+    ) -> eyre::Result<()> {
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        self.errors += 1;
+        formatter.error_group(&heading, &messages, suggestion.as_deref())?;
         Ok(())
     }
 
@@ -392,6 +411,48 @@ fn check_project_details(
         }
     }
 
+    // Check project dependencies
+    let depends_on = &project.manifest().project().depends_on;
+    if !depends_on.is_empty() {
+        result.add_info(formatter, format!("Dependencies: {}", depends_on.len()))?;
+
+        // If we're in a workspace context, validate dependencies
+        if let Ok(Some(workspace)) =
+            Workspace::load_from_name(&project.manifest().project.workspace)
+        {
+            let missing_dependencies: Vec<_> = depends_on
+                .iter()
+                .filter(|dep| !workspace.config().projects.contains_key(*dep))
+                .map(|dep| dep.to_string())
+                .collect();
+
+            if !missing_dependencies.is_empty() {
+                result.add_error(
+                    formatter,
+                    format!("Missing dependencies: {}", missing_dependencies.join(", ")),
+                    Some("Ensure all required projects are added to the workspace".to_string()),
+                )?;
+            } else {
+                let mut depends_on = depends_on.iter().map(|d| d.to_string());
+                result.add_success(
+                    formatter,
+                    format!("All dependencies found: {}", depends_on.join(", ")),
+                )?;
+            }
+        } else {
+            result.add_error(
+                formatter,
+                "Cannot find workspace of this project".to_string(),
+                Some(
+                    "Ensure this workspace is initiated either with `de init` or `de scan`."
+                        .to_string(),
+                ),
+            )?;
+        }
+    } else {
+        result.add_info(formatter, theme.dim("Dependencies: none"))?;
+    }
+
     // Check if project has any tasks defined
     let task_count = project
         .manifest()
@@ -510,6 +571,9 @@ fn check_workspace_details(
 
         // Check for task name conflicts
         check_for_conflicts(formatter, workspace, result)?;
+
+        // Check for dependency issues
+        check_for_dependency_issues(formatter, workspace, result)?;
     }
     Ok(())
 }
@@ -583,6 +647,81 @@ fn check_for_conflicts(
             )?;
         }
     }
+    Ok(())
+}
+
+fn check_for_dependency_issues(
+    formatter: &Formatter,
+    workspace: &Workspace,
+    result: &mut DiagnosticResult,
+) -> eyre::Result<()> {
+    let dependency_graph = match workspace.load_dependency_graph() {
+        Ok(graph) => graph,
+        Err(e) => {
+            result.add_error(
+                formatter,
+                format!("Failed to load dependency graph: {e}"),
+                Some("Ensure all projects are properly configured in the workspace".to_string()),
+            )?;
+
+            return Ok(());
+        }
+    };
+
+    // Check for circular dependencies first (more critical)
+    match dependency_graph.resolve_startup_order() {
+        Ok(_) => {
+            result.add_success(formatter, "Dependency order is valid".to_string())?;
+        }
+        Err(DependencyGraphError::CircularDependency(projects)) => {
+            let projects_str = projects.iter().map(|p| p.as_str()).join(", ");
+            result.add_error(
+                formatter,
+                format!("Circular dependency detected: {}", projects_str),
+                Some("Refactor your dependencies to remove circular references".to_string()),
+            )?;
+        }
+        Err(DependencyGraphError::MissingDependencies(_)) => {
+            // This will be handled in the next check
+        }
+    }
+
+    // Validate dependencies are available
+    match dependency_graph.validate_dependencies() {
+        Ok(()) => {
+            result.add_success(formatter, "All dependencies are available".to_string())?;
+        }
+        Err(DependencyGraphError::MissingDependencies(dependencies)) => {
+            let grouped = dependencies
+                .into_iter()
+                .chunk_by(|(key, _)| key.clone())
+                .into_iter()
+                .map(|(key, items)| {
+                    let deps: Vec<_> = items.into_iter().map(|(_, dep)| dep).collect();
+                    (key, deps)
+                })
+                .map(|(key, deps)| {
+                    format!("{}: {}", key, deps.iter().map(|d| d.as_str()).join(", "))
+                })
+                .collect::<Vec<_>>();
+
+            result.add_error_group(
+                formatter,
+                "Missing Dependencies".to_string(),
+                grouped,
+                Some("Ensure all required projects are added to the workspace".to_string()),
+            )?;
+        }
+        Err(DependencyGraphError::CircularDependency(_)) => {
+            // This should not happen here, already handled above
+            result.add_error(
+                formatter,
+                "Unexpected circular dependency detected".to_string(),
+                Some("This should not happen, please report this issue".to_string()),
+            )?;
+        }
+    }
+
     Ok(())
 }
 

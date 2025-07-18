@@ -55,6 +55,8 @@ pub struct ProjectMetadata {
     pub workspace: Slug,
     #[serde(default)]
     pub docker_compose: Option<PathBuf>,
+    #[serde(default)]
+    pub depends_on: Vec<Slug>,
 }
 
 impl Default for ProjectMetadata {
@@ -63,6 +65,7 @@ impl Default for ProjectMetadata {
             name: default_project_name(),
             workspace: default_project_workspace(),
             docker_compose: None,
+            depends_on: Vec::new(),
         }
     }
 }
