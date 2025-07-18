@@ -47,8 +47,9 @@ impl Workspace {
         self.config.projects.remove(id);
     }
 
-    pub fn load_dependency_graph(&self) -> eyre::Result<DependencyGraph> {
+    pub fn load_dependency_graph(&self) -> eyre::Result<(DependencyGraph, Vec<Project>)> {
         let mut graph = DependencyGraph::new();
+        let mut projects = Vec::new();
 
         for (id, ws_project) in &self.config.projects {
             let project = Project::from_dir(&ws_project.dir)
@@ -57,10 +58,16 @@ impl Workspace {
                     format!("Failed to load project from {}", ws_project.dir.display())
                 })?;
 
-            graph.add_project(id.clone(), project.manifest().project().depends_on.clone());
+            if let Some(depends_on) = &project.manifest().project().depends_on {
+                graph.add_project(id.clone(), depends_on.clone());
+            } else {
+                graph.add_project(id.clone(), Vec::new());
+            }
+
+            projects.push(project);
         }
 
-        Ok(graph)
+        Ok((graph, projects))
     }
 
     pub fn load_from_name(name: &Slug) -> eyre::Result<Option<Self>> {

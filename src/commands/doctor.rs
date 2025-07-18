@@ -412,8 +412,7 @@ fn check_project_details(
     }
 
     // Check project dependencies
-    let depends_on = &project.manifest().project().depends_on;
-    if !depends_on.is_empty() {
+    if let Some(depends_on) = &project.manifest().project().depends_on {
         result.add_info(formatter, format!("Dependencies: {}", depends_on.len()))?;
 
         // If we're in a workspace context, validate dependencies
@@ -655,7 +654,7 @@ fn check_for_dependency_issues(
     workspace: &Workspace,
     result: &mut DiagnosticResult,
 ) -> eyre::Result<()> {
-    let dependency_graph = match workspace.load_dependency_graph() {
+    let (dependency_graph, _) = match workspace.load_dependency_graph() {
         Ok(graph) => graph,
         Err(e) => {
             result.add_error(

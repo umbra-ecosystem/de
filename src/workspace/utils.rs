@@ -1,9 +1,8 @@
 use std::path::PathBuf;
 
 use crate::{
-    project::Project,
     types::Slug,
-    workspace::{DependencyGraph, Workspace, config::WorkspaceProject},
+    workspace::{Workspace, config::WorkspaceProject},
 };
 use eyre::{Context, eyre};
 
@@ -45,21 +44,15 @@ pub fn add_project_to_workspace(
 }
 
 pub fn spin_up_workspace(workspace: &Workspace) -> eyre::Result<()> {
-    let mut dependency_graph = DependencyGraph::new();
-    let mut projects_map = std::collections::BTreeMap::new();
+    let (dependency_graph, projects) = workspace
+        .load_dependency_graph()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to load dependency graph for workspace")?;
 
-    // Load all projects and build dependency graph
-    for (id, wp) in &workspace.config().projects {
-        let project = Project::from_dir(&wp.dir)
-            .map_err(|e| eyre!(e))
-            .wrap_err_with(|| {
-                format!("Failed to load project from directory {}", wp.dir.display())
-            })?;
-
-        let depends_on = project.manifest().project().depends_on.clone();
-        dependency_graph.add_project(id.clone(), depends_on);
-        projects_map.insert(id.clone(), project);
-    }
+    let projects_map: std::collections::BTreeMap<_, _> = projects
+        .into_iter()
+        .map(|p| (p.manifest().project.name.clone(), p))
+        .collect();
 
     // Validate dependencies
     dependency_graph
@@ -103,21 +96,15 @@ pub fn spin_up_workspace(workspace: &Workspace) -> eyre::Result<()> {
 }
 
 pub fn spin_down_workspace(workspace: &Workspace) -> eyre::Result<()> {
-    let mut dependency_graph = DependencyGraph::new();
-    let mut projects_map = std::collections::BTreeMap::new();
+    let (dependency_graph, projects) = workspace
+        .load_dependency_graph()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to load dependency graph for workspace")?;
 
-    // Load all projects and build dependency graph
-    for (id, wp) in &workspace.config().projects {
-        let project = Project::from_dir(&wp.dir)
-            .map_err(|e| eyre!(e))
-            .wrap_err_with(|| {
-                format!("Failed to load project from directory {}", wp.dir.display())
-            })?;
-
-        let depends_on = project.manifest().project().depends_on.clone();
-        dependency_graph.add_project(id.clone(), depends_on);
-        projects_map.insert(id.clone(), project);
-    }
+    let projects_map: std::collections::BTreeMap<_, _> = projects
+        .into_iter()
+        .map(|p| (p.manifest().project.name.clone(), p))
+        .collect();
 
     // Validate dependencies
     dependency_graph
