@@ -23,7 +23,7 @@
   - ✅ Check and list available tasks
 
 - **Docker Compose Integration**
-  - 🚀 Start and stop all Docker Compose projects in a workspace
+  - 🚀 Start and stop Docker Compose projects - current project + dependencies or entire workspace
   - 📦 Manage services across multiple projects
   - 🧩 Manage project dependencies with `depends_on` in `de.toml`
 
@@ -306,10 +306,13 @@ This will:
 
 ### 12. Start/Stop Docker Compose Projects
 
-Start all Docker Compose projects in a workspace:
+Start Docker Compose projects:
 
 ```bash
+# Start the current project and its dependencies
 de start
+
+# Start all Docker Compose projects in a specific workspace
 de start --workspace my-workspace
 ```
 
@@ -423,7 +426,7 @@ complex-task = { command = "multi part command with args" }
 
 #### Project Dependencies
 
-The `depends_on` field allows you to specify which projects must be started before the current project when using `de start` or `de stop` commands. This is particularly useful for microservices architectures where services have startup dependencies.
+The `depends_on` field allows you to specify which projects must be started before the current project. When using `de start` without a workspace parameter, it will start the current project and its dependencies in the correct order. When using `de start --workspace`, it starts all projects in the workspace, respecting all dependency relationships. This is particularly useful for microservices architectures where services have startup dependencies.
 
 ```toml
 [project]
@@ -650,14 +653,14 @@ php
 Start and stop Docker Compose projects across workspaces:
 
 ```bash
-# Start all Docker Compose projects in the current workspace
+# Start the current project and its dependencies
 de start
 
 # Start all Docker Compose projects in a specific workspace
 de start --workspace production
 ```
 
-The `start` command will also set the started workspace as the active one.
+The `start` command will also set the workspace as the active one. When no workspace is specified, it starts only the current project and its dependencies in the correct dependency order. When a workspace is specified, it starts all projects in that workspace.
 
 ```bash
 # Stop all Docker Compose projects in the active workspace
@@ -669,7 +672,7 @@ de stop --workspace production
 
 The `stop` command will check for uncommitted or unpushed changes and prompt for confirmation before stopping. It will also deactivate the workspace if it was the active one.
 
-These commands automatically run `docker-compose up -d` and `docker-compose down` respectively for all projects in the workspace that have Docker Compose files configured.
+These commands automatically run `docker-compose up -d` and `docker-compose down` respectively for the relevant projects that have Docker Compose files configured. The `start` command without a workspace parameter will only start the current project and its dependencies, while specifying a workspace will start all projects in that workspace.
 
 ## Examples
 
@@ -750,10 +753,19 @@ build = { service = "web", command = "npm run build" }
 ```
 
 **Startup Order:**
-When you run `de start`, the projects will start in this order:
+When you run `de start` from the `web` project directory, it will start the current project and its dependencies in this order:
 1. `database` and `cache` (can start in parallel)
 2. `api` (waits for database and cache)
 3. `web` (waits for api)
+
+If you run `de start` from the `api` project directory, it will only start:
+1. `database` and `cache` (can start in parallel)
+2. `api` (waits for database and cache)
+
+To start all projects in the workspace regardless of your current directory, use:
+```bash
+de start --workspace microservices
+```
 
 **Shutdown Order:**
 When you run `de stop`, the projects will stop in reverse order:

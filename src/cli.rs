@@ -31,7 +31,8 @@ pub enum Commands {
         name: Option<Slug>,
     },
 
-    /// Spin up all projects in the workspace.
+    /// Spin up projects. If workspace is provided, spins up all projects in the workspace.
+    /// If no workspace is provided, spins up the current project and its dependencies.
     Start {
         #[arg(short, long)]
         workspace: Option<Slug>,
