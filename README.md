@@ -192,19 +192,19 @@ This allows you to run commands that apply to the entire workspace, such as buil
 Run any command within the context of a project's environment:
 
 ```bash
-de exec <command> -- <args>
+de exec <project> -- <args>
 ```
 
 For example, to run `npm install` in a project:
 
 ```bash
-de exec npm install
+de exec web -- npm install
 ```
 
 Or to run a specific script with arguments:
 
 ```bash
-de exec python my_script.py -- --some-arg value
+de exec app1 -- python my_script.py --some-arg value
 ```
 
 This command is useful for one-off operations or when you need to interact directly with the project's environment without defining a specific task in `de.toml`.
