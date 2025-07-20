@@ -11,6 +11,8 @@ use crate::{
 pub fn update(all: bool, workspace: Option<Option<Slug>>) -> eyre::Result<()> {
     let ui = UserInterface::new();
 
+    ui.heading("Update Summary:")?;
+
     if all {
         update_all_workspaces(&ui)
     } else if let Some(workspace_name) = workspace {
@@ -34,21 +36,21 @@ pub fn update(all: bool, workspace: Option<Option<Slug>>) -> eyre::Result<()> {
 
 /// Updates all workspaces by scanning for projects and validating existing registrations.
 fn update_all_workspaces(ui: &UserInterface) -> eyre::Result<()> {
-    ui.writeln("Updating all workspaces...")?;
-
-    // Get all workspace config files
     let project_dirs = crate::utils::get_project_dirs()?;
     let workspaces_dir = project_dirs.config_local_dir().join("workspaces");
 
     if !workspaces_dir.exists() {
-        ui.writeln("No workspaces directory found. Nothing to update.")?;
+        ui.error_item("No workspaces directory found. Nothing to update.", None)?;
         return Ok(());
     }
 
     let mut updated_count = 0;
     let mut removed_count = 0;
+    let mut skipped_count = 0;
 
-    // Read all workspace files
+    // Collect per-workspace results for summary
+    let mut workspace_summaries = Vec::new();
+
     for entry in std::fs::read_dir(&workspaces_dir)
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to read workspaces directory")?
@@ -73,26 +75,46 @@ fn update_all_workspaces(ui: &UserInterface) -> eyre::Result<()> {
                 .wrap_err_with(|| format!("Failed to load workspace '{workspace_name}'"))?
                 .ok_or_else(|| eyre!("Workspace '{}' not found.", workspace_name))?;
 
-            let (updated, removed) = update_workspace_internal(ui, workspace)?;
+            ui.subheading(workspace_name.as_str())?;
+
+            let (updated, removed, summary) =
+                ui.indented(|ui| update_workspace_internal_verbose(ui, workspace))?;
 
             updated_count += updated;
             removed_count += removed;
+            workspace_summaries.push(summary);
         } else {
-            ui.writeln(&format!(
-                "Skipping invalid workspace file: {}",
-                path.display()
-            ))?;
+            ui.error_item(
+                &format!("Skipping invalid workspace file: {}", path.display()),
+                None,
+            )?;
+            skipped_count += 1;
             continue;
         }
     }
 
-    ui.writeln(&format!(
-        "Updated {updated_count} projects across all workspaces"
-    ))?;
-    if removed_count > 0 {
-        ui.writeln(&format!(
-            "Removed {removed_count} stale project registrations"
+    // Print summary for all workspaces
+
+    if updated_count > 0 || removed_count > 0 || skipped_count > 0 {
+        ui.new_line()?;
+    }
+
+    if updated_count > 0 {
+        ui.info_item(&format!(
+            "Updated {updated_count} project registration(s) across all workspaces"
         ))?;
+    }
+    if removed_count > 0 {
+        ui.warning_item(
+            &format!("Removed {removed_count} stale project registration(s)"),
+            None,
+        )?;
+    }
+    if skipped_count > 0 {
+        ui.error_item(
+            &format!("Skipped {skipped_count} invalid workspace file(s)"),
+            None,
+        )?;
     }
 
     Ok(())
@@ -102,30 +124,41 @@ fn update_all_workspaces(ui: &UserInterface) -> eyre::Result<()> {
 fn update_workspace(ui: &UserInterface, workspace: Workspace) -> eyre::Result<()> {
     let workspace_name = workspace.config().name.clone();
 
-    ui.writeln(&format!("Updating workspace '{workspace_name}'..."))?;
+    ui.subheading(workspace_name.as_str())?;
+    let (updated_count, removed_count, _summary) =
+        update_workspace_internal_verbose(ui, workspace)?;
 
-    let (updated_count, removed_count) = update_workspace_internal(ui, workspace)?;
+    if updated_count > 0 || removed_count > 0 {
+        ui.new_line()?;
+    }
 
-    ui.writeln(&format!(
-        "Updated {updated_count} projects in workspace '{workspace_name}'"
-    ))?;
-    if removed_count > 0 {
-        ui.writeln(&format!(
-            "Removed {removed_count} stale project registrations"
+    if updated_count > 0 {
+        ui.info_item(&format!(
+            "Updated {updated_count} project registration(s) in workspace '{workspace_name}'"
         ))?;
+    }
+    if removed_count > 0 {
+        ui.warning_item(
+            &format!("Removed {removed_count} stale project registration(s)"),
+            None,
+        )?;
+    }
+    if updated_count == 0 && removed_count == 0 {
+        ui.success_item("All projects in this workspace are up to date.", None)?;
     }
 
     Ok(())
 }
 
-/// Internal function that handles the actual workspace update logic.
-fn update_workspace_internal(
+/// Internal function that handles the actual workspace update logic, with verbose UI output.
+fn update_workspace_internal_verbose(
     ui: &UserInterface,
     mut workspace: Workspace,
-) -> eyre::Result<(usize, usize)> {
+) -> eyre::Result<(usize, usize, String)> {
     let workspace_name = &workspace.config().name;
 
     let mut updated_count = 0;
+    let mut removed_count = 0;
 
     let mut add_projects = Vec::new();
     let mut remove_projects = Vec::new();
@@ -140,12 +173,13 @@ fn update_workspace_internal(
             ui.warning_item(
                 &format!(
                     "Removing stale project '{}' (manifest not found at {})",
-                    project_name,
+                    ui.theme.highlight(project_name.as_str()),
                     manifest_path.display()
                 ),
                 None,
             )?;
             remove_projects.push(project_name.clone());
+            removed_count += 1;
             continue;
         }
 
@@ -157,19 +191,21 @@ fn update_workspace_internal(
                 if current_manifest.project().workspace != *workspace_name {
                     ui.info_item(&format!(
                         "Removing project '{}' (moved to workspace '{}')",
-                        project_name,
-                        current_manifest.project().workspace
+                        ui.theme.highlight(project_name.as_str()),
+                        ui.theme
+                            .accent(current_manifest.project().workspace.as_str())
                     ))?;
                     remove_projects.push(project_name.clone());
+                    removed_count += 1;
                     continue;
                 }
 
                 // Check if project name has changed, and update if necessary
                 if current_manifest.project().name != project_name {
                     ui.info_item(&format!(
-                        "Updating project name '{}' -> '{}'",
-                        project_name,
-                        current_manifest.project().name
+                        "Updating project name '{}' → '{}'",
+                        ui.theme.highlight(project_name.as_str()),
+                        ui.theme.accent(current_manifest.project().name.as_str()),
                     ))?;
                     remove_projects.push(project_name.clone());
 
@@ -180,13 +216,19 @@ fn update_workspace_internal(
                 }
             }
             Err(e) => {
-                eprintln!("  Failed to loading project '{project_name}' (failed to load: {e})");
+                ui.error_item(
+                    &format!(
+                        "Failed to load project '{}' (error: {})",
+                        ui.theme.error(project_name.as_str()),
+                        e
+                    ),
+                    None,
+                )?;
             }
         }
     }
 
     // Apply changes: remove stale projects and add new/updated projects
-    let removed_count = remove_projects.len();
     for project_name in remove_projects {
         workspace.remove_project(&project_name);
     }
@@ -197,7 +239,15 @@ fn update_workspace_internal(
 
     workspace.save()?;
 
-    Ok((updated_count, removed_count))
+    let summary = format!("Updated: {}, Removed: {}", updated_count, removed_count);
+
+    if updated_count == 0 && removed_count == 0 {
+        ui.success_item("No changes made to workspace registrations.", None)?;
+    } else {
+        ui.info_item(&summary)?;
+    }
+
+    Ok((updated_count, removed_count, summary))
 }
 
 /// Updates the current project's workspace registration.
@@ -219,7 +269,14 @@ fn update_current_project(ui: &UserInterface) -> eyre::Result<()> {
 
     // TODO: Remove from previous workspace if it exists
 
-    ui.writeln(&format!("Updated project '{project_name}' registration"))?;
+    ui.success_item(
+        &format!(
+            "Updated project '{}' registration in workspace '{}'",
+            ui.theme.highlight(project_name.as_str()),
+            ui.theme.accent(workspace_name.as_str())
+        ),
+        None,
+    )?;
 
     Ok(())
 }

@@ -41,9 +41,15 @@ impl UserInterface {
             .write_line(&self.theme.bold_underline(&indented_message).to_string())
     }
 
-    pub fn indented<F>(&self, f: F) -> eyre::Result<()>
+    pub fn subheading(&self, message: &str) -> std::io::Result<()> {
+        let indented_message = self.theme.indent(self.indent) + message;
+        self.term
+            .write_line(&self.theme.bold(&indented_message).to_string())
+    }
+
+    pub fn indented<F, T>(&self, f: F) -> eyre::Result<T>
     where
-        F: FnOnce(&UserInterface) -> eyre::Result<()>,
+        F: FnOnce(&UserInterface) -> eyre::Result<T>,
     {
         f(&UserInterface {
             indent: self.indent + 1,
