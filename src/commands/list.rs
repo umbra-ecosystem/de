@@ -1,17 +1,21 @@
+use std::path::PathBuf;
+
 use crate::{
-    project::Project, types::Slug, utils::formatter::Formatter, utils::theme::Theme,
+    project::Project,
+    types::Slug,
+    utils::{theme::Theme, ui::UserInterface},
     workspace::Workspace,
 };
 use console::style;
 use eyre::{Context, eyre};
 
 pub fn list(workspace: Workspace) -> eyre::Result<()> {
-    let formatter = Formatter::new();
+    let ui = UserInterface::new();
     let theme = Theme::new();
     let name = &workspace.config().name;
 
     if workspace.config().projects.is_empty() {
-        formatter.warning(&format!("No projects found in workspace '{name}'"), None)?;
+        ui.warning_item(&format!("No projects found in workspace '{name}'"), None)?;
         return Ok(());
     }
 
@@ -43,6 +47,7 @@ pub fn list(workspace: Workspace) -> eyre::Result<()> {
         projects_to_display.push(ProjectDisplay {
             id: id.clone(),
             name: project_name,
+            dir: project_dir.clone(),
             present,
             current,
         });
@@ -50,9 +55,9 @@ pub fn list(workspace: Workspace) -> eyre::Result<()> {
 
     projects_to_display.sort_by(|a, b| a.id.cmp(&b.id));
 
-    formatter.heading(&format!("Projects in workspace {name}:"))?;
+    ui.heading(&format!("Projects in workspace {name}:"))?;
     for project in &projects_to_display {
-        print_project_display(project, &formatter, &theme)?;
+        print_project_display(project, &ui, &theme)?;
     }
 
     Ok(())
@@ -61,31 +66,33 @@ pub fn list(workspace: Workspace) -> eyre::Result<()> {
 struct ProjectDisplay {
     id: Slug,
     name: Slug,
+    dir: PathBuf,
     present: bool,
     current: bool,
 }
 
-fn print_project_display(project: &ProjectDisplay, formatter: &Formatter, theme: &Theme) -> eyre::Result<()> {
-    let status_symbol = if project.present {
-        formatter.success_symbol()
-    } else {
-        formatter.error_symbol()
-    };
-
+fn print_project_display(
+    project: &ProjectDisplay,
+    ui: &UserInterface,
+    theme: &Theme,
+) -> eyre::Result<()> {
     let current_indicator = if project.current {
         format!(" {}", style("(current)").fg(theme.accent_color))
     } else {
         "".to_string()
     };
 
-    formatter.line(
-        &format!(
-            "  {} {}{}",
-            status_symbol,
-            style(&project.name).bold(),
-            current_indicator
-        ),
-        0,
-    )?;
+    if project.present {
+        ui.success_item(&format!("{}{}", project.name, current_indicator), None)?;
+    } else {
+        ui.error_item(
+            project.name.as_str(),
+            Some(&format!(
+                "Project directory '{}' does not exist",
+                project.dir.display()
+            )),
+        )?;
+    }
+
     Ok(())
 }
