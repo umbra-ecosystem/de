@@ -79,7 +79,7 @@ exec_nth_command() {{
 # Silently check 'de task {program_name}'. Redirects all output to /dev/null.
 if de task check {program_name} >/dev/null 2>&1; then
     # If check passes, execute 'de run {program_name}'. 'exec' avoids new process.
-    exec de run {program_name} "$@"
+    exec de run {program_name} -- "$@"
 else
     # If check fails or 'de' not found, fall back to system command.
     # Calls the 2nd instance of '{program_name}' in PATH (assuming 1st is this shim).

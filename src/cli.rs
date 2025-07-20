@@ -59,7 +59,7 @@ pub enum Commands {
         workspace: Option<Slug>,
 
         /// Additional arguments to pass to the command.
-        #[arg(hide = true)]
+        #[arg(last = true)]
         args: Vec<String>,
     },
 
