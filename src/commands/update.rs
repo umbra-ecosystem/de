@@ -100,19 +100,14 @@ fn update_all_workspaces(ui: &UserInterface) -> eyre::Result<()> {
     }
 
     if updated_count > 0 {
-        ui.info_item(&format!(
-            "Updated {updated_count} project registration(s) across all workspaces"
-        ))?;
+        ui.info_item(&format!("Updated {updated_count} projects"))?;
     }
     if removed_count > 0 {
-        ui.warning_item(
-            &format!("Removed {removed_count} stale project registration(s)"),
-            None,
-        )?;
+        ui.warning_item(&format!("Removed {removed_count} stale projects"), None)?;
     }
     if skipped_count > 0 {
         ui.error_item(
-            &format!("Skipped {skipped_count} invalid workspace file(s)"),
+            &format!("Skipped {skipped_count} invalid workspace files"),
             None,
         )?;
     }
@@ -134,17 +129,14 @@ fn update_workspace(ui: &UserInterface, workspace: Workspace) -> eyre::Result<()
 
     if updated_count > 0 {
         ui.info_item(&format!(
-            "Updated {updated_count} project registration(s) in workspace '{workspace_name}'"
+            "Updated {updated_count} projects in '{workspace_name}'"
         ))?;
     }
     if removed_count > 0 {
-        ui.warning_item(
-            &format!("Removed {removed_count} stale project registration(s)"),
-            None,
-        )?;
+        ui.warning_item(&format!("Removed {removed_count} stale projects"), None)?;
     }
     if updated_count == 0 && removed_count == 0 {
-        ui.success_item("All projects in this workspace are up to date.", None)?;
+        ui.success_item("No changes.", None)?;
     }
 
     Ok(())
@@ -171,11 +163,7 @@ fn update_workspace_internal_verbose(
 
         if !manifest_path.exists() {
             ui.warning_item(
-                &format!(
-                    "Removing stale project '{}' (manifest not found at {})",
-                    ui.theme.highlight(project_name.as_str()),
-                    manifest_path.display()
-                ),
+                &format!("Removed: {}", ui.theme.highlight(project_name.as_str())),
                 None,
             )?;
             remove_projects.push(project_name.clone());
@@ -190,7 +178,7 @@ fn update_workspace_internal_verbose(
                 // Check if the project still belongs to this workspace
                 if current_manifest.project().workspace != *workspace_name {
                     ui.info_item(&format!(
-                        "Removing project '{}' (moved to workspace '{}')",
+                        "Removed: {} (moved to '{}')",
                         ui.theme.highlight(project_name.as_str()),
                         ui.theme
                             .accent(current_manifest.project().workspace.as_str())
@@ -203,7 +191,7 @@ fn update_workspace_internal_verbose(
                 // Check if project name has changed, and update if necessary
                 if current_manifest.project().name != project_name {
                     ui.info_item(&format!(
-                        "Updating project name '{}' → '{}'",
+                        "Renamed: {} → {}",
                         ui.theme.highlight(project_name.as_str()),
                         ui.theme.accent(current_manifest.project().name.as_str()),
                     ))?;
@@ -217,11 +205,7 @@ fn update_workspace_internal_verbose(
             }
             Err(e) => {
                 ui.error_item(
-                    &format!(
-                        "Failed to load project '{}' (error: {})",
-                        ui.theme.error(project_name.as_str()),
-                        e
-                    ),
+                    &format!("Error: {} ({})", ui.theme.error(project_name.as_str()), e),
                     None,
                 )?;
             }
@@ -239,10 +223,10 @@ fn update_workspace_internal_verbose(
 
     workspace.save()?;
 
-    let summary = format!("Updated: {}, Removed: {}", updated_count, removed_count);
+    let summary = format!("Updated {}, removed {}", updated_count, removed_count);
 
     if updated_count == 0 && removed_count == 0 {
-        ui.success_item("No changes made to workspace registrations.", None)?;
+        ui.success_item("No changes.", None)?;
     } else {
         ui.info_item(&summary)?;
     }
@@ -271,9 +255,8 @@ fn update_current_project(ui: &UserInterface) -> eyre::Result<()> {
 
     ui.success_item(
         &format!(
-            "Updated project '{}' registration in workspace '{}'",
+            "Updated project: {}",
             ui.theme.highlight(project_name.as_str()),
-            ui.theme.accent(workspace_name.as_str())
         ),
         None,
     )?;
