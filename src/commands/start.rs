@@ -6,11 +6,13 @@ use crate::{
     config::Config,
     project::Project,
     types::Slug,
-    utils::{formatter::Formatter, get_workspace_for_cli},
+    utils::{formatter::Formatter, get_workspace_for_cli, ui::UserInterface},
     workspace::{Workspace, spin_up_workspace},
 };
 
 pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
+    let ui = UserInterface::new();
+
     if let Some(workspace_name) = workspace_name {
         // Start entire workspace
         let workspace = get_workspace_for_cli(Some(workspace_name))
@@ -26,7 +28,7 @@ pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
         })?;
 
         // We ignore the error here because we want to proceed even if the status check fails
-        println!();
+        ui.new_line()?;
         let formatter = Formatter::new();
         let _ = workspace_status(&workspace, &formatter);
     } else {
@@ -43,7 +45,7 @@ pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
             .wrap_err("Failed to load workspace")?
             .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
 
-        spin_up_project_and_dependencies(&workspace, &project.manifest().project().name)
+        spin_up_project_and_dependencies(&ui, &workspace, &project.manifest().project().name)
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to spin up project and dependencies")?;
 
@@ -52,7 +54,7 @@ pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
         })?;
 
         // We ignore the error here because we want to proceed even if the status check fails
-        println!();
+        ui.new_line()?;
         let formatter = Formatter::new();
         let _ = workspace_status(&workspace, &formatter);
     }
@@ -61,6 +63,7 @@ pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
 }
 
 fn spin_up_project_and_dependencies(
+    ui: &UserInterface,
     workspace: &Workspace,
     project_name: &Slug,
 ) -> eyre::Result<()> {
@@ -94,7 +97,7 @@ fn spin_up_project_and_dependencies(
     for project_id in startup_order {
         if projects_to_start.contains(&project_id) {
             if let Some(project) = projects_map.get(&project_id) {
-                println!("Spinning up project {project_id}:");
+                ui.writeln(&ui.theme.bold(&format!("Spinning up project {project_id}:")))?;
 
                 let applied = project
                     .docker_compose_up()
@@ -115,7 +118,7 @@ fn spin_up_project_and_dependencies(
     }
 
     if applied_projects.is_empty() {
-        println!("- (No projects to spin up)");
+        ui.warning_item("No projects to spin up", None)?;
     }
 
     Ok(())

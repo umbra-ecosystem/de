@@ -5,8 +5,8 @@ use super::theme::{Symbols, Theme};
 #[derive(Debug, Clone)]
 pub struct UserInterface {
     term: Term,
-    theme: Theme,
-    symbols: Symbols,
+    pub theme: Theme,
+    pub symbols: Symbols,
     indent: usize,
 }
 
@@ -24,6 +24,10 @@ impl UserInterface {
     pub fn writeln(&self, message: &str) -> std::io::Result<()> {
         let indented_message = self.theme.indent(self.indent) + message;
         self.term.write_line(&indented_message)
+    }
+
+    pub fn new_line(&self) -> std::io::Result<()> {
+        self.term.write_line("")
     }
 }
 
