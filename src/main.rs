@@ -79,6 +79,7 @@ fn main() -> eyre::Result<()> {
         Commands::Shim { command } => match command {
             ShimCommands::Add { command } => commands::shim::add(command),
             ShimCommands::Remove { command } => commands::shim::remove(command),
+            ShimCommands::Reinstate => commands::shim::reinstate(),
             ShimCommands::List => commands::shim::list(),
             ShimCommands::Install => commands::shim::install(),
             ShimCommands::Uninstall => commands::shim::uninstall(),

@@ -277,6 +277,9 @@ pub enum ShimCommands {
         command: Slug,
     },
 
+    /// Update the current shims to the latest version.
+    Reinstate,
+
     /// List all shims currently installed.
     List,
 

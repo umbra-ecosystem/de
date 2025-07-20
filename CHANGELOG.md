@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `de shim reinstate` command to update or recreate all shims for project tasks. This command scans for all tasks with shims and rewrites all shim files, ensuring command aliases are up to date and consistent with your current configuration.
+
+### Changed
+
+- Pass extra arguments as trailing arguments in CLI. The shim exec call now adds '--' before extra arguments to improve argument handling and compatibility with various commands.
+
 ## [0.4.0] - 2025-07-18
 
 ### Added

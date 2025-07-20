@@ -1,7 +1,7 @@
 use eyre::{WrapErr, eyre};
 use std::path::Path;
 
-use crate::utils::get_project_dirs;
+use crate::{types::Slug, utils::get_project_dirs};
 
 pub fn get_shims_dir() -> eyre::Result<std::path::PathBuf> {
     let dirs = get_project_dirs()?;
@@ -31,6 +31,67 @@ pub fn check_shim_installation_in_shell_config(
         .wrap_err_with(|| format!("Failed to read file: {}", file.display()))?;
 
     Ok(content.contains(&shim_export))
+}
+
+pub fn write_shim_to_file(command: &Slug) -> eyre::Result<()> {
+    let shims_dir = get_shims_dir()?;
+    let shim_file = shims_dir.join(format!("{command}"));
+
+    let shim_program = generate_shim_bash_script(command.as_str());
+    std::fs::create_dir_all(&shims_dir)
+        .map_err(|e| eyre!(e))
+        .wrap_err_with(|| format!("Failed to create shims directory: {}", shims_dir.display()))?;
+
+    std::fs::write(&shim_file, shim_program)
+        .map_err(|e| eyre!(e))
+        .wrap_err_with(|| format!("Failed to write shim to {}", shim_file.display()))?;
+
+    #[cfg(target_family = "unix")]
+    apply_executable_permissions(&shim_file)?;
+
+    Ok(())
+}
+
+#[cfg(target_family = "unix")]
+fn apply_executable_permissions(shim_file: &Path) -> eyre::Result<()> {
+    use std::{fs, os::unix::fs::PermissionsExt};
+
+    let mut permissions = fs::metadata(shim_file)?.permissions();
+    permissions.set_mode(permissions.mode() | 0o111); // Add execute permissions for owner, group, others
+
+    fs::set_permissions(shim_file, permissions)
+        .map_err(|e| eyre!(e))
+        .wrap_err_with(|| format!("Failed to set permissions for {}", shim_file.display()))?;
+
+    Ok(())
+}
+
+pub fn get_installed_shims() -> eyre::Result<Vec<String>> {
+    let shims_dir = get_shims_dir()?;
+
+    if !shims_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = std::fs::read_dir(&shims_dir)
+        .map_err(|e| eyre!(e))
+        .wrap_err_with(|| format!("Failed to read shims directory: {}", shims_dir.display()))?;
+
+    let mut shims = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| eyre!(e)).wrap_err_with(|| {
+            format!(
+                "Failed to read entry in shims directory: {}",
+                shims_dir.display()
+            )
+        })?;
+
+        if let Some(name) = entry.file_name().to_str() {
+            shims.push(name.to_string());
+        }
+    }
+
+    Ok(shims)
 }
 
 pub fn generate_shim_bash_script(program_name: &str) -> String {

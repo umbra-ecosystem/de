@@ -648,6 +648,16 @@ php
 
 **Note**: Shims require a corresponding task with the same name defined in your project's `de.toml` file.
 
+#### Reinstate Shims
+
+To update or recreate all shims for your project tasks (for example, if shims are out of date), use:
+
+```bash
+de shim reinstate
+```
+
+This command will scan for all tasks with shims and rewrite all shim files, ensuring your command aliases are up to date and consistent with your current configuration.
+
 #### Docker Compose Management
 
 Start and stop Docker Compose projects across workspaces:
