@@ -1,4 +1,7 @@
+use std::time::Duration;
+
 use console::Term;
+use indicatif::ProgressBar;
 
 use super::theme::{Symbols, Theme};
 
@@ -35,12 +38,12 @@ impl UserInterface {
     pub fn heading(&self, message: &str) -> std::io::Result<()> {
         let indented_message = self.theme.indent(self.indent) + message;
         self.term
-            .write_line(&format!("{}", self.theme.bold(&indented_message)))
+            .write_line(&self.theme.bold_underline(&indented_message).to_string())
     }
 
-    pub fn indented<F>(&self, f: F) -> std::io::Result<()>
+    pub fn indented<F>(&self, f: F) -> eyre::Result<()>
     where
-        F: FnOnce(&UserInterface) -> std::io::Result<()>,
+        F: FnOnce(&UserInterface) -> eyre::Result<()>,
     {
         f(&UserInterface {
             indent: self.indent + 1,
@@ -102,6 +105,19 @@ impl UserInterface {
 }
 
 impl UserInterface {
+    pub fn loading_bar(&self, message: &str) -> std::io::Result<ProgressBar> {
+        let bar = ProgressBar::new_spinner();
+        bar.set_message(message.to_string());
+        bar.enable_steady_tick(Duration::from_millis(100));
+        bar.set_style(
+            indicatif::ProgressStyle::with_template("{spinner:.green} {msg}")
+                .unwrap()
+                .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
+        );
+        bar.set_prefix(self.theme.indent(self.indent));
+        Ok(bar)
+    }
+
     pub fn error_group(
         &self,
         heading: &str,
@@ -152,7 +168,7 @@ impl LineItem<'_> {
         let main_indent = ui.theme.indent(self.indent);
         let symbol = self.symbol.unwrap_or("-");
         let message = format!("{} {}", symbol, self.message);
-        ui.term.write_line(&format!("{}{}", main_indent, message))?;
+        ui.term.write_line(&format!("{main_indent}{message}"))?;
         if let Some(suggestion) = self.suggestion {
             ui.term.write_line(&format!(
                 "{}{} {}",

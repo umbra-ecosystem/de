@@ -46,6 +46,10 @@ impl Theme {
         console::style(s).bold().to_string()
     }
 
+    pub fn bold_underline(&self, s: &str) -> String {
+        console::style(s).bold().underlined().to_string()
+    }
+
     pub fn dim(&self, s: &str) -> String {
         console::style(s).dim().to_string()
     }
@@ -73,25 +77,5 @@ impl Symbols {
             info: console::style("-").fg(theme.highlight_color).to_string(),
             arrow: console::style("→").fg(theme.accent_color).to_string(),
         }
-    }
-
-    pub fn success_symbol(&self) -> &str {
-        &self.success
-    }
-
-    pub fn error_symbol(&self) -> &str {
-        &self.error
-    }
-
-    pub fn warning_symbol(&self) -> &str {
-        &self.warning
-    }
-
-    pub fn info_symbol(&self) -> &str {
-        &self.info
-    }
-
-    pub fn arrow_symbol(&self) -> &str {
-        &self.arrow
     }
 }

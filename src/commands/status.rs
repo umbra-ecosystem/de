@@ -1,8 +1,7 @@
 use crate::{
     project::Project,
     types::Slug,
-    utils::formatter::Formatter,
-    utils::theme::Theme,
+    utils::{theme::Theme, ui::UserInterface},
     workspace::{Workspace, WorkspaceProject},
 };
 use console::style;
@@ -13,7 +12,7 @@ use std::process::Command;
 /// Show the status of the active workspace and its projects.
 pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
     tracing::info!("Starting status command");
-    let formatter = Formatter::new();
+    let ui = UserInterface::new();
 
     let workspace = if let Some(workspace_name) = workspace_name {
         tracing::info!("Loading workspace '{}'", workspace_name);
@@ -25,28 +24,28 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
         match Workspace::active()? {
             Some(ws) => ws,
             None => {
-                tracing::warn!("No active workspace found");
-                formatter.warning("No active workspace found.", None)?;
+                ui.warning_item("No active workspace found.", None)?;
                 return Ok(());
             }
         }
     };
 
-    workspace_status(&workspace, &formatter)?;
+    workspace_status(&ui, &workspace)?;
 
     tracing::info!("Finished status command");
     Ok(())
 }
 
 pub fn workspace_status(
+    ui: &UserInterface,
     workspace: &Workspace,
-    formatter: &Formatter,
 ) -> eyre::Result<WorkspaceStatus> {
     let ws_config = workspace.config();
     tracing::info!("Loaded workspace '{}'", ws_config.name);
-    formatter.heading(&format!("Workspace: {}", ws_config.name))?;
-    println!(); // Add a newline after the heading
-    formatter.heading("Projects:")?;
+    ui.heading(&format!("Workspace: {}", ws_config.name))?;
+    ui.new_line()?; // Add a newline after the heading
+    ui.heading("Projects:")?;
+    let loading_bar = ui.loading_bar("Gathering project statuses...")?;
 
     let current_project = Project::current()
         .map_err(|e| eyre!(e))
@@ -66,11 +65,13 @@ pub fn workspace_status(
         })
         .collect();
 
+    loading_bar.finish_and_clear();
+
     for status in &statuses {
-        status.print(formatter)?;
+        status.print(ui)?;
     }
 
-    print_status_summary(&statuses, formatter)?;
+    print_status_summary(ui, &statuses)?;
 
     Ok(WorkspaceStatus { statuses })
 }
@@ -179,48 +180,61 @@ impl ProjectStatus {
     }
 
     /// Print the status for this project.
-    fn print(&self, formatter: &Formatter) -> eyre::Result<()> {
+    fn print(&self, ui: &UserInterface) -> eyre::Result<()> {
         let theme = Theme::new();
-        formatter.line(
-            &format!(
-                "{} [{}] {}",
-                style(&self.slug).bold(),
-                if self.present {
-                    style("present").fg(theme.success_color)
-                } else {
-                    style("missing").fg(theme.error_color)
-                },
-                if self.current {
-                    style("(current)").fg(theme.success_color).to_string()
-                } else {
-                    "".to_string()
-                }
-            ),
-            2,
-        )?;
-        println!("      Git: {}", self.git.format());
-        if let Some(ref docker_services) = self.docker_services {
-            if !docker_services.is_empty() {
-                println!("      Docker Compose services:");
+        ui.writeln(&format!(
+            "{} [{}] {}",
+            style(&self.slug).bold(),
+            if self.present {
+                style("present").fg(theme.success_color)
+            } else {
+                style("missing").fg(theme.error_color)
+            },
+            if self.current {
+                style("(current)").fg(theme.success_color).to_string()
+            } else {
+                "".to_string()
+            }
+        ))?;
+
+        ui.indented(|ui| {
+            ui.writeln(&format!("Git: {}", self.git.format(ui)))?;
+
+            let Some(docker_services) = self.docker_services.as_ref() else {
+                return Ok(());
+            };
+
+            if docker_services.is_empty() {
+                return Ok(());
+            }
+
+            ui.writeln(&format!("Docker Compose services:"))?;
+            ui.indented(|ui| {
                 for svc in docker_services {
                     let status_style = if svc.status.contains("Up") {
                         style(&svc.status).fg(theme.success_color)
                     } else {
                         style(&svc.status).fg(theme.error_color)
                     };
+
                     if let Some(ref ports) = svc.ports {
-                        println!(
-                            "        {}: {} {}",
+                        ui.writeln(&format!(
+                            "{}: {} {}",
                             style(&svc.name).bold(),
                             status_style,
                             theme.dim(ports),
-                        );
+                        ))?;
                     } else {
-                        println!("        {}: {}", style(&svc.name).bold(), status_style);
+                        ui.writeln(&format!("{}: {}", style(&svc.name).bold(), status_style))?;
                     }
                 }
-            }
-        }
+
+                Ok(())
+            })?;
+
+            Ok(())
+        })?;
+
         Ok(())
     }
 }
@@ -236,7 +250,7 @@ struct GitStatus {
 }
 
 /// Print a concise, actionable summary of project and service status.
-fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) -> eyre::Result<()> {
+fn print_status_summary(ui: &UserInterface, statuses: &[ProjectStatus]) -> eyre::Result<()> {
     let theme = Theme::new();
     let dirty = statuses
         .iter()
@@ -265,65 +279,54 @@ fn print_status_summary(statuses: &[ProjectStatus], formatter: &Formatter) -> ey
     );
 
     println!();
-    formatter.heading("Status Summary:")?;
+    ui.heading("Status Summary:")?;
     let mut any = false;
     if dirty > 0 {
-        formatter.line(
+        ui.warning_item(
             &format!(
-                "{} Uncommitted changes: {} (run: {})",
-                formatter.warning_symbol(),
+                "Uncommitted changes: {} (run: {})",
                 dirty,
                 style("git commit").fg(theme.accent_color)
             ),
-            2,
+            None,
         )?;
         any = true;
     }
     if behind > 0 {
-        formatter.line(
-            &format!(
-                "{} To pull: {} (run: {})",
-                formatter.info_symbol(),
-                behind,
-                style("git pull").fg(theme.accent_color)
-            ),
-            2,
-        )?;
+        ui.info_item(&format!(
+            "To pull: {} (run: {})",
+            behind,
+            style("git pull").fg(theme.accent_color)
+        ))?;
         any = true;
     }
     if ahead > 0 {
-        formatter.line(
-            &format!(
-                "{} To push: {} (run: {})",
-                formatter.info_symbol(),
-                ahead,
-                style("git push").fg(theme.accent_color)
-            ),
-            2,
-        )?;
+        ui.info_item(&format!(
+            "To push: {} (run: {})",
+            ahead,
+            style("git push").fg(theme.accent_color)
+        ))?;
         any = true;
     }
     if downed_services_total > 0 {
-        formatter.line(
+        ui.error_item(
             &format!(
-                "{} Downed services: {} (run: {})",
-                formatter.error_symbol(),
+                "Downed services: {} (run: {})",
                 downed_services_total,
                 style("docker-compose up -d").fg(theme.accent_color)
             ),
-            2,
+            None,
         )?;
         any = true;
     }
 
     if !any {
-        formatter.line(
+        ui.success_item(
             &format!(
-                "{} {}",
-                formatter.success_symbol(),
+                "{}",
                 style("All projects and services are up to date.").fg(theme.success_color)
             ),
-            2,
+            None,
         )?;
     }
     Ok(())
@@ -438,31 +441,39 @@ impl GitStatus {
         }
     }
 
-    fn format(&self) -> String {
-        let theme = Theme::new();
+    fn format(&self, ui: &UserInterface) -> String {
+        let theme = &ui.theme;
+
         if self.git_disabled {
             return theme.dim("git disabled");
         }
+
         if !self.is_repo {
             return theme.dim("not a git repo");
         }
+
         let mut out = String::new();
+
         if let Some(branch) = &self.branch {
-            out.push_str(&style(branch).bold().to_string());
+            out.push_str(&ui.theme.highlight(branch));
         } else {
             out.push('?');
         }
+
         if let Some(a) = self.ahead {
             out.push_str(&format!(" (ahead {a})"));
         }
+
         if let Some(b) = self.behind {
             out.push_str(&format!(" (behind {b})"));
         }
+
         if self.dirty {
-            out.push_str(&format!(", {}", style("dirty").fg(theme.warning_color)));
+            out.push_str(&format!(", {}", theme.warn("dirty")));
         } else {
-            out.push_str(&format!(", {}", style("clean").fg(theme.success_color)));
+            out.push_str(&format!(", {}", theme.success("clean")));
         }
+
         out
     }
 }

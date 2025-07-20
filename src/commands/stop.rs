@@ -2,8 +2,8 @@ use crate::{
     commands::status::workspace_status,
     config::Config,
     types::Slug,
+    utils::ui::UserInterface,
     workspace::{Workspace, spin_down_workspace},
-    utils::formatter::Formatter,
 };
 use dialoguer::Confirm;
 use eyre::{Context, eyre};
@@ -21,14 +21,13 @@ pub fn stop(workspace_name: Option<Slug>) -> eyre::Result<()> {
             .ok_or_else(|| eyre!("No workspace is currently active"))?
     };
 
-    let workspace_status = {
-        let formatter = Formatter::new();
-        workspace_status(&workspace, &formatter)
-    }
+    let ui = UserInterface::new();
+
+    let workspace_status = workspace_status(&ui, &workspace)
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get workspace status")?;
 
-    println!();
+    ui.new_line()?;
 
     if workspace_status.has_uncommited_or_unpushed_changes() {
         let prompt = Confirm::new()

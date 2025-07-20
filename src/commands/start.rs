@@ -6,7 +6,7 @@ use crate::{
     config::Config,
     project::Project,
     types::Slug,
-    utils::{formatter::Formatter, get_workspace_for_cli, ui::UserInterface},
+    utils::{get_workspace_for_cli, ui::UserInterface},
     workspace::{Workspace, spin_up_workspace},
 };
 
@@ -29,8 +29,7 @@ pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
 
         // We ignore the error here because we want to proceed even if the status check fails
         ui.new_line()?;
-        let formatter = Formatter::new();
-        let _ = workspace_status(&workspace, &formatter);
+        let _ = workspace_status(&ui, &workspace);
     } else {
         // Start current project and its dependencies
         let project = Project::current()
@@ -55,8 +54,7 @@ pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
 
         // We ignore the error here because we want to proceed even if the status check fails
         ui.new_line()?;
-        let formatter = Formatter::new();
-        let _ = workspace_status(&workspace, &formatter);
+        let _ = workspace_status(&ui, &workspace);
     }
 
     Ok(())
