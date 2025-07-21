@@ -31,7 +31,7 @@ pub fn switch(
     let target_branch = get_target_branch(&workspace, query)?;
 
     ui.info_item(&format!("Workspace: {}", workspace.config().name))?;
-    ui.info_item(&format!("Target Branch: {}", target_branch))?;
+    ui.info_item(&format!("Target Branch: {target_branch}"))?;
 
     let dirty_projects = get_dirty_projects(&workspace)?;
     let action = on_dirty.unwrap_or(OnDirtyAction::Prompt);
@@ -126,14 +126,13 @@ fn switch_project_branch(
             get_default_branch(&ws_project.dir).unwrap_or_else(|_| "main".to_string())
         };
 
-        let checkout_branch = if branch_exists(&target_branch, &ws_project.dir)? {
+        let checkout_branch = if branch_exists(target_branch, &ws_project.dir)? {
             ui.info_item("Target branch found.")?;
-            &target_branch
+            target_branch
         } else if branch_exists(&fallback_branch, &ws_project.dir)? {
             ui.warning_item(
                 &format!(
-                    "Target branch not found. Falling back to '{}'.",
-                    fallback_branch
+                    "Target branch not found. Falling back to '{fallback_branch}'."
                 ),
                 None,
             )?;
@@ -141,8 +140,7 @@ fn switch_project_branch(
         } else {
             ui.warning_item(
                 &format!(
-                    "Neither target branch nor fallback branch '{}' found. Aborting.",
-                    fallback_branch
+                    "Neither target branch nor fallback branch '{fallback_branch}' found. Aborting."
                 ),
                 None,
             )?;
@@ -150,7 +148,7 @@ fn switch_project_branch(
         };
 
         if let Err(e) = run_git_command(&["checkout", checkout_branch], &ws_project.dir) {
-            ui.error_item(&format!("Failed to switch branch: {}", e), None)?;
+            ui.error_item(&format!("Failed to switch branch: {e}"), None)?;
         } else {
             ui.success_item("Switched to target branch.", None)?;
         }
@@ -159,7 +157,7 @@ fn switch_project_branch(
         if let DirtyResult::Stashed = dirty_result {
             ui.info_item("Restoring stashed changes...")?;
             if let Err(e) = run_git_command(&["stash", "pop"], &ws_project.dir) {
-                ui.error_item(&format!("Failed to restore stashed changes: {}", e), None)?;
+                ui.error_item(&format!("Failed to restore stashed changes: {e}"), None)?;
                 return Ok(false);
             } else {
                 ui.success_item("Stashed changes restored successfully.", None)?;
@@ -366,7 +364,7 @@ fn handle_dirty_projects_preflight(
 
     ui.indented(|ui| {
         for project_name in dirty_projects {
-            ui.info_item(&format!("{project_name}"))?;
+            ui.info_item(&project_name.to_string())?;
         }
 
         match on_dirty {
@@ -388,18 +386,18 @@ fn handle_dirty_projects_preflight(
                     0 => Ok(OnDirtyAction::Prompt),
                     1 => Ok(OnDirtyAction::Stash),
                     2 => Ok(OnDirtyAction::Force),
-                    _ => return Err(eyre::eyre!("Operation aborted.")),
+                    _ => Err(eyre::eyre!("Operation aborted.")),
                 }
             }
             n @ OnDirtyAction::Stash => {
                 ui.warning_item("Stash changes and proceed", None)?;
-                return Ok(*n);
+                Ok(*n)
             }
             n @ OnDirtyAction::Force => {
                 ui.warning_item("Force checkout (discard all changes)", None)?;
-                return Ok(*n);
+                Ok(*n)
             }
-            OnDirtyAction::Abort => return Err(eyre::eyre!("Operation aborted.")),
+            OnDirtyAction::Abort => Err(eyre::eyre!("Operation aborted.")),
         }
     })
 }
@@ -423,7 +421,7 @@ fn handle_dirty_project(
     fn stash_changes(ui: &UserInterface, project: &Project) -> eyre::Result<DirtyResult> {
         ui.info_item("Stashing changes...")?;
         if let Err(e) = run_git_command(&["stash", "push", "-u"], project.dir()) {
-            ui.error_item(&format!("Failed to stash changes: {}", e), None)?;
+            ui.error_item(&format!("Failed to stash changes: {e}"), None)?;
             return Ok(DirtyResult::StashFailed);
         }
         ui.success_item("Changes stashed successfully.", None)?;
@@ -447,7 +445,7 @@ fn handle_dirty_project(
             ];
 
             let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt(&format!(
+                .with_prompt(format!(
                     "Uncommitted changes found in project '{}'",
                     project.manifest().project().name
                 ))
@@ -465,7 +463,7 @@ fn handle_dirty_project(
                     Ok(DirtyResult::Proceed)
                 }
                 2 => Ok(DirtyResult::Skip),
-                _ => return Err(eyre::eyre!("Operation aborted by user.")),
+                _ => Err(eyre::eyre!("Operation aborted by user.")),
             }
         }
         OnDirtyAction::Stash => {
@@ -476,6 +474,6 @@ fn handle_dirty_project(
             force_checkout(ui, project)?;
             Ok(DirtyResult::Proceed)
         }
-        OnDirtyAction::Abort => return Err(eyre::eyre!("Operation aborted by user.")),
+        OnDirtyAction::Abort => Err(eyre::eyre!("Operation aborted by user.")),
     }
 }

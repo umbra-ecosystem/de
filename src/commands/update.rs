@@ -223,7 +223,7 @@ fn update_workspace_internal_verbose(
 
     workspace.save()?;
 
-    let summary = format!("Updated {}, removed {}", updated_count, removed_count);
+    let summary = format!("Updated {updated_count}, removed {removed_count}");
 
     if updated_count == 0 && removed_count == 0 {
         ui.success_item("No changes.", None)?;

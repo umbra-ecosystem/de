@@ -208,7 +208,7 @@ impl ProjectStatus {
                 return Ok(());
             }
 
-            ui.writeln(&format!("Docker Compose services:"))?;
+            ui.writeln("Docker Compose services:")?;
             ui.indented(|ui| {
                 for svc in docker_services {
                     let status_style = if svc.status.contains("Up") {
