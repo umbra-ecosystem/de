@@ -10,7 +10,7 @@ use crate::{
     project::Project,
     utils::{
         git::{branch_exists, get_default_branch, run_git_command},
-        theme::Theme,
+        ui::UserInterface,
     },
     workspace::Workspace,
 };
@@ -20,17 +20,28 @@ pub fn switch(
     fallback: Option<String>,
     on_dirty: Option<OnDirtyAction>,
 ) -> Result<()> {
-    let theme = Theme::new();
+    let ui = UserInterface::new();
+    let theme = &ui.theme;
+
+    ui.heading("Switching Workspace Branch")?;
+
     let workspace =
         Workspace::active()?.ok_or_else(|| eyre::eyre!("No active workspace found."))?;
 
     let target_branch = get_target_branch(&workspace, query)?;
 
+    ui.info_item(&format!("Workspace: {}", workspace.config().name))?;
+    ui.info_item(&format!("Target Branch: {}", target_branch))?;
+
     let dirty_projects = get_dirty_projects(&workspace)?;
     let action = on_dirty.unwrap_or(OnDirtyAction::Prompt);
 
+    ui.heading("Preflight checks:")?;
+
     if !dirty_projects.is_empty() {
-        handle_dirty_projects(&dirty_projects, &action, &theme)?;
+        handle_dirty_projects(&ui, &dirty_projects, &action)?;
+    } else {
+        ui.success_item("No dirty projects found. Proceeding...", None)?;
     }
 
     println!(
@@ -78,8 +89,7 @@ pub fn switch(
         };
 
         let checkout_branch = if branch_exists(&target_branch, &ws_project.dir)? {
-            messages
-                .push(theme.highlight(&format!("  Target branch \'{target_branch}\' found.")));
+            messages.push(theme.highlight(&format!("  Target branch \'{target_branch}\' found.")));
             &target_branch
         } else {
             messages.push(theme.warn(&format!(
@@ -324,43 +334,46 @@ fn is_project_dirty(dir: &std::path::Path) -> Result<bool> {
 }
 
 fn handle_dirty_projects(
+    ui: &UserInterface,
     dirty_projects: &[String],
     on_dirty: &OnDirtyAction,
-    theme: &Theme,
 ) -> Result<()> {
-    println!(
-        "{}",
-        theme.warn("Uncommitted changes found in the following projects:")
-    );
+    ui.warning_item("Uncommitted changes found in the following projects", None)?;
 
-    for project_name in dirty_projects {
-        println!("  - {project_name}");
-    }
-
-    match on_dirty {
-        OnDirtyAction::Prompt => {
-            let selections = &[
-                "Stash changes and proceed",
-                "Force checkout (discard all changes)",
-                "Abort operation",
-            ];
-
-            let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt("What would you like to do?")
-                .default(0)
-                .items(&selections[..])
-                .interact()?;
-
-            match selection {
-                0 => println!("Stashing changes..."),
-                1 => println!("Forcing checkout..."),
-                _ => return Err(eyre::eyre!("Operation aborted.")),
-            }
+    ui.indented(|ui| {
+        for project_name in dirty_projects {
+            ui.info_item(&format!("{project_name}"))?;
         }
-        OnDirtyAction::Stash => println!("Stashing changes..."),
-        OnDirtyAction::Force => println!("Forcing checkout..."),
-        OnDirtyAction::Abort => return Err(eyre::eyre!("Operation aborted.")),
-    }
+
+        match on_dirty {
+            OnDirtyAction::Prompt => {
+                let selections = &[
+                    "Stash changes and proceed",
+                    "Force checkout (discard all changes)",
+                    "Abort operation",
+                ];
+
+                let selection = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("What would you like to do?")
+                    .default(0)
+                    .items(&selections[..])
+                    .interact()?;
+
+                match selection {
+                    0 => {}
+                    1 => {}
+                    _ => return Err(eyre::eyre!("Operation aborted.")),
+                }
+            }
+            OnDirtyAction::Stash => ui.warning_item("Stashing changes...", None)?,
+            OnDirtyAction::Force => {
+                ui.warning_item("Forcing checkout, discarding all changes...", None)?
+            }
+            OnDirtyAction::Abort => return Err(eyre::eyre!("Operation aborted.")),
+        }
+
+        Ok(())
+    })?;
 
     Ok(())
 }
