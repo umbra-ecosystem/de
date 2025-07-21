@@ -98,16 +98,6 @@ impl UserInterface {
         }
         .write_to(self)
     }
-
-    pub fn line_item(&self, message: &str, suggestion: Option<&str>) -> std::io::Result<()> {
-        LineItem {
-            indent: self.indent,
-            symbol: None,
-            message,
-            suggestion,
-        }
-        .write_to(self)
-    }
 }
 
 impl UserInterface {

@@ -24,7 +24,7 @@ pub fn switch(
     let ui = UserInterface::new();
     let theme = &ui.theme;
 
-    ui.heading("Switching Workspace Branch")?;
+    ui.heading("Switch Branch")?;
 
     let workspace =
         Workspace::active()?.ok_or_else(|| eyre::eyre!("No active workspace found."))?;
