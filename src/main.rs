@@ -1,4 +1,8 @@
-#![deny(unused_must_use)]
+#![deny(
+    unused_must_use,
+    clippy::inconsistent_struct_constructor,
+    clippy::implicit_clone
+)]
 
 mod cli;
 mod commands;

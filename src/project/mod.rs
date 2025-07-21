@@ -72,7 +72,7 @@ impl Project {
 
         Ok(Self {
             manifest,
-            manifest_path: manifest_path.to_path_buf(),
+            manifest_path: manifest_path.clone(),
             dir: dir.to_path_buf(),
         })
     }

@@ -34,8 +34,8 @@ impl Workspace {
         };
 
         Ok(Self {
-            config_path,
             config,
+            config_path,
         })
     }
 
