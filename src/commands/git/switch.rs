@@ -8,11 +8,12 @@ use itertools::Itertools;
 use crate::{
     cli::OnDirtyAction,
     project::Project,
+    types::Slug,
     utils::{
         git::{branch_exists, get_default_branch, run_git_command},
         ui::UserInterface,
     },
-    workspace::Workspace,
+    workspace::{Workspace, WorkspaceProject},
 };
 
 pub fn switch(
@@ -36,51 +37,87 @@ pub fn switch(
     let dirty_projects = get_dirty_projects(&workspace)?;
     let action = on_dirty.unwrap_or(OnDirtyAction::Prompt);
 
-    ui.heading("Preflight checks:")?;
+    ui.heading("Preflight:")?;
 
     if !dirty_projects.is_empty() {
-        handle_dirty_projects(&ui, &dirty_projects, &action)?;
+        handle_dirty_projects_preflight(&ui, &dirty_projects, &action)?;
     } else {
         ui.success_item("No dirty projects found. Proceeding...", None)?;
     }
 
-    println!(
+    ui.heading(&format!(
         "{}",
         theme.highlight(&format!(
-            "Synchronizing workspace to branch \'{}\' (fallback: \'{}\')...",
+            "Synchronizing workspace to: {} (fallback: {})...",
             target_branch,
             fallback.as_deref().unwrap_or("default")
         ))
-    );
+    ))?;
 
     let mut projects_with_issues = Vec::new();
 
     for (project_name, ws_project) in workspace.config().projects.iter() {
-        let mut messages = Vec::new();
-        let mut has_issue = false;
-        let stashed =
-            dirty_projects.contains(&project_name.to_string()) && action == OnDirtyAction::Stash;
+        let success = switch_project_branch(
+            &ui,
+            &workspace,
+            ws_project,
+            project_name,
+            &target_branch,
+            fallback.as_deref(),
+            &action,
+        )?;
 
-        messages.push(theme.highlight(&format!("  - Project: {project_name}")));
+        if !success {
+            projects_with_issues.push(project_name.to_string());
+        }
+    }
 
-        let project = Project::from_dir(&ws_project.dir)
-            .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to load project '{project_name}'"))?;
+    ui.new_line()?;
+    ui.heading("Synchronization Summary:")?;
 
+    if !projects_with_issues.is_empty() {
+        ui.error_group(
+            &format!("{} project(s) have issues:", projects_with_issues.len()),
+            &projects_with_issues,
+            None,
+        )?;
+    } else {
+        ui.success_item("All projects synchronized successfully.", None)?;
+    }
+
+    Ok(())
+}
+
+fn switch_project_branch(
+    ui: &UserInterface,
+    workspace: &Workspace,
+    ws_project: &WorkspaceProject,
+    project_name: &Slug,
+    target_branch: &str,
+    fallback: Option<&str>,
+    on_dirty: &OnDirtyAction,
+) -> eyre::Result<bool> {
+    ui.subheading(&format!("{project_name}"))?;
+
+    let project = Project::from_dir(&ws_project.dir)
+        .map_err(|e| eyre!(e))
+        .wrap_err_with(|| format!("Failed to load project '{project_name}'"))?;
+
+    ui.indented(|ui| {
         if !project.manifest().git.clone().unwrap_or_default().enabled {
-            messages.push(theme.warn("  Git is not enabled for this project. Skipping..."));
-            continue;
+            ui.info_item("Git is not enabled for this project. Skipping...")?;
+            return Ok(false);
         }
 
-        if stashed {
-            messages.push(theme.highlight("  Stashing changes..."));
-            if let Err(e) = run_git_command(&["stash", "push", "-u"], &ws_project.dir) {
-                messages.push(theme.error(&format!("  STASH FAILED: {e}")));
-                has_issue = true;
+        let dirty_result = handle_dirty_project(ui, &project, on_dirty)?;
+        match dirty_result {
+            DirtyResult::Proceed | DirtyResult::Stashed => {}
+            DirtyResult::Skip | DirtyResult::StashFailed => {
+                return Ok(false);
             }
-        }
+        };
 
-        let fallback_branch = if let Some(fallback) = fallback.as_deref() {
+        let fallback_branch = if let Some(fallback) = fallback {
             fallback.to_string()
         } else if let Some(default_branch) = workspace.config().default_branch.as_deref() {
             default_branch.to_string()
@@ -89,72 +126,58 @@ pub fn switch(
         };
 
         let checkout_branch = if branch_exists(&target_branch, &ws_project.dir)? {
-            messages.push(theme.highlight(&format!("  Target branch \'{target_branch}\' found.")));
+            ui.info_item("Target branch found.")?;
             &target_branch
+        } else if branch_exists(&fallback_branch, &ws_project.dir)? {
+            ui.warning_item(
+                &format!(
+                    "Target branch not found. Falling back to '{}'.",
+                    fallback_branch
+                ),
+                None,
+            )?;
+            fallback_branch.as_str()
         } else {
-            messages.push(theme.warn(&format!(
-                "  Target branch \'{target_branch}\' not found. Falling back to \'{fallback_branch}\'."
-            )));
-            &fallback_branch
+            ui.warning_item(
+                &format!(
+                    "Neither target branch nor fallback branch '{}' found. Aborting.",
+                    fallback_branch
+                ),
+                None,
+            )?;
+            return Ok(false);
         };
 
-        let mut args = vec!["checkout"];
-        if action == OnDirtyAction::Force {
-            args.push("--force");
-            messages.push(theme.warn("  Forcing checkout..."));
-        }
-        args.push(checkout_branch);
-
-        if let Err(e) = run_git_command(&args, &ws_project.dir) {
-            messages.push(theme.error(&format!("  CHECKOUT FAILED: {e}")));
-            has_issue = true;
+        if let Err(e) = run_git_command(&["checkout", checkout_branch], &ws_project.dir) {
+            ui.error_item(&format!("Failed to switch branch: {}", e), None)?;
         } else {
-            messages.push(theme.success(&format!("  Switched to \'{checkout_branch}\'.")));
+            ui.success_item("Switched to target branch.", None)?;
         }
 
-        if stashed {
-            messages.push(theme.highlight("  Restoring stashed changes..."));
+        // Restore stashed changes if it was stashed previously
+        if let DirtyResult::Stashed = dirty_result {
+            ui.info_item("Restoring stashed changes...")?;
             if let Err(e) = run_git_command(&["stash", "pop"], &ws_project.dir) {
-                messages.push(theme.error(&format!("  STASH POP FAILED: {e}")));
-                has_issue = true;
+                ui.error_item(&format!("Failed to restore stashed changes: {}", e), None)?;
+                return Ok(false);
+            } else {
+                ui.success_item("Stashed changes restored successfully.", None)?;
             }
         }
 
         if is_project_dirty(&ws_project.dir)? {
-            messages.push(theme.warn("  MERGE CONFLICT detected. Please resolve manually."));
-            has_issue = true;
+            ui.error_item(
+                &format!(
+                    "{} detected. Please resolve manually.",
+                    ui.theme.error("MERGE CONFLICT")
+                ),
+                None,
+            )?;
+            Ok(false)
+        } else {
+            Ok(true)
         }
-
-        for message in messages {
-            println!("{message}");
-        }
-
-        if has_issue {
-            projects_with_issues.push(project_name.to_string());
-        }
-    }
-
-    println!();
-
-    if !projects_with_issues.is_empty() {
-        println!(
-            "{}",
-            theme.error(&format!(
-                "{} project(s) have issues:",
-                projects_with_issues.len()
-            ))
-        );
-        for project_name in projects_with_issues {
-            println!("  - {}", theme.error(&project_name));
-        }
-    } else {
-        println!(
-            "{}",
-            theme.success("All projects synchronized successfully.")
-        );
-    }
-
-    Ok(())
+    })
 }
 
 fn get_target_branch(workspace: &Workspace, query: Option<String>) -> Result<String> {
@@ -333,11 +356,11 @@ fn is_project_dirty(dir: &std::path::Path) -> Result<bool> {
     Ok(!output.stdout.is_empty())
 }
 
-fn handle_dirty_projects(
+fn handle_dirty_projects_preflight(
     ui: &UserInterface,
     dirty_projects: &[String],
     on_dirty: &OnDirtyAction,
-) -> Result<()> {
+) -> Result<OnDirtyAction> {
     ui.warning_item("Uncommitted changes found in the following projects", None)?;
 
     ui.indented(|ui| {
@@ -348,6 +371,7 @@ fn handle_dirty_projects(
         match on_dirty {
             OnDirtyAction::Prompt => {
                 let selections = &[
+                    "Prompt individually",
                     "Stash changes and proceed",
                     "Force checkout (discard all changes)",
                     "Abort operation",
@@ -360,20 +384,97 @@ fn handle_dirty_projects(
                     .interact()?;
 
                 match selection {
-                    0 => {}
-                    1 => {}
+                    0 => Ok(OnDirtyAction::Prompt),
+                    1 => Ok(OnDirtyAction::Stash),
+                    2 => Ok(OnDirtyAction::Force),
                     _ => return Err(eyre::eyre!("Operation aborted.")),
                 }
             }
-            OnDirtyAction::Stash => ui.warning_item("Stashing changes...", None)?,
-            OnDirtyAction::Force => {
-                ui.warning_item("Forcing checkout, discarding all changes...", None)?
+            n @ OnDirtyAction::Stash => {
+                ui.warning_item("Stash changes and proceed", None)?;
+                return Ok(*n);
+            }
+            n @ OnDirtyAction::Force => {
+                ui.warning_item("Force checkout (discard all changes)", None)?;
+                return Ok(*n);
             }
             OnDirtyAction::Abort => return Err(eyre::eyre!("Operation aborted.")),
         }
+    })
+}
 
-        Ok(())
-    })?;
+enum DirtyResult {
+    Proceed,
+    Skip,
+    Stashed,
+    StashFailed,
+}
 
-    Ok(())
+fn handle_dirty_project(
+    ui: &UserInterface,
+    project: &Project,
+    on_dirty: &OnDirtyAction,
+) -> eyre::Result<DirtyResult> {
+    if !is_project_dirty(project.dir())? {
+        return Ok(DirtyResult::Proceed);
+    };
+
+    fn stash_changes(ui: &UserInterface, project: &Project) -> eyre::Result<DirtyResult> {
+        ui.info_item("Stashing changes...")?;
+        if let Err(e) = run_git_command(&["stash", "push", "-u"], project.dir()) {
+            ui.error_item(&format!("Failed to stash changes: {}", e), None)?;
+            return Ok(DirtyResult::StashFailed);
+        }
+        ui.success_item("Changes stashed successfully.", None)?;
+        Ok(DirtyResult::Stashed)
+    }
+
+    fn force_checkout(ui: &UserInterface, project: &Project) -> eyre::Result<DirtyResult> {
+        ui.warning_item("Forcing checkout, discarding all changes...", None)?;
+        run_git_command(&["checkout", "--force"], project.dir())?;
+        ui.success_item("Checkout forced successfully.", None)?;
+        Ok(DirtyResult::Proceed)
+    }
+
+    match on_dirty {
+        OnDirtyAction::Prompt => {
+            let selections = &[
+                "Stash changes and proceed",
+                "Force checkout (discard all changes)",
+                "Skip this project and continue with others",
+                "Abort operation",
+            ];
+
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt(&format!(
+                    "Uncommitted changes found in project '{}'. What would you like to do?",
+                    project.manifest().project().name
+                ))
+                .default(0)
+                .items(&selections[..])
+                .interact()?;
+
+            match selection {
+                0 => {
+                    stash_changes(ui, project)?;
+                    Ok(DirtyResult::Proceed)
+                }
+                1 => {
+                    force_checkout(ui, project)?;
+                    Ok(DirtyResult::Proceed)
+                }
+                2 => Ok(DirtyResult::Skip),
+                _ => return Err(eyre::eyre!("Operation aborted by user.")),
+            }
+        }
+        OnDirtyAction::Stash => {
+            stash_changes(ui, project)?;
+            Ok(DirtyResult::Proceed)
+        }
+        OnDirtyAction::Force => {
+            force_checkout(ui, project)?;
+            Ok(DirtyResult::Proceed)
+        }
+        OnDirtyAction::Abort => return Err(eyre::eyre!("Operation aborted by user.")),
+    }
 }
