@@ -199,7 +199,7 @@ pub enum GitCommands {
         base_branch: Option<String>,
 
         /// What to do if there are uncommitted changes.
-        #[arg(long, value_enum, default_value_t = OnDirtyAction::Prompt)]
+        #[arg(short = 'd', long, value_enum, default_value_t = OnDirtyAction::Prompt)]
         on_dirty: OnDirtyAction,
     },
 }
