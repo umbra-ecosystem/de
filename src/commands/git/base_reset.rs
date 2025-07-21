@@ -33,9 +33,7 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
 
     println!(
         "{}",
-        theme.highlight(&format!(
-            "Resetting workspace to base branch '{branch}'..."
-        ))
+        theme.highlight(&format!("Resetting workspace to base branch '{branch}'..."))
     );
 
     let mut projects_with_issues = Vec::new();
@@ -225,10 +223,9 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
             // Try to check out from remote if not present locally
             let remote_branch = format!("origin/{branch}");
             if branch_exists(&remote_branch, &ws_project.dir)? {
-                if let Err(e) = run_git_command(
-                    &["checkout", "-B", branch, &remote_branch],
-                    &ws_project.dir,
-                ) {
+                if let Err(e) =
+                    run_git_command(&["checkout", "-B", branch, &remote_branch], &ws_project.dir)
+                {
                     println!(
                         "  {} {}",
                         theme.error("CHECKOUT FAILED:"),

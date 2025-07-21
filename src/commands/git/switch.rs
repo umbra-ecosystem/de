@@ -22,7 +22,6 @@ pub fn switch(
     on_dirty: Option<OnDirtyAction>,
 ) -> Result<()> {
     let ui = UserInterface::new();
-    let theme = &ui.theme;
 
     ui.heading("Switch Branch")?;
 
@@ -37,7 +36,8 @@ pub fn switch(
     let dirty_projects = get_dirty_projects(&workspace)?;
     let action = on_dirty.unwrap_or(OnDirtyAction::Prompt);
 
-    ui.heading("Preflight:")?;
+    ui.new_line()?;
+    ui.heading("Preflight")?;
 
     if !dirty_projects.is_empty() {
         handle_dirty_projects_preflight(&ui, &dirty_projects, &action)?;
@@ -45,13 +45,11 @@ pub fn switch(
         ui.success_item("No dirty projects found. Proceeding...", None)?;
     }
 
+    ui.new_line()?;
     ui.heading(&format!(
-        "{}",
-        theme.highlight(&format!(
-            "Synchronizing workspace to: {} (fallback: {})...",
-            target_branch,
-            fallback.as_deref().unwrap_or("default")
-        ))
+        "Synchronizing: {} (fallback: {})...",
+        target_branch,
+        fallback.as_deref().unwrap_or("default")
     ))?;
 
     let mut projects_with_issues = Vec::new();
@@ -73,7 +71,7 @@ pub fn switch(
     }
 
     ui.new_line()?;
-    ui.heading("Synchronization Summary:")?;
+    ui.heading("Summary")?;
 
     if !projects_with_issues.is_empty() {
         ui.error_group(
@@ -97,7 +95,10 @@ fn switch_project_branch(
     fallback: Option<&str>,
     on_dirty: &OnDirtyAction,
 ) -> eyre::Result<bool> {
-    ui.subheading(&format!("{project_name}"))?;
+    ui.subheading(&format!(
+        "{project_name} {}",
+        ui.theme.dim(&format!("({})", ws_project.dir.display()))
+    ))?;
 
     let project = Project::from_dir(&ws_project.dir)
         .map_err(|e| eyre!(e))
@@ -106,14 +107,14 @@ fn switch_project_branch(
     ui.indented(|ui| {
         if !project.manifest().git.clone().unwrap_or_default().enabled {
             ui.info_item("Git is not enabled for this project. Skipping...")?;
-            return Ok(false);
+            return Ok(true);
         }
 
         let dirty_result = handle_dirty_project(ui, &project, on_dirty)?;
         match dirty_result {
             DirtyResult::Proceed | DirtyResult::Stashed => {}
             DirtyResult::Skip | DirtyResult::StashFailed => {
-                return Ok(false);
+                return Ok(true);
             }
         };
 
@@ -145,7 +146,7 @@ fn switch_project_branch(
                 ),
                 None,
             )?;
-            return Ok(false);
+            return Ok(true);
         };
 
         if let Err(e) = run_git_command(&["checkout", checkout_branch], &ws_project.dir) {
@@ -447,7 +448,7 @@ fn handle_dirty_project(
 
             let selection = Select::with_theme(&ColorfulTheme::default())
                 .with_prompt(&format!(
-                    "Uncommitted changes found in project '{}'. What would you like to do?",
+                    "Uncommitted changes found in project '{}'",
                     project.manifest().project().name
                 ))
                 .default(0)
