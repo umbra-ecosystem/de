@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Major UI refactoring: Introduced a `UserInterface` module for styled terminal output, refactored multiple commands to use it, added loading bars and improved messaging.
 - Pass extra arguments as trailing arguments in CLI. The shim exec call now adds '--' before extra arguments to improve argument handling and compatibility with various commands.
+- After program update, update all shims to ensure they are in sync with the latest project configuration.
 
 ## [0.4.0] - 2025-07-18
 

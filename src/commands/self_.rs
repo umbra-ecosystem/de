@@ -1,12 +1,31 @@
-use axoupdater::AxoUpdater;
+use crate::commands;
+use axoupdater::{AxoUpdater, UpdateResult};
 use eyre::{WrapErr, eyre};
+use indicatif::ProgressBar;
 
 use crate::{constants::PROJECT_NAME, utils::ui::UserInterface};
 
 pub fn update() -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let loading_bar = ui.loading_bar("Checking for updates...")?;
+    let mut loading_bar = ui.loading_bar("Checking for updates...")?;
 
+    if let Some(update_result) = update_binary(&ui, &mut loading_bar)? {
+        commands::shim::reinstate()?;
+        ui.writeln(&format!(
+            "Update successful! Version {} installed.",
+            update_result.new_version_tag
+        ))?;
+    }
+
+    loading_bar.finish_and_clear();
+
+    Ok(())
+}
+
+fn update_binary(
+    ui: &UserInterface,
+    loading_bar: &mut ProgressBar,
+) -> eyre::Result<Option<UpdateResult>> {
     let mut updater = AxoUpdater::new_for(PROJECT_NAME);
     updater
         .load_receipt()
@@ -23,7 +42,7 @@ pub fn update() -> eyre::Result<()> {
     } else {
         loading_bar.finish_and_clear();
         ui.writeln("You are already on the latest version.")?;
-        return Ok(());
+        return Ok(None);
     }
 
     let updated = updater
@@ -32,16 +51,10 @@ pub fn update() -> eyre::Result<()> {
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to run updater")?;
 
-    loading_bar.finish_and_clear();
-
     if let Some(updated) = updated {
-        ui.writeln(&format!(
-            "Update successful! Version {} installed.",
-            ui.theme.highlight(updated.new_version_tag.as_str()),
-        ))?;
+        Ok(Some(updated))
     } else {
         ui.writeln("You are already on the latest version.")?;
+        Ok(None)
     }
-
-    Ok(())
 }
