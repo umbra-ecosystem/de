@@ -11,6 +11,8 @@ pub fn update() -> eyre::Result<()> {
 
     if let Some(update_result) = update_binary(&ui, &mut loading_bar)? {
         commands::shim::reinstate()?;
+
+        ui.new_line()?;
         ui.writeln(&format!(
             "Update successful! Version {} installed.",
             update_result.new_version_tag
