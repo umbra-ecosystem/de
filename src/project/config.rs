@@ -7,7 +7,7 @@ use std::{
 use eyre::{Context, eyre};
 use serde::{Deserialize, Serialize};
 
-use crate::{project::task::Task, types::Slug};
+use crate::{project::task::Task, setup::project::config::SetupConfig, types::Slug};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProjectManifest {
@@ -17,6 +17,8 @@ pub struct ProjectManifest {
     pub git: Option<ProjectGitSettings>,
     #[serde(default)]
     pub tasks: Option<BTreeMap<Slug, Task>>,
+    #[serde(default)]
+    pub setup: Option<SetupConfig>,
 }
 
 impl ProjectManifest {

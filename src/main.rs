@@ -9,6 +9,7 @@ mod commands;
 mod config;
 mod constants;
 mod project;
+mod setup;
 mod types;
 mod utils;
 mod workspace;
