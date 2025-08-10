@@ -32,13 +32,9 @@ command = "npm install"
 [setup.steps.restore_database]
 name = "Restore database"
 service = { name = "mysql", compose = "../infra/docker-compose.yml" }
-command = "mysql -u root -p$DB_PASSWORD < $DE_FILES/$DB_DATABASE.sql"
-export = [
-    { command = "mysqldump -p$DB_PASSWORD $DB_DATABASE > $DB_DATABASE.sql", files = [
-        "$DB_DATABASE.sql",
-    ] },
-]
-env = { DB_PASSWORD = "DB_PASSWORD", DB_DATABASE = "DB_DATABASE" }
+apply = { "command" = "mysql -u root -p$PASSWORD $DATABASE", "stdin" = { "file" = "$DE_FILES/$DATABASE.sql" } }
+export = { command = "mysqldump -p$PASSWORD $DATABASE", stdout = { "file" = "$DE_FILES/$DATABASE.sql" } }
+env = { PASSWORD = "DB_PASSWORD", DATABASE = "DB_DATABASE" }
 
 # Default only step
 [setup.profiles.dev.steps.run_migrations]

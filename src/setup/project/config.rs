@@ -70,19 +70,23 @@ pub struct Step {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum StepKind {
-    Defined(DefinedStep),
-    Custom {
-        command: OneOrMany<String>,
+    Standard(StandardStep),
+    Complex {
+        apply: OneOrMany<StringOr<ApplyCommand>>,
+        export: OneOrMany<StringOr<ExportCommand>>,
         #[serde(default)]
         env: Option<HashMap<String, String>>,
+    },
+    Basic {
+        command: StringOr<ApplyCommand>,
         #[serde(default)]
-        export: Option<Vec<StringOr<Snapshot>>>,
+        env: Option<HashMap<String, String>>,
     },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum DefinedStep {
+pub enum StandardStep {
     CopyFiles {
         source: String,
         #[serde(default)]
@@ -99,16 +103,39 @@ pub struct Service {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Snapshot {
-    pub command: String,
-    pub files: Vec<String>,
+pub struct ApplyCommand {
+    command: String,
+    #[serde(default)]
+    stdin: Option<CommandPipe>,
 }
 
-impl From<String> for Snapshot {
+impl From<String> for ApplyCommand {
     fn from(command: String) -> Self {
         Self {
             command,
-            files: vec![],
+            stdin: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ExportCommand {
+    pub command: String,
+    #[serde(default)]
+    pub stdout: Option<CommandPipe>,
+}
+
+impl From<String> for ExportCommand {
+    fn from(command: String) -> Self {
+        Self {
+            command,
+            stdout: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged, rename_all = "snake_case")]
+pub enum CommandPipe {
+    File { file: String },
 }
