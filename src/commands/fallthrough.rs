@@ -4,7 +4,8 @@ use clap::CommandFactory;
 use eyre::{Context, bail, eyre};
 
 use crate::{
-    cli::Cli, commands::run::run_project_task, project::Project, types::Slug, workspace::Workspace,
+    cli::Cli, commands::run::run_project_task, project::Project, types::Slug, utils::theme::Theme,
+    workspace::Workspace,
 };
 
 pub fn fallthrough(args: Vec<String>) -> eyre::Result<()> {
@@ -46,7 +47,21 @@ pub fn fallthrough(args: Vec<String>) -> eyre::Result<()> {
         }
     }
 
-    bail!("Project or task not found for '{command}' in the current context.");
+    {
+        let theme = Theme::new();
+        let error_prefix = theme.error("Error:");
+        eprintln!(
+            "{error_prefix} Project or task not found for '{command}' in the current context."
+        );
+        eprintln!();
+    }
+
+    Cli::command()
+        .print_help()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to print help")?;
+
+    Ok(())
 }
 
 fn split_args(args: Vec<String>) -> eyre::Result<(Slug, Vec<String>)> {
