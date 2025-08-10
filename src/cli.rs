@@ -116,6 +116,12 @@ pub enum Commands {
         workspace: Option<Option<Slug>>,
     },
 
+    /// Manage the workspace setup and configuration.
+    Setup {
+        #[command(subcommand)]
+        command: SetupCommands,
+    },
+
     /// Manage tasks defined in the project.
     Task {
         #[command(subcommand)]
@@ -214,6 +220,12 @@ pub enum OnDirtyAction {
     Force,
     /// Abort the operation.
     Abort,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SetupCommands {
+    /// Check if the setup is properly setup.
+    Check,
 }
 
 #[derive(Debug, Subcommand)]

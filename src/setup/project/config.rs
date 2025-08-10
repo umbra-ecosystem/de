@@ -58,31 +58,37 @@ impl From<String> for GitOverride {
 pub struct Step {
     pub name: String,
     #[serde(default)]
-    pub r#type: Option<String>,
-    #[serde(default)]
     pub service: Option<Service>,
     #[serde(default)]
     pub optional: Option<bool>,
     #[serde(default)]
     pub skip_if: Option<String>,
+    #[serde(flatten)]
+    pub kind: StepKind,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub enum StepType {
+#[serde(untagged, rename_all = "snake_case")]
+pub enum StepKind {
+    Defined(DefinedStep),
+    Custom {
+        command: OneOrMany<String>,
+        #[serde(default)]
+        env: Option<HashMap<String, String>>,
+        #[serde(default)]
+        export: Option<Vec<StringOr<Snapshot>>>,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DefinedStep {
     CopyFiles {
         source: String,
         #[serde(default)]
         destination: String,
         #[serde(default)]
         overwrite: bool,
-    },
-    Custom {
-        #[serde(default)]
-        command: Option<OneOrMany<String>>,
-        #[serde(default)]
-        env: Option<HashMap<String, String>>,
-        #[serde(default)]
-        export: Option<Vec<StringOr<Snapshot>>>,
     },
 }
 

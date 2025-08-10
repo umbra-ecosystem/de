@@ -9,6 +9,7 @@ mod list;
 mod run;
 mod scan;
 pub mod self_;
+pub mod setup;
 mod start;
 mod status;
 mod stop;

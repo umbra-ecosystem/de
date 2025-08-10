@@ -12,7 +12,7 @@ git = { branch = "develop" }
 
 [setup.steps.copy_env]
 name = "Set up environment"
-type = "fs-copy"
+type = "copy_files"
 source = "(.*)\\.env\\.example"
 destination = "$1.env"
 overwrite = false               # Default is true, but can be set to false to always copy
@@ -33,7 +33,7 @@ command = "npm install"
 name = "Restore database"
 service = { name = "mysql", compose = "../infra/docker-compose.yml" }
 command = "mysql -u root -p$DB_PASSWORD < $DE_FILES/$DB_DATABASE.sql"
-snapshot = [
+export = [
     { command = "mysqldump -p$DB_PASSWORD $DB_DATABASE > $DB_DATABASE.sql", files = [
         "$DB_DATABASE.sql",
     ] },
