@@ -6,7 +6,7 @@ use crate::{
     utils::serde::{OneOrMany, StringOr},
 };
 
-use super::types::GitConfig;
+use super::{export::ExportCommand, types::GitConfig};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SetupConfig {
@@ -70,7 +70,7 @@ pub enum StepKind {
         apply: OneOrMany<StringOr<ApplyCommand>>,
         export: OneOrMany<StringOr<ExportCommand>>,
         #[serde(default)]
-        env: Option<HashMap<String, String>>,
+        env: Option<BTreeMap<String, String>>,
     },
     Basic {
         command: StringOr<ApplyCommand>,
@@ -118,22 +118,6 @@ impl From<String> for ApplyCommand {
         Self {
             command,
             stdin: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ExportCommand {
-    pub command: String,
-    #[serde(default)]
-    pub stdout: Option<CommandPipe>,
-}
-
-impl From<String> for ExportCommand {
-    fn from(command: String) -> Self {
-        Self {
-            command,
-            stdout: None,
         }
     }
 }

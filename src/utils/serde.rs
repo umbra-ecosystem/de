@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -8,6 +10,16 @@ pub enum StringOr<T: From<String>> {
 }
 
 impl<T: From<String>> StringOr<T> {
+    pub fn as_value(&self) -> Cow<T>
+    where
+        T: Clone,
+    {
+        match self {
+            StringOr::String(s) => Cow::Owned(T::from(s.clone())),
+            StringOr::Value(v) => Cow::Borrowed(v),
+        }
+    }
+
     pub fn into_inner(self) -> T {
         match self {
             StringOr::String(s) => T::from(s),
@@ -31,6 +43,15 @@ impl<T: From<String>> StringOr<T> {
 pub enum OneOrMany<T> {
     One(T),
     Many(Vec<T>),
+}
+
+impl<T> OneOrMany<T> {
+    pub fn as_slice(&self) -> &[T] {
+        match self {
+            OneOrMany::One(item) => std::slice::from_ref(item),
+            OneOrMany::Many(items) => items.as_slice(),
+        }
+    }
 }
 
 impl<T: From<String>> From<String> for OneOrMany<T> {

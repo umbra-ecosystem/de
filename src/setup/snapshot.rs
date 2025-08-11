@@ -4,10 +4,11 @@ use std::{collections::BTreeMap, path::PathBuf};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::{project::Project, types::Slug, workspace::Workspace};
+use crate::{project::Project, setup::utils::EnvMapper, types::Slug, workspace::Workspace};
 
 use super::{
-    project::{ApplyCommand, ExportCommand, StepService},
+    export::ExportCommand,
+    project::{ApplyCommand, StepKind, StepService},
     types::GitConfig,
 };
 
@@ -97,7 +98,7 @@ pub fn create_project_snapshot(project: &Project) -> eyre::Result<Option<Project
             optional: setup_step.optional,
             skip_if: setup_step.skip_if.clone(),
             kind: match &setup_step.kind {
-                super::project::StepKind::Standard(standard_step) => match standard_step {
+                StepKind::Standard(standard_step) => match standard_step {
                     super::project::StandardStep::CopyFiles {
                         source,
                         destination,
@@ -108,8 +109,14 @@ pub fn create_project_snapshot(project: &Project) -> eyre::Result<Option<Project
                         overwrite: *overwrite,
                     },
                 },
-                super::project::StepKind::Complex { apply, export, env } => todo!(),
-                super::project::StepKind::Basic { command, env } => todo!(),
+                StepKind::Complex { apply, export, env } => {
+                    let env_mapper = env.as_ref().map(EnvMapper::new);
+                    for export_command in export.as_slice() {
+                        let result = export_command.as_value();
+                    }
+                    todo!("Implement complex step handling")
+                }
+                StepKind::Basic { command, env } => todo!(),
             },
         };
 
