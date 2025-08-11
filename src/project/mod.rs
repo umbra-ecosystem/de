@@ -11,7 +11,7 @@ use std::{
     process::Command,
 };
 
-use crate::{project::config::ProjectManifest, setup::project::config::SetupConfig, types::Slug};
+use crate::{project::config::ProjectManifest, setup::project::SetupConfig, types::Slug};
 
 pub struct Project {
     dir: PathBuf,

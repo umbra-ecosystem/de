@@ -7,7 +7,7 @@ use std::{
 use eyre::{Context, eyre};
 use serde::{Deserialize, Serialize};
 
-use crate::{project::task::Task, setup::project::config::SetupConfig, types::Slug};
+use crate::{project::task::Task, setup::project::SetupConfig, types::Slug};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProjectManifest {

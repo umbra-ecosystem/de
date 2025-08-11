@@ -8,10 +8,20 @@ pub enum StringOr<T: From<String>> {
 }
 
 impl<T: From<String>> StringOr<T> {
-    pub fn into_value(self) -> T {
+    pub fn into_inner(self) -> T {
         match self {
             StringOr::String(s) => T::from(s),
             StringOr::Value(v) => v,
+        }
+    }
+
+    pub fn clone_value(&self) -> T
+    where
+        T: Clone,
+    {
+        match self {
+            StringOr::String(s) => T::from(s.clone()),
+            StringOr::Value(v) => v.clone(),
         }
     }
 }

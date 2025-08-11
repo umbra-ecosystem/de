@@ -6,6 +6,8 @@ use crate::{
     utils::serde::{OneOrMany, StringOr},
 };
 
+use super::types::GitConfig;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SetupConfig {
     pub git: StringOr<GitConfig>,
@@ -13,13 +15,6 @@ pub struct SetupConfig {
     pub steps: HashMap<Slug, Step>,
     #[serde(default)]
     pub profiles: HashMap<Slug, Profile>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct GitConfig {
-    pub url: String,
-    #[serde(default)]
-    pub branch: Option<String>,
 }
 
 impl From<String> for GitConfig {
@@ -58,9 +53,9 @@ impl From<String> for GitOverride {
 pub struct Step {
     pub name: String,
     #[serde(default)]
-    pub service: Option<StepService>,
+    pub service: Option<StringOr<StepService>>,
     #[serde(default)]
-    pub optional: Option<bool>,
+    pub optional: bool,
     #[serde(default)]
     pub skip_if: Option<String>,
     #[serde(flatten)]
@@ -99,7 +94,16 @@ pub enum StandardStep {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StepService {
     pub name: String,
-    pub compose: String,
+    pub compose: Option<String>,
+}
+
+impl From<String> for StepService {
+    fn from(name: String) -> Self {
+        Self {
+            name,
+            compose: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
