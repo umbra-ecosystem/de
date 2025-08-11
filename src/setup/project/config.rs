@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     types::Slug,
@@ -58,7 +58,7 @@ impl From<String> for GitOverride {
 pub struct Step {
     pub name: String,
     #[serde(default)]
-    pub service: Option<Service>,
+    pub service: Option<StepService>,
     #[serde(default)]
     pub optional: Option<bool>,
     #[serde(default)]
@@ -80,7 +80,7 @@ pub enum StepKind {
     Basic {
         command: StringOr<ApplyCommand>,
         #[serde(default)]
-        env: Option<HashMap<String, String>>,
+        env: Option<BTreeMap<String, String>>,
     },
 }
 
@@ -97,7 +97,7 @@ pub enum StandardStep {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Service {
+pub struct StepService {
     pub name: String,
     pub compose: String,
 }
