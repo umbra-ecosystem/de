@@ -131,9 +131,7 @@ fn switch_project_branch(
             target_branch
         } else if branch_exists(&fallback_branch, &ws_project.dir)? {
             ui.warning_item(
-                &format!(
-                    "Target branch not found. Falling back to '{fallback_branch}'."
-                ),
+                &format!("Target branch not found. Falling back to '{fallback_branch}'."),
                 None,
             )?;
             fallback_branch.as_str()
@@ -248,7 +246,6 @@ fn get_workspace_branches(workspace: &Workspace) -> Result<Vec<Branch>> {
     }
 
     let mut branches: Vec<_> = branches.into_iter().collect();
-    branches.dedup();
     branches.sort_by(|a, b| {
         // Sort by date if available, otherwise by name
         match (a.date, b.date) {
@@ -258,6 +255,7 @@ fn get_workspace_branches(workspace: &Workspace) -> Result<Vec<Branch>> {
             (None, None) => a.name.cmp(&b.name),
         }
     });
+    branches.dedup_by(|a, b| a.name == b.name);
 
     Ok(branches)
 }

@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pass extra arguments as trailing arguments in CLI. The shim exec call now adds '--' before extra arguments to improve argument handling and compatibility with various commands.
 - After program update, update all shims to ensure they are in sync with the latest project configuration.
 
+### Fixed
+
+- git switch: Deduplicate branches by name instead of full struct
+
 ## [0.4.0] - 2025-07-18
 
 ### Added
