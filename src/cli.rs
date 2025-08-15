@@ -347,4 +347,14 @@ pub enum WorkspaceCommands {
         #[arg(short, long)]
         workspace: Option<Slug>,
     },
+
+    Snapshot {
+        /// The name of the workspace to create a snapshot for. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// The profile to use for the snapshot. Defaults to "default".
+        #[arg(short, long, default_value = "default")]
+        profile: Slug,
+    },
 }

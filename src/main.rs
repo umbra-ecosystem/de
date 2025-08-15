@@ -112,6 +112,9 @@ fn main() -> eyre::Result<()> {
                 unset,
             } => commands::workspace::config(workspace, key, value, unset),
             WorkspaceCommands::Info { workspace } => commands::workspace::info(workspace),
+            WorkspaceCommands::Snapshot { workspace, profile } => {
+                commands::workspace::snapshot(workspace, profile)
+            }
         },
         Commands::Doctor { workspace } => commands::doctor(workspace),
         Commands::Status { workspace } => commands::status(workspace),

@@ -3,6 +3,7 @@ use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
 };
+use tempfile::TempDir;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -67,7 +68,7 @@ pub struct CopyFile {
     destination_path: PathBuf,
 }
 
-pub fn create_snapshot(workspace: Workspace, profile: Slug) -> eyre::Result<Snapshot> {
+pub fn create_snapshot(workspace: Workspace, profile: Slug) -> eyre::Result<(TempDir, Snapshot)> {
     let snapshot_dir = tempfile::tempdir()
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to create temporary dir")?;
@@ -82,21 +83,23 @@ pub fn create_snapshot(workspace: Workspace, profile: Slug) -> eyre::Result<Snap
                 format!("Failed to load project from {}", ws_project.dir.display())
             })?;
 
-        let project_files_dir = files_dir.join(name.as_str());
-
-        let project_snapshot = create_project_snapshot(&project, &profile, &project_files_dir)?;
+        let project_snapshot = create_project_snapshot(name, &project, &profile, &files_dir)?;
         if let Some(project_snapshot) = project_snapshot {
             project_snapshots.insert(name.clone(), project_snapshot);
         }
     }
 
-    Ok(Snapshot {
-        projects: project_snapshots,
-        created_at: Utc::now(),
-    })
+    Ok((
+        snapshot_dir,
+        Snapshot {
+            projects: project_snapshots,
+            created_at: Utc::now(),
+        },
+    ))
 }
 
 pub fn create_project_snapshot(
+    project_name: &Slug,
     project: &Project,
     profile: &Slug,
     files_dir: &Path,
@@ -104,6 +107,8 @@ pub fn create_project_snapshot(
     let Some(project_setup) = project.manifest().setup.as_ref() else {
         return Ok(None);
     };
+
+    let project_files_dir = files_dir.join(project_name.as_str());
 
     let mut project_snapshot = ProjectSnapshot {
         git: project_setup.git(profile),
@@ -134,7 +139,12 @@ pub fn create_project_snapshot(
                     for export_command in export.as_slice() {
                         let result = export_command
                             .as_value()
-                            .run(&project.dir(), env_mapper.as_ref(), files_dir)
+                            .run(
+                                &project.dir(),
+                                env_mapper.as_ref(),
+                                &project_files_dir,
+                                files_dir,
+                            )
                             .map_err(|e| eyre!(e))
                             .wrap_err_with(|| {
                                 format!(

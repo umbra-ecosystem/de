@@ -36,7 +36,10 @@ impl ExportCommand {
         dir: &Path,
         env_mapper: Option<&EnvMapper>,
         output_dir: &Path,
+        prefix: &Path,
     ) -> eyre::Result<ExportCommandResult> {
+        // TODO: add docker service support
+
         let command_str = if let Some(env_mapper) = env_mapper {
             env_mapper.format_str(&self.command)
         } else {
@@ -69,7 +72,19 @@ impl ExportCommand {
                         return Err(eyre!("Command failed with status: {}", status));
                     }
 
-                    Ok(ExportCommandResult::File { file_path })
+                    let file_path = file_path
+                        .strip_prefix(prefix)
+                        .map_err(|e| eyre!(e))
+                        .wrap_err_with(|| {
+                            format!(
+                                "Failed to strip prefix from file path: {}",
+                                file_path.display()
+                            )
+                        })?;
+
+                    Ok(ExportCommandResult::File {
+                        file_path: file_path.to_path_buf(),
+                    })
                 }
             }
         } else {

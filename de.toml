@@ -2,50 +2,24 @@
 name = "de"
 workspace = "de"
 
-# This is shared for all profiles
 [setup]
 git = { "url" = "https://github.com/umbra-ecosystem/de.git", "branch" = "main" }
 
-# Define different profiles
 [setup.profiles.dev]
 git = { branch = "develop" }
 
-[setup.steps.copy_env]
-name = "Set up environment"
+[setup.steps.copy]
+name = "Demonstrate copy files"
 type = "copy_files"
 source = "(.*)\\.env\\.example"
 destination = "$1.env"
-overwrite = false               # Default is true, but can be set to false to always copy
 
-# All profile step
-[setup.steps.install_backend_dependencies]
-name = "Install backend dependencies"
-service = { name = "php", compose = "../infra/docker-compose.yml" }
-command = "composer install --no-interaction --optimize-autoloader --prefer-dist"
+[setup.steps.basic]
+name = "Demonstrate basic command"
+command = "cargo check"
 
-# All profile step
-[setup.steps.install_frontend_dependencies]
-name = "Install frontend dependencies"
-command = "npm install"
-
-# All profile step
-[setup.steps.restore_database]
-name = "Restore database"
-service = { name = "mysql", compose = "../infra/docker-compose.yml" }
-apply = { "command" = "mysql -u root -p$PASSWORD $DATABASE", "stdin" = { "file" = "$DATABASE.sql" } }
-export = { command = "mysqldump -p$PASSWORD $DATABASE", stdout = { "file" = "$DATABASE.sql" } }
-env = { PASSWORD = "DB_PASSWORD", DATABASE = "DB_DATABASE" }
-
-# Default only step
-[setup.profiles.dev.steps.run_migrations]
-name = "Run migrations"
-service = { name = "php", compose = "../infra/docker-compose.yml" }
-command = "php artisan migrate --force"
-skip_if = "php artisan migrate:status | grep -q 'No migrations found.'" # Skip if no migrations are found
-
-# Default only step
-[setup.profiles.dev.steps.run_seeder]
-name = "Run seeder"
-service = { name = "php", compose = "../infra/docker-compose.yml" }
-command = "php artisan db:seed --force"
-optional = true                                                     # Optional step, can be skipped if seeding is not needed
+[setup.steps.complex]
+name = "Demonstrate complex command"
+apply = { "command" = "tee $FILE", "stdin" = { "file" = "$FILE" } }
+export = { command = "echo $FILE", stdout = { "file" = "$FILE" } }
+env = { FILE = "COMPLEX_COMMAND_FILE" }
