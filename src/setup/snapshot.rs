@@ -160,7 +160,7 @@ pub fn create_project_snapshot(
                         let result = export_command
                             .as_value()
                             .run(
-                                &project.dir(),
+                                project.dir(),
                                 env_mapper.as_ref(),
                                 &project_files_dir,
                                 files_dir,
@@ -190,12 +190,12 @@ pub fn create_project_snapshot(
                     ProjectSnapshotStepKind::Complex {
                         apply: apply
                             .as_slice()
-                            .into_iter()
+                            .iter()
                             .map(|cmd| cmd.clone_value())
                             .collect(),
                         export: export
                             .as_slice()
-                            .into_iter()
+                            .iter()
                             .map(|cmd| cmd.clone_value())
                             .collect(),
                         env: env.clone(),
@@ -204,7 +204,7 @@ pub fn create_project_snapshot(
                 StepKind::Basic { command, env } => ProjectSnapshotStepKind::Basic {
                     command: command
                         .as_slice()
-                        .into_iter()
+                        .iter()
                         .map(|cmd| cmd.clone_value())
                         .collect(),
                     env: env.clone(),

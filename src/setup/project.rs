@@ -141,11 +141,10 @@ impl SetupConfig {
 
     pub fn git(&self, profile: &Slug) -> GitConfig {
         let mut git_config = self.git.clone_value();
-        if let Some(profile) = self.profiles.get(profile) {
-            if let Some(git_override) = profile.git.as_ref() {
+        if let Some(profile) = self.profiles.get(profile)
+            && let Some(git_override) = profile.git.as_ref() {
                 git_config = git_config.apply_override(git_override.clone_value());
             }
-        }
         git_config
     }
 }

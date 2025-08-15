@@ -102,14 +102,13 @@ impl DependencyGraph {
 
             // For each project that depends on the current project, decrease its in-degree
             for (dependent, deps) in &self.dependencies {
-                if deps.contains(&project) {
-                    if let Some(degree) = in_degree.get_mut(dependent) {
+                if deps.contains(&project)
+                    && let Some(degree) = in_degree.get_mut(dependent) {
                         *degree -= 1;
                         if *degree == 0 {
                             queue.push_back(dependent.clone());
                         }
                     }
-                }
             }
         }
 

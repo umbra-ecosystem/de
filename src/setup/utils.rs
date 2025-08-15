@@ -9,13 +9,9 @@ impl<'a> EnvMapper<'a> {
     pub fn new(map: &'a BTreeMap<String, String>) -> Self {
         let env = std::env::vars().collect::<HashMap<_, _>>();
         let values = map
-            .into_iter()
+            .iter()
             .filter_map(|(mapped, original)| {
-                if let Some(value) = env.get(original) {
-                    Some((mapped.clone(), value.clone()))
-                } else {
-                    None
-                }
+                env.get(original).map(|value| (mapped.clone(), value.clone()))
             })
             .collect();
 

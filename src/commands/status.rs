@@ -409,8 +409,8 @@ impl GitStatus {
 
         let mut ahead = None;
         let mut behind = None;
-        if let Some(ref ab) = ahead_behind {
-            if let Some(idx) = ab.find("[") {
+        if let Some(ref ab) = ahead_behind
+            && let Some(idx) = ab.find("[") {
                 let ab_part = &ab[idx..];
                 if let Some(a_idx) = ab_part.find("ahead ") {
                     let rest = &ab_part[a_idx + 6..];
@@ -429,7 +429,6 @@ impl GitStatus {
                     }
                 }
             }
-        }
 
         GitStatus {
             is_repo: true,

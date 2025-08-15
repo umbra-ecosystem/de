@@ -10,9 +10,8 @@ pub fn list() -> eyre::Result<()> {
     if let Some(project) = Project::current()
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get current project")?
-    {
-        if let Some(tasks) = project.manifest().tasks.as_ref() {
-            if !tasks.is_empty() {
+        && let Some(tasks) = project.manifest().tasks.as_ref()
+            && !tasks.is_empty() {
                 println!(
                     "{} {}",
                     theme.bold("Tasks in project:"),
@@ -23,15 +22,12 @@ pub fn list() -> eyre::Result<()> {
                 }
                 found_tasks = true;
             }
-        }
-    }
 
     // List workspace tasks
     if let Some(workspace) = Workspace::active()
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get active workspace")?
-    {
-        if !workspace.config().tasks.is_empty() {
+        && !workspace.config().tasks.is_empty() {
             if found_tasks {
                 println!(); // Add a newline for separation if project tasks were listed
             }
@@ -41,7 +37,6 @@ pub fn list() -> eyre::Result<()> {
             }
             found_tasks = true;
         }
-    }
 
     if !found_tasks {
         println!("No tasks found in the current project or active workspace.");

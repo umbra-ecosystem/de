@@ -59,7 +59,7 @@ impl ExportCommand {
             .next()
             .ok_or_else(|| eyre!("Command is empty or does not contain a program to run"))?;
 
-        let mut command = std::process::Command::new(&program);
+        let mut command = std::process::Command::new(program);
         command.current_dir(dir);
         command.args(parts);
 

@@ -84,8 +84,8 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
         }
 
         // 1b. Check for unpushed commits
-        if let Ok(current_branch) = get_current_branch(&ws_project.dir) {
-            if let Ok(true) = has_unpushed_commits(&current_branch, &ws_project.dir) {
+        if let Ok(current_branch) = get_current_branch(&ws_project.dir)
+            && let Ok(true) = has_unpushed_commits(&current_branch, &ws_project.dir) {
                 println!("  {}", theme.warn("You have unpushed commits!"));
                 let choices = &[
                     "Push commits now",
@@ -119,7 +119,6 @@ pub fn base_reset(base_branch: Option<String>, on_dirty: OnDirtyAction) -> Resul
                     _ => unreachable!(),
                 }
             }
-        }
 
         // 2. Check for uncommitted changes
         let dirty = is_project_dirty(&ws_project.dir).unwrap_or(false);
