@@ -7,6 +7,7 @@ use tempfile::TempDir;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::{
     project::Project,
@@ -69,6 +70,8 @@ pub struct CopyFile {
 }
 
 pub fn create_snapshot(workspace: Workspace, profile: Slug) -> eyre::Result<(TempDir, Snapshot)> {
+    info!("Creating snapshot for workspace with profile '{}'", profile);
+
     let snapshot_dir = tempfile::tempdir()
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to create temporary dir")?;
@@ -77,18 +80,21 @@ pub fn create_snapshot(workspace: Workspace, profile: Slug) -> eyre::Result<(Tem
 
     let mut project_snapshots = BTreeMap::new();
     for (name, ws_project) in workspace.config().projects.iter() {
+        info!("Loading project '{}'", name);
         let project = Project::from_dir(&ws_project.dir)
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| {
                 format!("Failed to load project from {}", ws_project.dir.display())
             })?;
 
+        info!("Creating snapshot for project '{}'", name);
         let project_snapshot = create_project_snapshot(name, &project, &profile, &files_dir)?;
         if let Some(project_snapshot) = project_snapshot {
             project_snapshots.insert(name.clone(), project_snapshot);
         }
     }
 
+    info!("Snapshot creation complete.");
     Ok((
         snapshot_dir,
         Snapshot {
@@ -105,6 +111,10 @@ pub fn create_project_snapshot(
     files_dir: &Path,
 ) -> eyre::Result<Option<ProjectSnapshot>> {
     let Some(project_setup) = project.manifest().setup.as_ref() else {
+        info!(
+            "No setup found for project '{}', skipping snapshot.",
+            project_name
+        );
         return Ok(None);
     };
 
@@ -117,6 +127,10 @@ pub fn create_project_snapshot(
     };
 
     for (name, setup_step) in project_setup.steps(profile) {
+        info!(
+            "Processing setup step '{}' for project '{}'",
+            name, project_name
+        );
         let step = ProjectSnapshotStep {
             name: name.clone(),
             service: setup_step.service.as_ref().map(|v| v.clone_value()),
@@ -137,6 +151,12 @@ pub fn create_project_snapshot(
                 StepKind::Complex { apply, export, env } => {
                     let env_mapper = env.as_ref().map(EnvMapper::new);
                     for export_command in export.as_slice() {
+                        info!(
+                            "Running export command '{}' for step '{}' in project '{}'",
+                            export_command.as_value().command,
+                            name,
+                            project_name
+                        );
                         let result = export_command
                             .as_value()
                             .run(
@@ -155,6 +175,12 @@ pub fn create_project_snapshot(
 
                         match result {
                             ExportCommandResult::File { file_path } => {
+                                info!(
+                                    "Export command produced file '{}' for step '{}' in project '{}'",
+                                    file_path.display(),
+                                    name,
+                                    project_name
+                                );
                                 project_snapshot.files.push(file_path);
                             }
                             ExportCommandResult::NoOutput => {}

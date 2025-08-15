@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use tracing::info;
+
 use eyre::{WrapErr, eyre};
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +48,12 @@ impl ExportCommand {
             self.command.to_string()
         };
 
+        info!(
+            "Running ExportCommand: '{}' in directory '{}'",
+            command_str,
+            dir.display()
+        );
+
         let mut parts = command_str.split_whitespace();
         let program = parts
             .next()
@@ -69,7 +77,16 @@ impl ExportCommand {
                     })?;
 
                     if !status.success() {
+                        info!(
+                            "ExportCommand failed: '{}' (status: {})",
+                            command_str, status
+                        );
                         return Err(eyre!("Command failed with status: {}", status));
+                    } else {
+                        info!(
+                            "ExportCommand succeeded: '{}' (output file: '{}')",
+                            command_str, file_name
+                        );
                     }
 
                     let file_path = file_path
@@ -94,7 +111,16 @@ impl ExportCommand {
                 .wrap_err_with(|| format!("Failed to run command: {}", command_str))?;
 
             if !status.success() {
+                info!(
+                    "ExportCommand failed: '{}' (status: {})",
+                    command_str, status
+                );
                 return Err(eyre!("Command failed with status: {}", status));
+            } else {
+                info!(
+                    "ExportCommand succeeded: '{}' (no output file)",
+                    command_str
+                );
             }
 
             Ok(ExportCommandResult::NoOutput)
@@ -131,6 +157,11 @@ fn resolve_pipe_file(
                 file_path.display()
             )
         })?;
+
+    info!(
+        "Resolved pipe file for ExportCommand output: '{}'",
+        file_path.display()
+    );
 
     Ok((file_path, file))
 }

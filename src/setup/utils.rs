@@ -29,6 +29,7 @@ impl<'a> EnvMapper<'a> {
                 formatted_command = formatted_command.replace(&format!("${{{}}}", original), value);
             }
         }
+        tracing::info!("formatted string with env: {value} -> {formatted_command}");
         formatted_command
     }
 }
