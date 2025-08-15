@@ -1,14 +1,22 @@
 use eyre::{WrapErr, eyre};
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::{project::Project, setup::utils::EnvMapper, types::Slug, workspace::Workspace};
+use crate::{
+    project::Project,
+    setup::{export::ExportCommandResult, utils::EnvMapper},
+    types::Slug,
+    workspace::Workspace,
+};
 
 use super::{
     export::ExportCommand,
-    project::{ApplyCommand, StepKind, StepService},
+    project::{ApplyCommand, StandardStep, StepKind, StepService},
     types::GitConfig,
 };
 
@@ -59,7 +67,13 @@ pub struct CopyFile {
     destination_path: PathBuf,
 }
 
-pub fn create_snapshot(workspace: Workspace) -> eyre::Result<Snapshot> {
+pub fn create_snapshot(workspace: Workspace, profile: Slug) -> eyre::Result<Snapshot> {
+    let snapshot_dir = tempfile::tempdir()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to create temporary dir")?;
+
+    let files_dir = snapshot_dir.path().join("files");
+
     let mut project_snapshots = BTreeMap::new();
     for (name, ws_project) in workspace.config().projects.iter() {
         let project = Project::from_dir(&ws_project.dir)
@@ -68,7 +82,9 @@ pub fn create_snapshot(workspace: Workspace) -> eyre::Result<Snapshot> {
                 format!("Failed to load project from {}", ws_project.dir.display())
             })?;
 
-        let project_snapshot = create_project_snapshot(&project)?;
+        let project_files_dir = files_dir.join(name.as_str());
+
+        let project_snapshot = create_project_snapshot(&project, &profile, &project_files_dir)?;
         if let Some(project_snapshot) = project_snapshot {
             project_snapshots.insert(name.clone(), project_snapshot);
         }
@@ -80,18 +96,22 @@ pub fn create_snapshot(workspace: Workspace) -> eyre::Result<Snapshot> {
     })
 }
 
-pub fn create_project_snapshot(project: &Project) -> eyre::Result<Option<ProjectSnapshot>> {
+pub fn create_project_snapshot(
+    project: &Project,
+    profile: &Slug,
+    files_dir: &Path,
+) -> eyre::Result<Option<ProjectSnapshot>> {
     let Some(project_setup) = project.manifest().setup.as_ref() else {
         return Ok(None);
     };
 
     let mut project_snapshot = ProjectSnapshot {
-        git: project_setup.git.clone_value(),
+        git: project_setup.git(profile),
         steps: Default::default(),
         files: vec![],
     };
 
-    for (name, setup_step) in project_setup.steps.iter() {
+    for (name, setup_step) in project_setup.steps(profile) {
         let step = ProjectSnapshotStep {
             name: name.clone(),
             service: setup_step.service.as_ref().map(|v| v.clone_value()),
@@ -99,7 +119,7 @@ pub fn create_project_snapshot(project: &Project) -> eyre::Result<Option<Project
             skip_if: setup_step.skip_if.clone(),
             kind: match &setup_step.kind {
                 StepKind::Standard(standard_step) => match standard_step {
-                    super::project::StandardStep::CopyFiles {
+                    StandardStep::CopyFiles {
                         source,
                         destination,
                         overwrite,
@@ -112,11 +132,47 @@ pub fn create_project_snapshot(project: &Project) -> eyre::Result<Option<Project
                 StepKind::Complex { apply, export, env } => {
                     let env_mapper = env.as_ref().map(EnvMapper::new);
                     for export_command in export.as_slice() {
-                        let result = export_command.as_value();
+                        let result = export_command
+                            .as_value()
+                            .run(&project.dir(), env_mapper.as_ref(), files_dir)
+                            .map_err(|e| eyre!(e))
+                            .wrap_err_with(|| {
+                                format!(
+                                    "Failed to run export command: {}",
+                                    export_command.as_value().command
+                                )
+                            })?;
+
+                        match result {
+                            ExportCommandResult::File { file_path } => {
+                                project_snapshot.files.push(file_path);
+                            }
+                            ExportCommandResult::NoOutput => {}
+                        }
                     }
-                    todo!("Implement complex step handling")
+
+                    ProjectSnapshotStepKind::Complex {
+                        apply: apply
+                            .as_slice()
+                            .into_iter()
+                            .map(|cmd| cmd.clone_value())
+                            .collect(),
+                        export: export
+                            .as_slice()
+                            .into_iter()
+                            .map(|cmd| cmd.clone_value())
+                            .collect(),
+                        env: env.clone(),
+                    }
                 }
-                StepKind::Basic { command, env } => todo!(),
+                StepKind::Basic { command, env } => ProjectSnapshotStepKind::Basic {
+                    command: command
+                        .as_slice()
+                        .into_iter()
+                        .map(|cmd| cmd.clone_value())
+                        .collect(),
+                    env: env.clone(),
+                },
             },
         };
 

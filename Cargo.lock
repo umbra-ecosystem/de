@@ -485,6 +485,7 @@ dependencies = [
  "indicatif",
  "itertools",
  "serde",
+ "tempfile",
  "thiserror 2.0.12",
  "toml",
  "tracing",

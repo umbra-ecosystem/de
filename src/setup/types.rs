@@ -1,10 +1,21 @@
 use serde::{Deserialize, Serialize};
 
+use crate::setup::project::GitOverride;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GitConfig {
     pub url: String,
     #[serde(default)]
     pub branch: Option<String>,
+}
+
+impl GitConfig {
+    pub fn apply_override(self, git_override: GitOverride) -> Self {
+        Self {
+            url: git_override.url.unwrap_or(self.url),
+            branch: git_override.branch.or(self.branch),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

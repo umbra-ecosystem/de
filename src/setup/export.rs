@@ -1,5 +1,5 @@
 use std::{
-    fs::{File, OpenOptions},
+    fs::File,
     path::{Path, PathBuf},
 };
 
@@ -34,10 +34,15 @@ impl ExportCommand {
     pub fn run(
         &self,
         dir: &Path,
-        env_mapper: &EnvMapper,
+        env_mapper: Option<&EnvMapper>,
         output_dir: &Path,
     ) -> eyre::Result<ExportCommandResult> {
-        let command_str = env_mapper.format_str(&self.command);
+        let command_str = if let Some(env_mapper) = env_mapper {
+            env_mapper.format_str(&self.command)
+        } else {
+            self.command.to_string()
+        };
+
         let mut parts = command_str.split_whitespace();
         let program = parts
             .next()
@@ -84,10 +89,15 @@ impl ExportCommand {
 
 fn resolve_pipe_file(
     file_name: &str,
-    env_mapper: &EnvMapper,
+    env_mapper: Option<&EnvMapper>,
     output_dir: &Path,
 ) -> eyre::Result<(PathBuf, File)> {
-    let file_name = env_mapper.format_str(file_name);
+    let file_name = if let Some(env_mapper) = env_mapper {
+        env_mapper.format_str(file_name)
+    } else {
+        file_name.to_string()
+    };
+
     let file_path = output_dir.join(file_name);
 
     if !output_dir.exists() {

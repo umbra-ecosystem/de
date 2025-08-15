@@ -12,9 +12,9 @@ use super::{export::ExportCommand, types::GitConfig};
 pub struct SetupConfig {
     pub git: StringOr<GitConfig>,
     #[serde(default)]
-    pub steps: HashMap<Slug, Step>,
+    pub steps: BTreeMap<Slug, Step>,
     #[serde(default)]
-    pub profiles: HashMap<Slug, Profile>,
+    pub profiles: BTreeMap<Slug, Profile>,
 }
 
 impl From<String> for GitConfig {
@@ -28,7 +28,7 @@ pub struct Profile {
     #[serde(default)]
     pub git: Option<StringOr<GitOverride>>,
     #[serde(default)]
-    pub steps: HashMap<String, Step>,
+    pub steps: BTreeMap<Slug, Step>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -73,7 +73,7 @@ pub enum StepKind {
         env: Option<BTreeMap<String, String>>,
     },
     Basic {
-        command: StringOr<ApplyCommand>,
+        command: OneOrMany<StringOr<ApplyCommand>>,
         #[serde(default)]
         env: Option<BTreeMap<String, String>>,
     },
@@ -126,4 +126,26 @@ impl From<String> for ApplyCommand {
 #[serde(untagged, rename_all = "snake_case")]
 pub enum CommandPipe {
     File { file: String },
+}
+
+impl SetupConfig {
+    pub fn steps(&self, profile: &Slug) -> BTreeMap<Slug, Step> {
+        let mut output = self.steps.clone();
+        if let Some(profile_steps) = self.profiles.get(profile) {
+            for (slug, step) in &profile_steps.steps {
+                output.insert(slug.clone(), step.clone());
+            }
+        }
+        output
+    }
+
+    pub fn git(&self, profile: &Slug) -> GitConfig {
+        let mut git_config = self.git.clone_value();
+        if let Some(profile) = self.profiles.get(profile) {
+            if let Some(git_override) = profile.git.as_ref() {
+                git_config = git_config.apply_override(git_override.clone_value());
+            }
+        }
+        git_config
+    }
 }
