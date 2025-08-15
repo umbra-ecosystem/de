@@ -16,6 +16,7 @@ mod workspace;
 
 use clap::Parser;
 use eyre::{Context, eyre};
+use tracing_subscriber::EnvFilter;
 
 use crate::{
     cli::{
@@ -26,6 +27,11 @@ use crate::{
 };
 
 fn main() -> eyre::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init()
+        .expect("Failed to initialize tracing subscriber");
+
     color_eyre::config::HookBuilder::default()
         .display_env_section(false)
         .install()?;

@@ -20,6 +20,6 @@ command = "cargo check"
 
 [setup.steps.complex]
 name = "Demonstrate complex command"
-apply = { "command" = "tee $FILE", "stdin" = { "file" = "$FILE" } }
-export = { command = "echo $FILE", stdout = { "file" = "$FILE" } }
+apply = { "command" = "tee ${FILE}", "stdin" = { "file" = "${FILE}" } }
+export = { command = "echo ${FILE}", stdout = { "file" = "${FILE}" } }
 env = { FILE = "COMPLEX_COMMAND_FILE" }
