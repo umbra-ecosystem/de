@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::{
+    setup::types::ApplyCommand,
     types::Slug,
     utils::serde::{OneOrMany, StringOr},
 };
@@ -107,22 +108,6 @@ impl From<String> for StepService {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ApplyCommand {
-    command: String,
-    #[serde(default)]
-    stdin: Option<CommandPipe>,
-}
-
-impl From<String> for ApplyCommand {
-    fn from(command: String) -> Self {
-        Self {
-            command,
-            stdin: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum CommandPipe {
     File { file: String },
@@ -142,9 +127,10 @@ impl SetupConfig {
     pub fn git(&self, profile: &Slug) -> GitConfig {
         let mut git_config = self.git.clone_value();
         if let Some(profile) = self.profiles.get(profile)
-            && let Some(git_override) = profile.git.as_ref() {
-                git_config = git_config.apply_override(git_override.clone_value());
-            }
+            && let Some(git_override) = profile.git.as_ref()
+        {
+            git_config = git_config.apply_override(git_override.clone_value());
+        }
         git_config
     }
 }

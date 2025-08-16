@@ -10,7 +10,7 @@ pub enum StringOr<T: From<String>> {
 }
 
 impl<T: From<String>> StringOr<T> {
-    pub fn as_value(&self) -> Cow<T>
+    pub fn as_value(&self) -> Cow<'_, T>
     where
         T: Clone,
     {

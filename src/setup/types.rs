@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::setup::project::GitOverride;
+use crate::setup::{project::GitOverride, utils::EnvMapper};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GitConfig {
@@ -40,18 +40,19 @@ impl From<String> for ApplyCommand {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ExportCommand {
-    pub command: String,
-    #[serde(default)]
-    pub stdout: Option<CommandPipe>,
-}
-
-impl From<String> for ExportCommand {
-    fn from(command: String) -> Self {
-        Self {
-            command,
-            stdout: None,
+impl ApplyCommand {
+    pub fn resolve_env(&self, env_mapper: Option<&EnvMapper>) -> Self {
+        if let Some(env_mapper) = env_mapper {
+            Self {
+                command: env_mapper.format_str(&self.command),
+                stdin: self.stdin.as_ref().map(|pipe| match pipe {
+                    CommandPipe::File { file } => CommandPipe::File {
+                        file: env_mapper.format_str(file),
+                    },
+                }),
+            }
+        } else {
+            self.clone()
         }
     }
 }

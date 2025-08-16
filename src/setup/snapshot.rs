@@ -11,14 +11,13 @@ use tracing::info;
 
 use crate::{
     project::Project,
-    setup::{export::ExportCommandResult, utils::EnvMapper},
+    setup::{export::ExportCommandResult, types::ApplyCommand, utils::EnvMapper},
     types::Slug,
     workspace::Workspace,
 };
 
 use super::{
-    export::ExportCommand,
-    project::{ApplyCommand, StandardStep, StepKind, StepService},
+    project::{StandardStep, StepKind, StepService},
     types::GitConfig,
 };
 
@@ -54,12 +53,9 @@ pub enum ProjectSnapshotStepKind {
     },
     Complex {
         apply: Vec<ApplyCommand>,
-        export: Vec<ExportCommand>,
-        env: Option<BTreeMap<String, String>>,
     },
     Basic {
         command: Vec<ApplyCommand>,
-        env: Option<BTreeMap<String, String>>,
     },
 }
 
@@ -88,7 +84,8 @@ pub fn create_snapshot(workspace: Workspace, profile: Slug) -> eyre::Result<(Tem
             })?;
 
         info!("Creating snapshot for project '{}'", name);
-        let project_snapshot = create_project_snapshot(name, &project, &profile, &files_dir)?;
+        let project_snapshot =
+            create_project_snapshot(name, &project, &profile, &files_dir, snapshot_dir.path())?;
         if let Some(project_snapshot) = project_snapshot {
             project_snapshots.insert(name.clone(), project_snapshot);
         }
@@ -109,6 +106,7 @@ pub fn create_project_snapshot(
     project: &Project,
     profile: &Slug,
     files_dir: &Path,
+    prefix_dir: &Path,
 ) -> eyre::Result<Option<ProjectSnapshot>> {
     let Some(project_setup) = project.manifest().setup.as_ref() else {
         info!(
@@ -159,12 +157,8 @@ pub fn create_project_snapshot(
                         );
                         let result = export_command
                             .as_value()
-                            .run(
-                                project.dir(),
-                                env_mapper.as_ref(),
-                                &project_files_dir,
-                                files_dir,
-                            )
+                            .resolve_env(env_mapper.as_ref())
+                            .run(project.dir(), &project_files_dir, prefix_dir)
                             .map_err(|e| eyre!(e))
                             .wrap_err_with(|| {
                                 format!(
@@ -191,24 +185,21 @@ pub fn create_project_snapshot(
                         apply: apply
                             .as_slice()
                             .iter()
-                            .map(|cmd| cmd.clone_value())
+                            .map(|cmd| cmd.as_value().resolve_env(env_mapper.as_ref()))
                             .collect(),
-                        export: export
-                            .as_slice()
-                            .iter()
-                            .map(|cmd| cmd.clone_value())
-                            .collect(),
-                        env: env.clone(),
                     }
                 }
-                StepKind::Basic { command, env } => ProjectSnapshotStepKind::Basic {
-                    command: command
-                        .as_slice()
-                        .iter()
-                        .map(|cmd| cmd.clone_value())
-                        .collect(),
-                    env: env.clone(),
-                },
+                StepKind::Basic { command, env } => {
+                    let env_mapper = env.as_ref().map(EnvMapper::new);
+
+                    ProjectSnapshotStepKind::Basic {
+                        command: command
+                            .as_slice()
+                            .iter()
+                            .map(|cmd| cmd.as_value().resolve_env(env_mapper.as_ref()))
+                            .collect(),
+                    }
+                }
             },
         };
 

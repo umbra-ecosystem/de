@@ -33,28 +33,36 @@ pub enum ExportCommandResult {
 }
 
 impl ExportCommand {
+    pub fn resolve_env(&self, env_mapper: Option<&EnvMapper>) -> Self {
+        if let Some(env_mapper) = env_mapper {
+            Self {
+                command: env_mapper.format_str(&self.command),
+                stdout: self.stdout.as_ref().map(|pipe| match pipe {
+                    CommandPipe::File { file } => CommandPipe::File {
+                        file: env_mapper.format_str(file),
+                    },
+                }),
+            }
+        } else {
+            self.clone()
+        }
+    }
+
     pub fn run(
         &self,
         dir: &Path,
-        env_mapper: Option<&EnvMapper>,
         output_dir: &Path,
         prefix: &Path,
     ) -> eyre::Result<ExportCommandResult> {
         // TODO: add docker service support
 
-        let command_str = if let Some(env_mapper) = env_mapper {
-            env_mapper.format_str(&self.command)
-        } else {
-            self.command.to_string()
-        };
-
         info!(
             "Running ExportCommand: '{}' in directory '{}'",
-            command_str,
+            self.command,
             dir.display()
         );
 
-        let mut parts = command_str.split_whitespace();
+        let mut parts = self.command.split_whitespace();
         let program = parts
             .next()
             .ok_or_else(|| eyre!("Command is empty or does not contain a program to run"))?;
@@ -66,27 +74,22 @@ impl ExportCommand {
         if let Some(stdout) = &self.stdout {
             match stdout {
                 CommandPipe::File { file: file_name } => {
-                    let (file_path, file) = resolve_pipe_file(file_name, env_mapper, output_dir)?;
+                    let (file_path, file) = resolve_pipe_file(file_name, output_dir)?;
                     command.stdout(file);
 
                     let status = command.status().map_err(|e| eyre!(e)).wrap_err_with(|| {
                         format!(
                             "Failed to run command: {} with output file: {}",
-                            command_str, file_name
+                            self.command, file_name
                         )
                     })?;
 
                     if !status.success() {
                         info!(
                             "ExportCommand failed: '{}' (status: {})",
-                            command_str, status
+                            self.command, status
                         );
                         return Err(eyre!("Command failed with status: {}", status));
-                    } else {
-                        info!(
-                            "ExportCommand succeeded: '{}' (output file: '{}')",
-                            command_str, file_name
-                        );
                     }
 
                     let file_path = file_path
@@ -99,6 +102,12 @@ impl ExportCommand {
                             )
                         })?;
 
+                    info!(
+                        "ExportCommand succeeded: '{}' (output path: '{}')",
+                        self.command,
+                        file_path.display()
+                    );
+
                     Ok(ExportCommandResult::File {
                         file_path: file_path.to_path_buf(),
                     })
@@ -108,18 +117,18 @@ impl ExportCommand {
             let status = command
                 .status()
                 .map_err(|e| eyre!(e))
-                .wrap_err_with(|| format!("Failed to run command: {}", command_str))?;
+                .wrap_err_with(|| format!("Failed to run command: {}", self.command))?;
 
             if !status.success() {
                 info!(
                     "ExportCommand failed: '{}' (status: {})",
-                    command_str, status
+                    self.command, status
                 );
                 return Err(eyre!("Command failed with status: {}", status));
             } else {
                 info!(
                     "ExportCommand succeeded: '{}' (no output file)",
-                    command_str
+                    self.command
                 );
             }
 
@@ -128,17 +137,7 @@ impl ExportCommand {
     }
 }
 
-fn resolve_pipe_file(
-    file_name: &str,
-    env_mapper: Option<&EnvMapper>,
-    output_dir: &Path,
-) -> eyre::Result<(PathBuf, File)> {
-    let file_name = if let Some(env_mapper) = env_mapper {
-        env_mapper.format_str(file_name)
-    } else {
-        file_name.to_string()
-    };
-
+fn resolve_pipe_file(file_name: &str, output_dir: &Path) -> eyre::Result<(PathBuf, File)> {
     let file_path = output_dir.join(file_name);
 
     if !output_dir.exists() {

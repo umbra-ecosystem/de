@@ -29,9 +29,7 @@ pub fn snapshot(workspace_name: Option<Slug>, profile: Slug) -> eyre::Result<()>
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| format!("Failed to create snapshot for workspace: {workspace_name}"))?;
 
-    zip_snapshot(&workspace_name, &snapshot_dir, &snapshot)
-        .map_err(|e| eyre!(e))
-        .wrap_err_with(|| format!("Failed to zip snapshot for workspace: {workspace_name}"))?;
+    zip_snapshot(&workspace_name, &snapshot_dir, &snapshot)?;
 
     Ok(())
 }
@@ -71,7 +69,7 @@ fn zip_dir(zip_file: File, dir: &Path) -> eyre::Result<()> {
     let prefix = Path::new(dir);
     let mut buffer = Vec::new();
 
-    for entry in walkdir::WalkDir::new(dir) {
+    for entry in walkdir::WalkDir::new(dir).max_depth(5) {
         let entry = entry
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| format!("Failed to read directory entry in: {}", dir.display()))?;
@@ -84,12 +82,14 @@ fn zip_dir(zip_file: File, dir: &Path) -> eyre::Result<()> {
             .ok_or_else(|| eyre!("{name:?} Is a Non UTF-8 Path"))?;
 
         if path.is_file() {
+            tracing::debug!("Adding file to zip: {path_as_string}");
             zip.start_file(path_as_string, options)?;
             let mut f = File::open(path)?;
             f.read_to_end(&mut buffer)?;
             zip.write_all(&buffer)?;
             buffer.clear();
         } else if !name.as_os_str().is_empty() {
+            tracing::debug!("Adding dir to zip: {path_as_string}");
             zip.add_directory(path_as_string, options)?;
         }
     }
