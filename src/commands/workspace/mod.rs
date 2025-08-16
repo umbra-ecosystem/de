@@ -69,7 +69,7 @@ fn zip_dir(zip_file: File, dir: &Path) -> eyre::Result<()> {
     let prefix = Path::new(dir);
     let mut buffer = Vec::new();
 
-    for entry in walkdir::WalkDir::new(dir).max_depth(5) {
+    for entry in walkdir::WalkDir::new(dir).max_depth(10) {
         let entry = entry
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| format!("Failed to read directory entry in: {}", dir.display()))?;
