@@ -283,13 +283,14 @@ fn check_docker_compose() -> eyre::Result<String> {
     let output = Command::new("docker-compose").arg("--version").output();
 
     if let Ok(output) = output
-        && output.status.success() {
-            let version = String::from_utf8(output.stdout)
-                .map_err(|e| eyre!("Failed to parse docker-compose version output: {}", e))?
-                .trim()
-                .to_string();
-            return Ok(version);
-        }
+        && output.status.success()
+    {
+        let version = String::from_utf8(output.stdout)
+            .map_err(|e| eyre!("Failed to parse docker-compose version output: {}", e))?
+            .trim()
+            .to_string();
+        return Ok(version);
+    }
 
     // Try docker compose (plugin)
     let output = Command::new("docker")
@@ -474,8 +475,9 @@ fn check_project_details(
             let service_set: std::collections::HashSet<_> = services.iter().collect();
             for (task_name, task) in tasks {
                 if let Task::Compose { service, .. } = task
-                    && !service_set.contains(&service) {
-                        result.add_error(
+                    && !service_set.contains(&service)
+                {
+                    result.add_error(
                             formatter,
                             format!(
                                 "Task '{task_name}' references missing Docker Compose service '{service}'"
@@ -485,7 +487,7 @@ fn check_project_details(
                                     .to_string(),
                             ),
                         )?;
-                    }
+                }
             }
         } else {
             // No Compose file found, but there are Compose tasks
@@ -731,9 +733,10 @@ fn validate_docker_compose(compose_path: &std::path::Path) -> eyre::Result<()> {
         .output();
 
     if let Ok(output) = output
-        && output.status.success() {
-            return Ok(());
-        }
+        && output.status.success()
+    {
+        return Ok(());
+    }
 
     // Try with docker compose plugin
     let output = Command::new("docker")

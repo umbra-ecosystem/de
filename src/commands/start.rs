@@ -94,24 +94,25 @@ fn spin_up_project_and_dependencies(
     // Start only the projects we need, in dependency order
     for project_id in startup_order {
         if projects_to_start.contains(&project_id)
-            && let Some(project) = projects_map.get(&project_id) {
-                ui.writeln(&ui.theme.bold(&format!("Spinning up project {project_id}:")))?;
+            && let Some(project) = projects_map.get(&project_id)
+        {
+            ui.writeln(&ui.theme.bold(&format!("Spinning up project {project_id}:")))?;
 
-                let applied = project
-                    .docker_compose_up()
-                    .map_err(|e| eyre!(e))
-                    .wrap_err_with(|| {
-                        format!(
-                            "Failed to spin up project {} in workspace {}",
-                            project_id,
-                            workspace.config().name
-                        )
-                    })?;
+            let applied = project
+                .docker_compose_up()
+                .map_err(|e| eyre!(e))
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to spin up project {} in workspace {}",
+                        project_id,
+                        workspace.config().name
+                    )
+                })?;
 
-                if applied {
-                    applied_projects.push(project);
-                }
+            if applied {
+                applied_projects.push(project);
             }
+        }
     }
 
     if applied_projects.is_empty() {

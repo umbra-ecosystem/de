@@ -60,9 +60,10 @@ fn update_workspace(manifest_path: &Path, workspace: Option<&Slug>) -> eyre::Res
         .wrap_err("Failed to load project from directory")?;
 
     if let Some(ws) = workspace
-        && project.manifest().project().workspace != *ws {
-            return Ok(());
-        }
+        && project.manifest().project().workspace != *ws
+    {
+        return Ok(());
+    }
 
     workspace::add_project_to_workspace(
         project.manifest().project().workspace.clone(),

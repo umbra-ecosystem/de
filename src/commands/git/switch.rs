@@ -131,9 +131,7 @@ fn switch_project_branch(
             target_branch
         } else if branch_exists(&fallback_branch, &ws_project.dir)? {
             ui.warning_item(
-                &format!(
-                    "Target branch not found. Falling back to '{fallback_branch}'."
-                ),
+                &format!("Target branch not found. Falling back to '{fallback_branch}'."),
                 None,
             )?;
             fallback_branch.as_str()

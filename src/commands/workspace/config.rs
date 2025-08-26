@@ -1,10 +1,6 @@
-
 use eyre::{Context, eyre};
 
-use crate::{
-    commands::config::ConfigAction, types::Slug,
-    workspace::Workspace,
-};
+use crate::{commands::config::ConfigAction, types::Slug, workspace::Workspace};
 
 /// Set or get a property on the workspace (e.g., active, default-branch).
 pub fn config(

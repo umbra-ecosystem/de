@@ -410,25 +410,26 @@ impl GitStatus {
         let mut ahead = None;
         let mut behind = None;
         if let Some(ref ab) = ahead_behind
-            && let Some(idx) = ab.find("[") {
-                let ab_part = &ab[idx..];
-                if let Some(a_idx) = ab_part.find("ahead ") {
-                    let rest = &ab_part[a_idx + 6..];
-                    if let Some(end) = rest.find(|c: char| !c.is_ascii_digit()) {
-                        ahead = rest[..end].parse::<u32>().ok();
-                    } else {
-                        ahead = rest.parse::<u32>().ok();
-                    }
-                }
-                if let Some(b_idx) = ab_part.find("behind ") {
-                    let rest = &ab_part[b_idx + 7..];
-                    if let Some(end) = rest.find(|c: char| !c.is_ascii_digit()) {
-                        behind = rest[..end].parse::<u32>().ok();
-                    } else {
-                        behind = rest.parse::<u32>().ok();
-                    }
+            && let Some(idx) = ab.find("[")
+        {
+            let ab_part = &ab[idx..];
+            if let Some(a_idx) = ab_part.find("ahead ") {
+                let rest = &ab_part[a_idx + 6..];
+                if let Some(end) = rest.find(|c: char| !c.is_ascii_digit()) {
+                    ahead = rest[..end].parse::<u32>().ok();
+                } else {
+                    ahead = rest.parse::<u32>().ok();
                 }
             }
+            if let Some(b_idx) = ab_part.find("behind ") {
+                let rest = &ab_part[b_idx + 7..];
+                if let Some(end) = rest.find(|c: char| !c.is_ascii_digit()) {
+                    behind = rest[..end].parse::<u32>().ok();
+                } else {
+                    behind = rest.parse::<u32>().ok();
+                }
+            }
+        }
 
         GitStatus {
             is_repo: true,

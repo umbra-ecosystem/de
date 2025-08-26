@@ -26,9 +26,9 @@ pub struct StepService {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ApplyCommand {
-    command: String,
+    pub command: String,
     #[serde(default)]
-    stdin: Option<CommandPipe>,
+    pub stdin: Option<CommandPipe>,
 }
 
 impl From<String> for ApplyCommand {

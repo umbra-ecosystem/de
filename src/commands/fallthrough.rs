@@ -41,9 +41,10 @@ pub fn fallthrough(args: Vec<String>) -> eyre::Result<()> {
     if let Some(project) = Project::current()
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get current project")?
-        && run_project_task(&project, &command, &args)? {
-            return Ok(());
-        }
+        && run_project_task(&project, &command, &args)?
+    {
+        return Ok(());
+    }
 
     {
         let theme = Theme::new();

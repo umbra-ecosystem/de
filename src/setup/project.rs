@@ -80,6 +80,16 @@ pub enum StepKind {
     },
 }
 
+impl StepKind {
+    pub fn as_str(&self) -> &str {
+        match self {
+            StepKind::Standard(_) => "standard",
+            StepKind::Complex { .. } => "complex",
+            StepKind::Basic { .. } => "basic",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StandardStep {

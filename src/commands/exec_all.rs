@@ -5,7 +5,9 @@ use crate::{types::Slug, workspace::Workspace};
 
 pub fn exec_all(workspace_name: Option<Slug>, command: Vec<String>) -> Result<()> {
     let mut command_iter = command.into_iter();
-    let program = command_iter.next().ok_or_else(|| eyre!("No command provided"))?;
+    let program = command_iter
+        .next()
+        .ok_or_else(|| eyre!("No command provided"))?;
     let args = command_iter.collect::<Vec<_>>();
 
     let workspace = if let Some(workspace_name) = workspace_name {
@@ -26,7 +28,9 @@ pub fn exec_all(workspace_name: Option<Slug>, command: Vec<String>) -> Result<()
         cmd.args(&args);
         cmd.current_dir(&project.dir);
 
-        let status = cmd.status().wrap_err_with(|| format!("Failed to execute command in project '{project_name}'"))?;
+        let status = cmd
+            .status()
+            .wrap_err_with(|| format!("Failed to execute command in project '{project_name}'"))?;
         if !status.success() {
             eprintln!("Command failed in project '{project_name}' with status: {status}");
         }
