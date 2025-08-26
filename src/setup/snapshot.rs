@@ -95,7 +95,7 @@ pub fn create_snapshot(
 
         tracing::info!("Creating snapshot for project '{}'", name);
         let project_snapshot = create_project_snapshot(
-            &ui,
+            ui,
             name,
             &project,
             &profile,

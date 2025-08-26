@@ -49,7 +49,7 @@ fn zip_snapshot(
     let manifest_content = serde_json::to_string_pretty(snapshot)
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| format!("Failed to serialize snapshot manifest for: {workspace_name}"))?;
-    let manifest_size = manifest_content.as_bytes().len();
+    let manifest_size = manifest_content.len();
 
     std::fs::write(&manifest_path, manifest_content)
         .map_err(|e| eyre!(e))
