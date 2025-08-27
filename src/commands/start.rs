@@ -1,8 +1,9 @@
+use dialoguer::{Select, theme::ColorfulTheme};
 use eyre::{WrapErr, eyre};
 use std::collections::BTreeSet;
 
 use crate::{
-    commands::status::workspace_status,
+    commands::{status::workspace_status, stop::stop_workspace},
     config::Config,
     project::Project,
     types::Slug,
@@ -12,6 +13,8 @@ use crate::{
 
 pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
     let ui = UserInterface::new();
+
+    check_for_active_workspace(&ui)?;
 
     if let Some(workspace_name) = workspace_name {
         // Start entire workspace
@@ -56,6 +59,56 @@ pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
         ui.new_line()?;
         let _ = workspace_status(&ui, &workspace);
     }
+
+    Ok(())
+}
+
+fn check_for_active_workspace(ui: &UserInterface) -> eyre::Result<()> {
+    let working_workspace = Workspace::working()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to get working workspace")?;
+
+    let Some(working_workspace) = working_workspace else {
+        return Ok(());
+    };
+
+    ui.heading("Old Workspace")?;
+
+    let choice = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt(format!(
+            "A workspace ({}) is already active. How do you wish to proceed?",
+            ui.theme.accent(working_workspace.config().name.as_str())
+        ))
+        .items(&[
+            "Abort starting a new workspace",
+            "Deactivate the current workspace and start the new one",
+            "Start the new workspace alongside the current one",
+        ])
+        .default(0)
+        .interact()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to prompt for workspace conflict resolution")?;
+
+    match choice {
+        0 => {
+            return Err(eyre!("Start operation aborted by user"));
+        }
+        1 => {
+            ui.new_line()?;
+
+            let stopped = stop_workspace(ui, working_workspace)
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to stop current workspace")?;
+
+            if !stopped {
+                return Err(eyre!("Stop current workspace aborted"));
+            }
+        }
+        2 => {}
+        _ => unreachable!(),
+    }
+
+    ui.new_line()?;
 
     Ok(())
 }
