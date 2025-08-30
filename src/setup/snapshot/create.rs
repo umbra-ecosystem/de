@@ -1,69 +1,23 @@
 use eyre::{WrapErr, eyre};
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeMap, path::Path};
 use tempfile::TempDir;
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::Utc;
 
 use crate::{
     project::Project,
-    setup::{export::ExportCommandResult, types::ApplyCommand, utils::EnvMapper},
+    setup::{
+        export::ExportCommandResult,
+        project::{StandardStep, StepKind},
+        snapshot::types::{
+            ProjectSnapshot, ProjectSnapshotStep, ProjectSnapshotStepKind, Snapshot,
+        },
+        utils::EnvMapper,
+    },
     types::Slug,
     utils::ui::UserInterface,
     workspace::Workspace,
 };
-
-use super::{
-    project::{StandardStep, StepKind, StepService},
-    types::GitConfig,
-};
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Snapshot {
-    pub projects: BTreeMap<Slug, ProjectSnapshot>,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ProjectSnapshot {
-    pub git: GitConfig,
-    pub steps: BTreeMap<Slug, ProjectSnapshotStep>,
-    pub files: Vec<PathBuf>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ProjectSnapshotStep {
-    pub name: Slug,
-    pub service: Option<StepService>,
-    pub optional: bool,
-    pub skip_if: Option<String>,
-    pub kind: ProjectSnapshotStepKind,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProjectSnapshotStepKind {
-    CopyFiles {
-        source: String,
-        destination: String,
-        overwrite: bool,
-    },
-    Complex {
-        apply: Vec<ApplyCommand>,
-    },
-    Basic {
-        command: Vec<ApplyCommand>,
-    },
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CopyFile {
-    stored_path: PathBuf,
-    destination_path: PathBuf,
-}
 
 pub fn create_snapshot(
     ui: &UserInterface,
