@@ -71,15 +71,14 @@ pub fn extract_zip(zip_file: File, target_dir: &Path) -> eyre::Result<()> {
         } else {
             tracing::debug!("Extracting file to: {}", outpath.display());
 
-            if let Some(parent) = outpath.parent() {
-                if !parent.exists() {
+            if let Some(parent) = outpath.parent()
+                && !parent.exists() {
                     std::fs::create_dir_all(parent)
                         .map_err(|e| eyre!(e))
                         .wrap_err_with(|| {
                             format!("Failed to create directory: {}", parent.display())
                         })?;
                 }
-            }
 
             let mut outfile = File::create(&outpath)
                 .map_err(|e| eyre!(e))

@@ -28,7 +28,7 @@ pub fn stop(workspace_name: Option<Slug>) -> eyre::Result<()> {
 }
 
 pub fn stop_workspace(ui: &UserInterface, workspace: Workspace) -> eyre::Result<bool> {
-    let workspace_status = workspace_status(&ui, &workspace)
+    let workspace_status = workspace_status(ui, &workspace)
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get workspace status")?;
 

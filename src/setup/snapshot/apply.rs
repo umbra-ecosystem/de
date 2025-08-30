@@ -48,7 +48,7 @@ pub fn apply_snapshot(
         ui.subheading(&format!("{}", project_name))?;
         ui.indented(|ui| {
             apply_project_snapshot(
-                &ui,
+                ui,
                 &canonical_snapshot_dir,
                 project_name,
                 project_snapshot,
@@ -119,7 +119,7 @@ fn apply_project_snapshot(
             project_name,
             project_snapshot,
             &project_dir,
-            &target_dir,
+            target_dir,
         )
     })?;
 

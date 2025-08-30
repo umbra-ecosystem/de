@@ -11,7 +11,7 @@ use std::{
     process::Command,
 };
 
-use crate::{project::config::ProjectManifest, setup::project::SetupConfig, types::Slug};
+use crate::{project::config::ProjectManifest, types::Slug};
 
 pub struct Project {
     dir: PathBuf,
@@ -111,10 +111,6 @@ impl Project {
 
     pub fn tasks(&self) -> Option<&BTreeMap<Slug, Task>> {
         self.manifest.tasks.as_ref()
-    }
-
-    pub fn setup(&self) -> Option<&SetupConfig> {
-        self.manifest.setup.as_ref()
     }
 
     pub fn manifest_path(&self) -> &PathBuf {
