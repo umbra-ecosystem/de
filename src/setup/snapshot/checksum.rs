@@ -87,7 +87,9 @@ pub fn calculate_snapshot_checksum(
     snapshot_clone.checksum = None; // Clear checksum field for hashing
 
     match algorithm {
-        ChecksumAlgorithm::Sha256 => calculate_snapshot_checksum_sha256(&snapshot, snapshot_dir),
+        ChecksumAlgorithm::Sha256 => {
+            calculate_snapshot_checksum_sha256(&snapshot_clone, snapshot_dir)
+        }
     }
 }
 
