@@ -146,10 +146,9 @@ fn main() -> eyre::Result<()> {
         let error_prefix = theme.error("Error:");
         let cause_prefix = theme.dim("Caused by:");
 
-        if let Some(cause) = err.source() {
-            eprintln!("{error_prefix} {err}\n{cause_prefix} {cause}");
-        } else {
-            eprintln!("{error_prefix} {err}");
+        eprintln!("{error_prefix} {err}");
+        for cause in err.chain().skip(1) {
+            eprintln!("{cause_prefix} {cause}");
         }
 
         std::process::exit(1);

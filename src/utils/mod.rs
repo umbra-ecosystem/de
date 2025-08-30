@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod formatter;
 pub mod git;
+pub mod path;
 pub mod serde;
 pub mod shim;
 pub mod theme;

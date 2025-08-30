@@ -3,10 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tracing::info;
-
 use eyre::{WrapErr, eyre};
 use serde::{Deserialize, Serialize};
+
+use crate::utils::path::has_reverse_path_traversal;
 
 use super::{project::CommandPipe, utils::EnvMapper};
 
@@ -48,11 +48,11 @@ impl ExportCommand {
         &self,
         dir: &Path,
         output_dir: &Path,
-        prefix: &Path,
+        project_dir: &Path,
     ) -> eyre::Result<ExportCommandResult> {
         // TODO: add docker service support
 
-        info!(
+        tracing::info!(
             "Running ExportCommand: '{}' in directory '{}'",
             self.command,
             dir.display()
@@ -81,15 +81,17 @@ impl ExportCommand {
                     })?;
 
                     if !status.success() {
-                        info!(
+                        tracing::info!(
                             "ExportCommand failed: '{}' (status: {})",
-                            self.command, status
+                            self.command,
+                            status
                         );
+
                         return Err(eyre!("Command failed with status: {}", status));
                     }
 
                     let file_path = file_path
-                        .strip_prefix(prefix)
+                        .strip_prefix(project_dir)
                         .map_err(|e| eyre!(e))
                         .wrap_err_with(|| {
                             format!(
@@ -98,7 +100,7 @@ impl ExportCommand {
                             )
                         })?;
 
-                    info!(
+                    tracing::info!(
                         "ExportCommand succeeded: '{}' (output path: '{}')",
                         self.command,
                         file_path.display()
@@ -116,13 +118,14 @@ impl ExportCommand {
                 .wrap_err_with(|| format!("Failed to run command: {}", self.command))?;
 
             if !status.success() {
-                info!(
+                tracing::info!(
                     "ExportCommand failed: '{}' (status: {})",
-                    self.command, status
+                    self.command,
+                    status
                 );
                 return Err(eyre!("Command failed with status: {}", status));
             } else {
-                info!(
+                tracing::info!(
                     "ExportCommand succeeded: '{}' (no output file)",
                     self.command
                 );
@@ -135,6 +138,14 @@ impl ExportCommand {
 
 fn resolve_pipe_file(file_name: &str, output_dir: &Path) -> eyre::Result<(PathBuf, File)> {
     let file_path = output_dir.join(file_name);
+
+    // SECURITY: Ensure the file path is within the output_dir
+    if has_reverse_path_traversal(&file_path) {
+        return Err(eyre!(
+            "Invalid file path '{}': contains reverse path traversal",
+            file_path.display()
+        ));
+    }
 
     if !output_dir.exists() {
         std::fs::create_dir_all(output_dir)
@@ -153,7 +164,7 @@ fn resolve_pipe_file(file_name: &str, output_dir: &Path) -> eyre::Result<(PathBu
             )
         })?;
 
-    info!(
+    tracing::info!(
         "Resolved pipe file for ExportCommand output: '{}'",
         file_path.display()
     );

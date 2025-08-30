@@ -39,7 +39,13 @@ pub fn create_snapshot(
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to create temporary dir")?;
 
-    let files_dir = snapshot_dir.path().join("files");
+    let canonical_snapshot_dir = snapshot_dir
+        .path()
+        .canonicalize()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to canonicalize snapshot directory")?;
+
+    let files_dir = canonical_snapshot_dir.join("files");
 
     ui.heading("Projects")?;
 
@@ -59,7 +65,7 @@ pub fn create_snapshot(
             &project,
             &profile,
             &files_dir,
-            snapshot_dir.path(),
+            &canonical_snapshot_dir,
         )?;
         if let Some(project_snapshot) = project_snapshot {
             project_snapshots.insert(name.clone(), project_snapshot);
