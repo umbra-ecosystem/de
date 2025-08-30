@@ -60,6 +60,8 @@ This will automatically download and install the latest release from GitHub.
 
 ## Quick Start
 
+Get started with `de` in just a few steps. This section covers initializing a project, defining tasks, running commands, and key workspace operations.
+
 ### 1. Initialize a Project
 
 Create a new project and add it to a workspace:
@@ -114,13 +116,13 @@ Execute defined tasks from anywhere in your project. If a task is not found in t
 de run test
 de run dev
 de run build --release  # Pass additional arguments
-de run --project my-api test # Run a task in a specific project
-de run --workspace my-workspace build-all # Run a task in a specific workspace
+de run --project my-api test  # Run a task in a specific project
+de run --workspace my-workspace build-all  # Run a task in a specific workspace
 ```
 
 ### 4. Command Fallthrough (Direct Task Execution)
 
-`de` supports direct task execution without the `run` subcommand for a more streamlined workflow. If a command is not a built-in `de` command, it will be treated as a task to be executed.
+You can run tasks directly without the `run` subcommand for a streamlined workflow. If a command is not a built-in `de` command, it will be treated as a task to be executed.
 
 The fallthrough logic works as follows:
 
@@ -276,35 +278,9 @@ This will:
 - Stash or force checkout dirty projects as needed
 - Use the workspace's default branch as a fallback if the branch does not exist in a project
 
-### 11. Switch Branches Across All Projects
-
-Switch all workspace projects to a specified branch, with fuzzy branch selection and interactive handling of dirty states:
-
-```bash
-de git switch [branch-name]
-```
-
-- If you provide a branch name, `de` will attempt to switch all projects to that branch.
-- If the branch name is ambiguous or partially matches multiple branches, you'll be prompted to select the correct branch interactively.
-- If a project has uncommitted changes, you can choose to stash, force checkout, skip, or abort for each project.
-- If a project does not have the branch, the workspace's `default_branch` will be used as a fallback.
-
-You can skip certain projects from this command by setting `git.enabled = false` in their manifest.
-
-**Example:**
-
-```bash
-de git switch feature/login
-```
-
-This will:
-- Fuzzy-match and select the correct branch across all projects
-- Stash or force checkout dirty projects as needed
-- Use the workspace's default branch as a fallback if the branch does not exist in a project
-
 ---
 
-### 12. Start/Stop Docker Compose Projects
+### 11. Start/Stop Docker Compose Projects
 
 Start Docker Compose projects:
 
@@ -326,7 +302,7 @@ de stop
 de stop --workspace my-workspace
 ```
 
-### 13. List Projects
+### 12. List Projects
 
 View all projects in your current workspace (or the active workspace if set):
 
@@ -340,7 +316,7 @@ Or list projects in a specific workspace:
 de list --workspace my-workspace
 ```
 
-### 14. Check Project and Environment Health
+### 13. Check Project and Environment Health
 
 Diagnose and check the health of your `de` environment:
 
@@ -350,7 +326,7 @@ de doctor
 
 This command will check for common issues, missing files, and misconfigurations in your workspace and projects.
 
-### 15. Show Workspace and Project Status
+### 14. Show Workspace and Project Status
 
 Get a concise, actionable summary of the dynamic state of all projects in the current workspace:
 
@@ -660,7 +636,7 @@ This command will scan for all tasks with shims and rewrite all shim files, ensu
 
 ## Workspace Setup and Snapshot
 
-Manage portable workspace environments with snapshots and automated setup.
+Easily manage portable workspace environments with snapshots and automated setup.
 
 ### Workspace Snapshots
 
@@ -689,7 +665,7 @@ This creates `my-workspace.zip` with the setup manifest and files for the `dev` 
 
 ### Applying a Snapshot (Setup)
 
-To apply a snapshot to a directory (e.g., to set up a new environment):
+Apply a snapshot to a directory to quickly set up a new environment:
 
 ```bash
 de setup <snapshot-file> --target-dir <directory>
@@ -710,7 +686,7 @@ This sets up the workspace in `./new-env` using the snapshot.
 
 ### Setup Steps and Profiles
 
-Setup steps and profiles are defined in your `de.toml` file. Example:
+Setup steps and profiles are defined in your `de.toml` file. For example:
 
 ```toml
 [setup]
