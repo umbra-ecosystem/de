@@ -50,7 +50,6 @@ pub fn apply_snapshot(
             apply_project_snapshot(
                 &ui,
                 &canonical_snapshot_dir,
-                &snapshot,
                 project_name,
                 project_snapshot,
                 target_dir,
@@ -99,7 +98,6 @@ fn read_snapshot_manifest(snapshot_dir: &Path) -> eyre::Result<Snapshot> {
 fn apply_project_snapshot(
     ui: &UserInterface,
     snapshot_dir: &Path,
-    snapshot: &Snapshot,
     project_name: &Slug,
     project_snapshot: &ProjectSnapshot,
     target_dir: &Path,
