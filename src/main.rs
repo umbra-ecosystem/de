@@ -74,9 +74,10 @@ fn main() -> eyre::Result<()> {
         }
         Commands::Scan { dir, workspace } => commands::scan(dir, workspace),
         Commands::Update { all, workspace } => commands::update(all, workspace),
-        Commands::Setup { command } => match command {
-            cli::SetupCommands::Check => commands::setup::check(),
-        },
+        Commands::Setup {
+            snapshot,
+            target_dir: dir,
+        } => commands::setup(snapshot, dir),
         Commands::Task { command } => match command {
             TaskCommands::Check { task } => commands::task::check(task),
             TaskCommands::List => commands::task::list(),

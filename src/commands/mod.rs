@@ -28,6 +28,7 @@ pub use init::init;
 pub use list::list;
 pub use run::run;
 pub use scan::scan;
+pub use setup::setup;
 pub use start::start;
 pub use status::status;
 pub use stop::stop;

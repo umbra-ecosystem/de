@@ -11,6 +11,7 @@ use crate::{
         project::{StandardStep, StepKind},
         snapshot::types::{
             ProjectSnapshot, ProjectSnapshotStep, ProjectSnapshotStepKind, Snapshot,
+            WorkspaceSnapshot,
         },
         utils::EnvMapper,
     },
@@ -29,6 +30,10 @@ pub fn create_snapshot(
     ui.heading("Snapshot Creation")?;
     ui.info_item(&format!("workspace: {}", workspace.config().name))?;
     ui.new_line()?;
+
+    let workspace_snapshot = WorkspaceSnapshot {
+        name: workspace.config().name.clone(),
+    };
 
     let snapshot_dir = tempfile::tempdir()
         .map_err(|e| eyre!(e))
@@ -65,6 +70,7 @@ pub fn create_snapshot(
     Ok((
         snapshot_dir,
         Snapshot {
+            workspace: workspace_snapshot,
             projects: project_snapshots,
             created_at: Utc::now(),
         },

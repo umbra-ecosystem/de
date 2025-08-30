@@ -13,8 +13,14 @@ use crate::{
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Snapshot {
+    pub workspace: WorkspaceSnapshot,
     pub projects: BTreeMap<Slug, ProjectSnapshot>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WorkspaceSnapshot {
+    pub name: Slug,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -47,6 +53,16 @@ pub enum ProjectSnapshotStepKind {
     Basic {
         command: Vec<ApplyCommand>,
     },
+}
+
+impl ProjectSnapshotStepKind {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ProjectSnapshotStepKind::CopyFiles { .. } => "copy_files",
+            ProjectSnapshotStepKind::Complex { .. } => "complex",
+            ProjectSnapshotStepKind::Basic { .. } => "basic",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

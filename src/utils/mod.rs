@@ -6,6 +6,7 @@ pub mod shim;
 pub mod theme;
 pub mod ui;
 pub mod unix;
+pub mod zip;
 
 use crate::constants::{ORGANIZATION_NAME, PROJECT_NAME};
 

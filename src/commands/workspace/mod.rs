@@ -2,22 +2,17 @@ mod config;
 mod info;
 mod run;
 
-use std::{
-    fs::File,
-    io::{Read, Write},
-    path::{Path, PathBuf},
-};
+use std::{fs::File, path::PathBuf};
 
 pub use config::config;
 pub use info::info;
 pub use run::run;
 use tempfile::TempDir;
-use zip::write::SimpleFileOptions;
 
 use crate::{
-    setup::snapshot::{Snapshot, create_snapshot},
+    setup::snapshot::{SNAPSHOT_MANIFEST_FILE, Snapshot, create_snapshot},
     types::Slug,
-    utils::{get_workspace_for_cli, ui::UserInterface},
+    utils::{get_workspace_for_cli, ui::UserInterface, zip::zip_dir},
 };
 use eyre::{WrapErr, eyre};
 
@@ -45,7 +40,7 @@ fn zip_snapshot(
 ) -> eyre::Result<()> {
     ui.heading("Bundle")?;
 
-    let manifest_path = snapshot_dir.path().join("manifest.json");
+    let manifest_path = snapshot_dir.path().join(SNAPSHOT_MANIFEST_FILE);
     let manifest_content = serde_json::to_string_pretty(snapshot)
         .map_err(|e| eyre!(e))
         .wrap_err_with(|| format!("Failed to serialize snapshot manifest for: {workspace_name}"))?;
@@ -98,45 +93,6 @@ fn zip_snapshot(
         ),
         None,
     )?;
-
-    Ok(())
-}
-
-fn zip_dir(zip_file: File, dir: &Path) -> eyre::Result<()> {
-    let mut zip = zip::ZipWriter::new(zip_file);
-    let options = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored)
-        .unix_permissions(0o755);
-
-    let prefix = Path::new(dir);
-    let mut buffer = Vec::new();
-
-    for entry in walkdir::WalkDir::new(dir).max_depth(10) {
-        let entry = entry
-            .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to read directory entry in: {}", dir.display()))?;
-
-        let path = entry.path();
-        let name = path.strip_prefix(prefix).unwrap();
-        let path_as_string = name
-            .to_str()
-            .map(str::to_owned)
-            .ok_or_else(|| eyre!("{name:?} Is a Non UTF-8 Path"))?;
-
-        if path.is_file() {
-            tracing::debug!("Adding file to zip: {path_as_string}");
-            zip.start_file(path_as_string, options)?;
-            let mut f = File::open(path)?;
-            f.read_to_end(&mut buffer)?;
-            zip.write_all(&buffer)?;
-            buffer.clear();
-        } else if !name.as_os_str().is_empty() {
-            tracing::debug!("Adding dir to zip: {path_as_string}");
-            zip.add_directory(path_as_string, options)?;
-        }
-    }
-
-    zip.finish()?;
 
     Ok(())
 }

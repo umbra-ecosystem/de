@@ -118,8 +118,12 @@ pub enum Commands {
 
     /// Manage the workspace setup and configuration.
     Setup {
-        #[command(subcommand)]
-        command: SetupCommands,
+        /// The snapshot file to create or apply to the workspace.
+        snapshot: PathBuf,
+
+        /// The directory to apply the snapshot to. Defaults to the current directory.
+        #[arg(short, long)]
+        target_dir: Option<PathBuf>,
     },
 
     /// Manage tasks defined in the project.
@@ -220,12 +224,6 @@ pub enum OnDirtyAction {
     Force,
     /// Abort the operation.
     Abort,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum SetupCommands {
-    /// Check if the setup is properly setup.
-    Check,
 }
 
 #[derive(Debug, Subcommand)]
