@@ -658,6 +658,80 @@ de shim reinstate
 
 This command will scan for all tasks with shims and rewrite all shim files, ensuring your command aliases are up to date and consistent with your current configuration.
 
+## Workspace Setup and Snapshot
+
+Manage portable workspace environments with snapshots and automated setup.
+
+### Workspace Snapshots
+
+A **snapshot** is a portable archive of your workspace's configuration, setup steps, and relevant files. Snapshots allow you to quickly recreate or share a workspace environment.
+
+#### Creating a Snapshot
+
+To create a snapshot of your current workspace:
+
+```bash
+de workspace snapshot --workspace <name> --profile <profile>
+```
+
+- `--workspace <name>` (optional): The workspace to snapshot. Defaults to the active workspace.
+- `--profile <profile>` (optional): The setup profile to use. Defaults to `default`.
+
+This command generates a zip archive containing the workspace's setup manifest and files.
+
+**Example:**
+
+```bash
+de workspace snapshot --workspace my-workspace --profile dev
+```
+
+This creates `my-workspace.zip` with the setup manifest and files for the `dev` profile.
+
+### Applying a Snapshot (Setup)
+
+To apply a snapshot to a directory (e.g., to set up a new environment):
+
+```bash
+de setup <snapshot-file> --target-dir <directory>
+```
+
+- `<snapshot-file>`: Path to the snapshot zip file.
+- `--target-dir <directory>` (optional): Directory to apply the snapshot to. Defaults to the current directory.
+
+The target directory must be empty or newly created. The setup process will extract the snapshot and apply all setup steps defined in the manifest.
+
+**Example:**
+
+```bash
+de setup my-workspace.zip --target-dir ./new-env
+```
+
+This sets up the workspace in `./new-env` using the snapshot.
+
+### Setup Steps and Profiles
+
+Setup steps and profiles are defined in your `de.toml` file. Example:
+
+```toml
+[setup]
+git = { "url" = "https://github.com/umbra-ecosystem/de.git", "branch" = "main" }
+
+[setup.profiles.dev]
+git = { branch = "develop" }
+
+[setup.steps.copy]
+name = "Demonstrate copy files"
+type = "copy_files"
+source = "(.*)\\.env\\.example"
+destination = "$1.env"
+
+[setup.steps.basic]
+name = "Demonstrate basic command"
+command = "echo 'Hello, World!'"
+```
+
+When you create or apply a snapshot, these steps are included and executed.
+
 #### Docker Compose Management
 
 Start and stop Docker Compose projects across workspaces:
