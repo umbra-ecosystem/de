@@ -117,6 +117,23 @@ pub fn create_project_snapshot(
 
     let project_files_dir = files_dir.join(project_name.as_str());
 
+    let relative_project_files_dir_str = project_files_dir
+        .strip_prefix(prefix_dir)
+        .map_err(|e| eyre!(e))
+        .wrap_err_with(|| {
+            format!(
+                "Failed to get relative path for project files directory: {}",
+                project_files_dir.display()
+            )
+        })?
+        .to_str()
+        .ok_or_else(|| {
+            eyre!(
+                "Project files directory contains invalid UTF-8: {}",
+                project_files_dir.display()
+            )
+        })?;
+
     let mut project_snapshot = ProjectSnapshot {
         git: project_setup.git(profile),
         steps: Default::default(),
@@ -158,7 +175,9 @@ pub fn create_project_snapshot(
                         },
                     },
                     StepKind::Complex { apply, export, env } => {
-                        let env_mapper = env.as_ref().map(EnvMapper::new);
+                        let env_mapper = env.as_ref().map(EnvMapper::new)
+                            .unwrap_or_default()
+                            .with_env("DE_PROJECT_FILES", relative_project_files_dir_str);
 
                         ui.indented(|ui| {
                             for export_command in export.as_slice() {
@@ -171,7 +190,7 @@ pub fn create_project_snapshot(
 
                                 let resolved_command = export_command
                                     .as_value()
-                                    .resolve_env(env_mapper.as_ref());
+                                    .resolve_env(&env_mapper);
 
                                 ui.info_item(&format!(
                                     "Running export command: {}",
@@ -216,13 +235,13 @@ pub fn create_project_snapshot(
                             let apply_vec = apply
                                 .as_slice()
                                 .iter()
-                                .map(|cmd| cmd.as_value().resolve_env(env_mapper.as_ref()))
+                                .map(|cmd| cmd.as_value().resolve_env(&env_mapper))
                                 .collect::<Vec<_>>();
 
                             for cmd in apply_vec.iter() {
                                 ui.info_item(&format!(
                                     "Apply Command: {}",
-                                    ui.theme.accent(&cmd.command)
+                                    ui.theme.accent(&cmd.to_string())
                                 ))?;
                             }
 
@@ -232,19 +251,20 @@ pub fn create_project_snapshot(
                         })?
                     }
                     StepKind::Basic { command, env } => {
-                        let env_mapper = env.as_ref().map(EnvMapper::new);
+                        let env_mapper = env.as_ref().map(EnvMapper::new).unwrap_or_default()
+                            .with_env("DE_PROJECT_FILES", relative_project_files_dir_str);
 
                         let command_vec = command
                             .as_slice()
                             .iter()
-                            .map(|cmd| cmd.as_value().resolve_env(env_mapper.as_ref()))
+                            .map(|cmd| cmd.as_value().resolve_env(&env_mapper))
                             .collect::<Vec<_>>();
 
                         ui.indented(|ui| {
                             for cmd in command_vec.iter() {
                                 ui.info_item(&format!(
                                     "Command: {}",
-                                    ui.theme.accent(&cmd.command)
+                                    ui.theme.accent(&cmd.to_string())
                                 ))?;
                             }
                             Ok(())

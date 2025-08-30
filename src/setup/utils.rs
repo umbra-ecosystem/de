@@ -1,8 +1,20 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+};
 
 pub struct EnvMapper<'a> {
-    pub _map: &'a BTreeMap<String, String>,
+    pub _map: Cow<'a, BTreeMap<String, String>>,
     pub values: BTreeMap<String, String>,
+}
+
+impl Default for EnvMapper<'_> {
+    fn default() -> Self {
+        Self {
+            _map: Cow::Owned(BTreeMap::new()),
+            values: BTreeMap::new(),
+        }
+    }
 }
 
 impl<'a> EnvMapper<'a> {
@@ -18,7 +30,19 @@ impl<'a> EnvMapper<'a> {
 
         tracing::debug!("Env mapper created with values: {values:?}");
 
-        Self { _map: map, values }
+        Self {
+            _map: Cow::Borrowed(map),
+            values,
+        }
+    }
+
+    pub fn with_env<K, V>(mut self, key: K, value: V) -> Self
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.values.insert(key.into(), value.into());
+        self
     }
 
     pub fn format_str(&self, value: &str) -> String {

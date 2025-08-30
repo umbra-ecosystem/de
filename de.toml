@@ -16,10 +16,10 @@ destination = "$1.env"
 
 [setup.steps.basic]
 name = "Demonstrate basic command"
-command = "cargo check"
+command = "echo 'Hello, World!'"
 
 [setup.steps.complex]
 name = "Demonstrate complex command"
-apply = { "command" = "tee ${FILE}", "stdin" = { "file" = "${FILE}" } }
+apply = { "command" = "tee", "stdin" = { "file" = "${DE_PROJECT_FILES}/${FILE}" } }
 export = { command = "cat ${FILE}", stdout = { "file" = "${FILE}" } }
 env = { FILE = "COMPLEX_COMMAND_FILE" }

@@ -33,18 +33,14 @@ pub enum ExportCommandResult {
 }
 
 impl ExportCommand {
-    pub fn resolve_env(&self, env_mapper: Option<&EnvMapper>) -> Self {
-        if let Some(env_mapper) = env_mapper {
-            Self {
-                command: env_mapper.format_str(&self.command),
-                stdout: self.stdout.as_ref().map(|pipe| match pipe {
-                    CommandPipe::File { file } => CommandPipe::File {
-                        file: env_mapper.format_str(file),
-                    },
-                }),
-            }
-        } else {
-            self.clone()
+    pub fn resolve_env(&self, env_mapper: &EnvMapper) -> Self {
+        Self {
+            command: env_mapper.format_str(&self.command),
+            stdout: self.stdout.as_ref().map(|pipe| match pipe {
+                CommandPipe::File { file } => CommandPipe::File {
+                    file: env_mapper.format_str(file),
+                },
+            }),
         }
     }
 

@@ -4,13 +4,15 @@ use eyre::Context;
 use walkdir::WalkDir;
 
 use crate::{
-    setup::snapshot::{
-        SNAPSHOT_MANIFEST_FILE, Snapshot,
-        types::{ProjectSnapshot, ProjectSnapshotStep},
+    setup::{
+        snapshot::{
+            SNAPSHOT_MANIFEST_FILE, Snapshot,
+            types::{ProjectSnapshot, ProjectSnapshotStep},
+        },
+        types::{ApplyCommand, CommandPipe},
     },
     types::Slug,
     utils::{git::run_git_command, ui::UserInterface, zip::extract_zip},
-    workspace::Workspace,
 };
 
 use super::types::ProjectSnapshotStepKind;
@@ -172,8 +174,16 @@ fn apply_project_step(
         } => {
             apply_project_step_copy_files(ui, project_dir, source, destination, *overwrite)?;
         }
-        ProjectSnapshotStepKind::Basic { command } => {}
-        ProjectSnapshotStepKind::Complex { apply } => {}
+        ProjectSnapshotStepKind::Basic { command } => {
+            for cmd in command {
+                run_apply_command(ui, project_dir, cmd)?;
+            }
+        }
+        ProjectSnapshotStepKind::Complex { apply } => {
+            for cmd in apply {
+                run_apply_command(ui, project_dir, cmd)?;
+            }
+        }
     }
 
     Ok(())
@@ -270,6 +280,79 @@ fn apply_project_step_copy_files(
             None,
         )?;
     }
+
+    Ok(())
+}
+
+fn run_apply_command(
+    ui: &UserInterface,
+    project_dir: &Path,
+    apply_command: &ApplyCommand,
+) -> eyre::Result<()> {
+    use std::process::{Command, Stdio};
+
+    ui.info_item(&format!(
+        "Running command: {}",
+        ui.theme.accent(&apply_command.to_string())
+    ))?;
+
+    let mut parts = apply_command.command.split_whitespace();
+    let program = parts
+        .next()
+        .ok_or_else(|| eyre::eyre!("Command is empty"))?;
+
+    let mut command = Command::new(program);
+    command.current_dir(project_dir);
+    command.args(parts);
+
+    if let Some(stdin_pipe) = &apply_command.stdin {
+        match stdin_pipe {
+            CommandPipe::File { file } => {
+                tracing::info!("Using file '{}' as stdin", file);
+
+                let file_path = project_dir
+                    .join(file)
+                    .canonicalize()
+                    .map_err(|e| eyre::eyre!(e))
+                    .wrap_err_with(|| {
+                        format!("Failed to canonicalize stdin file path: {}", file)
+                    })?;
+
+                let input = std::fs::File::open(&file_path)
+                    .map_err(|e| eyre::eyre!(e))
+                    .wrap_err_with(|| {
+                        format!("Failed to open stdin file: {}", file_path.display())
+                    })?;
+
+                command.stdin(Stdio::from(input));
+            }
+        }
+    }
+
+    let status = command
+        .status()
+        .map_err(|e| eyre::eyre!(e))
+        .wrap_err_with(|| format!("Failed to run command: {}", apply_command.command))?;
+
+    if !status.success() {
+        ui.error_item(
+            &format!(
+                "Command failed: {} (status: {})",
+                apply_command.command, status
+            ),
+            None,
+        )?;
+
+        return Err(eyre::eyre!("Command failed with status: {}", status));
+    }
+
+    ui.success_item(
+        &format!(
+            "Command succeeded: {}",
+            ui.theme.accent(&apply_command.command)
+        ),
+        None,
+    )?;
 
     Ok(())
 }
