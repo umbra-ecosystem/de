@@ -74,6 +74,8 @@ pub fn apply_snapshot(
         })?;
     }
 
+    // TODO: initialize the workspace with the projects
+
     Ok(())
 }
 
