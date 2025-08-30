@@ -1,6 +1,7 @@
 use std::{fs::File, path::Path};
 
 use eyre::Context;
+use walkdir::WalkDir;
 
 use crate::{
     setup::snapshot::{
@@ -111,7 +112,7 @@ fn apply_project_snapshot(
         )
     })?;
 
-    for (step_index, (step_name, step_snapshot)) in project_snapshot.steps.iter().enumerate() {
+    for (step_index, (_, step_snapshot)) in project_snapshot.steps.iter().enumerate() {
         ui.writeln(&format!(
             "{} {} {}",
             step_index + 1,
@@ -120,7 +121,7 @@ fn apply_project_snapshot(
         ))?;
 
         ui.indented(|ui| {
-            apply_project_step(ui, &project_dir, step_name, step_snapshot)?;
+            apply_project_step(ui, &project_dir, step_snapshot)?;
             Ok(())
         })?;
     }
@@ -161,19 +162,113 @@ fn project_step_git(
 fn apply_project_step(
     ui: &UserInterface,
     project_dir: &Path,
-    step_name: &Slug,
     step_snapshot: &ProjectSnapshotStep,
 ) -> eyre::Result<()> {
-    return Ok(());
-
     match &step_snapshot.kind {
         ProjectSnapshotStepKind::CopyFiles {
             source,
             destination,
             overwrite,
-        } => todo!(),
-        ProjectSnapshotStepKind::Complex { apply } => todo!(),
-        ProjectSnapshotStepKind::Basic { command } => todo!(),
+        } => {
+            apply_project_step_copy_files(ui, project_dir, source, destination, *overwrite)?;
+        }
+        ProjectSnapshotStepKind::Basic { command } => {}
+        ProjectSnapshotStepKind::Complex { apply } => {}
+    }
+
+    Ok(())
+}
+
+fn apply_project_step_copy_files(
+    ui: &UserInterface,
+    project_dir: &Path,
+    source: &str,
+    destination: &str,
+    overwrite: bool,
+) -> eyre::Result<()> {
+    ui.info_item(&format!(
+        "Processing {} -> {}",
+        ui.theme.accent(source),
+        ui.theme.accent(destination)
+    ))?;
+
+    let source_re = regex::Regex::new(source)
+        .map_err(|e| eyre::eyre!(e))
+        .wrap_err_with(|| format!("Invalid source regex: {}", source))?;
+
+    let mut matched_files = 0;
+
+    ui.indented(|ui| {
+        for entry in WalkDir::new(project_dir).max_depth(255) {
+            let entry = entry.map_err(|e| eyre::eyre!(e)).wrap_err_with(|| {
+                format!(
+                    "Failed to read files in project directory: {}",
+                    project_dir.display()
+                )
+            })?;
+
+            let name = if let Some(name) = entry.file_name().to_str() {
+                name
+            } else {
+                tracing::warn!("Skipping non-UTF8 file name: {:?}", entry.file_name());
+                continue;
+            };
+
+            if !source_re.is_match(name) {
+                continue;
+            };
+
+            let dest_name = source_re.replace(name, destination).to_string();
+            let parent = if let Some(parent) = entry.path().parent() {
+                parent
+            } else {
+                tracing::warn!("Skipping file with no parent: {:?}", entry.path());
+                continue;
+            };
+
+            let dest_path = parent.join(dest_name);
+            if dest_path.exists() && !overwrite {
+                ui.warning_item(
+                    &format!(
+                        "Skipping existing file: {}",
+                        ui.theme.dim(&dest_path.display().to_string())
+                    ),
+                    None,
+                )?;
+
+                continue;
+            }
+
+            std::fs::copy(entry.path(), &dest_path)
+                .map_err(|e| eyre::eyre!(e))
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to copy file from {} to {}",
+                        entry.path().display(),
+                        dest_path.display()
+                    )
+                })?;
+
+            ui.success_item(
+                &format!(
+                    "{} -> {}",
+                    &entry.path().display().to_string(),
+                    ui.theme.accent(&dest_path.display().to_string()),
+                ),
+                None,
+            )?;
+
+            matched_files += 1;
+        }
+
+        Ok(())
+    })?;
+
+    if matched_files == 0 {
+        ui.warning_item(
+            &format!("No files matched source pattern: {}", ui.theme.dim(source)),
+            None,
+        )?;
     }
 
     Ok(())
