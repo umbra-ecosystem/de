@@ -9,9 +9,13 @@ use crate::{
     setup::{
         export::ExportCommandResult,
         project::{StandardStep, StepKind},
-        snapshot::types::{
-            ProjectSnapshot, ProjectSnapshotStep, ProjectSnapshotStepKind, Snapshot,
-            WorkspaceSnapshot,
+        snapshot::{
+            calculate_snapshot_checksum,
+            checksum::ChecksumAlgorithm,
+            types::{
+                ProjectSnapshot, ProjectSnapshotStep, ProjectSnapshotStepKind, Snapshot,
+                WorkspaceSnapshot,
+            },
         },
         utils::EnvMapper,
     },
@@ -72,15 +76,23 @@ pub fn create_snapshot(
         }
     }
 
-    tracing::info!("Snapshot creation complete.");
-    Ok((
-        snapshot_dir,
-        Snapshot {
-            workspace: workspace_snapshot,
-            projects: project_snapshots,
-            created_at: Utc::now(),
-        },
-    ))
+    let mut snapshot = Snapshot {
+        workspace: workspace_snapshot,
+        projects: project_snapshots,
+        created_at: Utc::now(),
+        checksum: None,
+    };
+
+    snapshot.checksum = calculate_snapshot_checksum(
+        &ChecksumAlgorithm::Sha256,
+        &snapshot,
+        &canonical_snapshot_dir,
+    )
+    .map_err(|e| eyre!(e))
+    .wrap_err("Failed to calculate snapshot checksum")?
+    .into();
+
+    Ok((snapshot_dir, snapshot))
 }
 
 pub fn create_project_snapshot(

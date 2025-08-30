@@ -85,6 +85,10 @@ fn zip_snapshot(
         })?
         .len();
 
+    if let Some(checksum) = &snapshot.checksum {
+        ui.success_item(&format!("Checksum: {}", checksum), None)?;
+    }
+
     ui.success_item(
         &format!(
             "Output: {} {}",

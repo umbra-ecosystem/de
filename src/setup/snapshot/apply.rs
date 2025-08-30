@@ -7,6 +7,7 @@ use crate::{
     setup::{
         snapshot::{
             SNAPSHOT_MANIFEST_FILE, Snapshot,
+            checksum::{SnapshotVerification, verify_snapshot_checksum},
             types::{ProjectSnapshot, ProjectSnapshotStep},
         },
         types::{ApplyCommand, CommandPipe},
@@ -30,6 +31,21 @@ pub fn apply_snapshot(
 
     ui.info_item(&format!("workspace: {}", snapshot.workspace.name))?;
     ui.info_item(&format!("created at: {}", snapshot.created_at))?;
+
+    match verify_snapshot_checksum(&snapshot, snapshot_dir.path())? {
+        SnapshotVerification::Valid => {
+            ui.success_item("Snapshot checksum is valid", None)?;
+        }
+        SnapshotVerification::Invalid => {
+            ui.error_item("Snapshot checksum is invalid", None)?;
+            return Err(eyre::eyre!("Snapshot checksum is invalid"));
+        }
+        SnapshotVerification::NoChecksum => {
+            ui.warning_item("Snapshot has no checksum", None)?;
+            return Err(eyre::eyre!("Snapshot has no checksum"));
+        }
+    }
+
     ui.new_line()?;
 
     let canonical_snapshot_dir = snapshot_dir
@@ -114,13 +130,7 @@ fn apply_project_snapshot(
 
     ui.writeln(&format!("{} git", ui.theme.dim("0")))?;
     ui.indented(|ui| {
-        project_step_git(
-            ui,
-            project_name,
-            project_snapshot,
-            &project_dir,
-            target_dir,
-        )
+        project_step_git(ui, project_name, project_snapshot, &project_dir, target_dir)
     })?;
 
     for (step_index, (_, step_snapshot)) in project_snapshot.steps.iter().enumerate() {

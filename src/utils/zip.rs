@@ -59,7 +59,11 @@ pub fn extract_zip(zip_file: File, target_dir: &Path) -> eyre::Result<()> {
         let outpath = if let Some(name) = file.enclosed_name() {
             target_dir.join(name)
         } else {
-            return Err(eyre!("Invalid file name in zip archive: {}", file.name()));
+            return Err(eyre!(
+                "Invalid or potentially unsafe file name in zip archive: '{}'. \
+                This may indicate a path traversal attempt or a corrupted archive.",
+                file.name()
+            ));
         };
 
         if file.is_dir() {
@@ -72,13 +76,14 @@ pub fn extract_zip(zip_file: File, target_dir: &Path) -> eyre::Result<()> {
             tracing::debug!("Extracting file to: {}", outpath.display());
 
             if let Some(parent) = outpath.parent()
-                && !parent.exists() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|e| eyre!(e))
-                        .wrap_err_with(|| {
-                            format!("Failed to create directory: {}", parent.display())
-                        })?;
-                }
+                && !parent.exists()
+            {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| eyre!(e))
+                    .wrap_err_with(|| {
+                        format!("Failed to create directory: {}", parent.display())
+                    })?;
+            }
 
             let mut outfile = File::create(&outpath)
                 .map_err(|e| eyre!(e))

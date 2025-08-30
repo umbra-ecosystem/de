@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     setup::{
         project::StepService,
+        snapshot::checksum::SnapshotChecksum,
         types::{ApplyCommand, GitConfig},
     },
     types::Slug,
@@ -15,6 +16,7 @@ use crate::{
 pub struct Snapshot {
     pub workspace: WorkspaceSnapshot,
     pub projects: BTreeMap<Slug, ProjectSnapshot>,
+    pub checksum: Option<SnapshotChecksum>,
     pub created_at: DateTime<Utc>,
 }
 
