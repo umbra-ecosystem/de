@@ -32,13 +32,24 @@ pub fn apply_snapshot(
     ui.info_item(&format!("created at: {}", snapshot.created_at))?;
     ui.new_line()?;
 
+    let canonical_snapshot_dir = snapshot_dir
+        .path()
+        .canonicalize()
+        .map_err(|e| eyre::eyre!(e))
+        .wrap_err_with(|| {
+            format!(
+                "Failed to canonicalize snapshot directory: {}",
+                snapshot_dir.path().display()
+            )
+        })?;
+
     ui.heading("Projects")?;
     for (project_name, project_snapshot) in snapshot.projects.iter() {
         ui.subheading(&format!("{}", project_name))?;
         ui.indented(|ui| {
             apply_project_snapshot(
                 &ui,
-                snapshot_dir.path(),
+                &canonical_snapshot_dir,
                 &snapshot,
                 project_name,
                 project_snapshot,
@@ -103,7 +114,7 @@ fn apply_project_snapshot(
             )
         })?;
 
-    ui.writeln(&format!("0 git"))?;
+    ui.writeln(&format!("{} git", ui.theme.dim("0")))?;
     ui.indented(|ui| {
         project_step_git(
             ui,
@@ -123,7 +134,7 @@ fn apply_project_snapshot(
         ))?;
 
         ui.indented(|ui| {
-            apply_project_step(ui, &project_dir, step_snapshot)?;
+            apply_project_step(ui, snapshot_dir, &project_dir, step_snapshot)?;
             Ok(())
         })?;
     }
@@ -163,6 +174,7 @@ fn project_step_git(
 
 fn apply_project_step(
     ui: &UserInterface,
+    snapshot_dir: &Path,
     project_dir: &Path,
     step_snapshot: &ProjectSnapshotStep,
 ) -> eyre::Result<()> {
@@ -176,12 +188,12 @@ fn apply_project_step(
         }
         ProjectSnapshotStepKind::Basic { command } => {
             for cmd in command {
-                run_apply_command(ui, project_dir, cmd)?;
+                run_apply_command(ui, snapshot_dir, project_dir, cmd)?;
             }
         }
         ProjectSnapshotStepKind::Complex { apply } => {
             for cmd in apply {
-                run_apply_command(ui, project_dir, cmd)?;
+                run_apply_command(ui, snapshot_dir, project_dir, cmd)?;
             }
         }
     }
@@ -286,6 +298,7 @@ fn apply_project_step_copy_files(
 
 fn run_apply_command(
     ui: &UserInterface,
+    snapshot_dir: &Path,
     project_dir: &Path,
     apply_command: &ApplyCommand,
 ) -> eyre::Result<()> {
@@ -310,13 +323,22 @@ fn run_apply_command(
             CommandPipe::File { file } => {
                 tracing::info!("Using file '{}' as stdin", file);
 
-                let file_path = project_dir
+                let file_path = snapshot_dir
                     .join(file)
                     .canonicalize()
                     .map_err(|e| eyre::eyre!(e))
                     .wrap_err_with(|| {
                         format!("Failed to canonicalize stdin file path: {}", file)
                     })?;
+
+                // SECURITY: Ensure the file is within the snapshot directory
+                if !file_path.starts_with(snapshot_dir) {
+                    return Err(eyre::eyre!(
+                        "Stdin file path '{}' is outside of snapshot directory: {}",
+                        snapshot_dir.display(),
+                        file_path.display()
+                    ));
+                }
 
                 let input = std::fs::File::open(&file_path)
                     .map_err(|e| eyre::eyre!(e))
