@@ -11,10 +11,10 @@ use crate::{
     workspace::{Workspace, spin_up_workspace},
 };
 
-pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
+pub fn start(workspace_name: Option<Option<Slug>>, yes: bool) -> eyre::Result<()> {
     let ui = UserInterface::new();
 
-    check_for_active_workspace(&ui)?;
+    check_for_active_workspace(&ui, yes)?;
 
     if let Some(workspace_name) = workspace_name {
         // Start entire workspace
@@ -63,7 +63,7 @@ pub fn start(workspace_name: Option<Option<Slug>>) -> eyre::Result<()> {
     Ok(())
 }
 
-fn check_for_active_workspace(ui: &UserInterface) -> eyre::Result<()> {
+fn check_for_active_workspace(ui: &UserInterface, yes: bool) -> eyre::Result<()> {
     let working_workspace = Workspace::working()
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get working workspace")?;
@@ -74,20 +74,25 @@ fn check_for_active_workspace(ui: &UserInterface) -> eyre::Result<()> {
 
     ui.heading("Old Workspace")?;
 
-    let choice = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt(format!(
-            "A workspace ({}) is already active. How do you wish to proceed?",
-            ui.theme.accent(working_workspace.config().name.as_str())
-        ))
-        .items(&[
-            "Abort starting a new workspace",
-            "Deactivate the current workspace and start the new one",
-            "Start the new workspace alongside the current one",
-        ])
-        .default(0)
-        .interact()
-        .map_err(|e| eyre!(e))
-        .wrap_err("Failed to prompt for workspace conflict resolution")?;
+    let choice = if yes {
+        // When --yes is used, default to option 1 (deactivate current and start new)
+        1
+    } else {
+        Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(format!(
+                "A workspace ({}) is already active. How do you wish to proceed?",
+                ui.theme.accent(working_workspace.config().name.as_str())
+            ))
+            .items(&[
+                "Abort starting a new workspace",
+                "Deactivate the current workspace and start the new one",
+                "Start the new workspace alongside the current one",
+            ])
+            .default(0)
+            .interact()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to prompt for workspace conflict resolution")?
+    };
 
     match choice {
         0 => {
@@ -96,7 +101,7 @@ fn check_for_active_workspace(ui: &UserInterface) -> eyre::Result<()> {
         1 => {
             ui.new_line()?;
 
-            let stopped = stop_workspace(ui, working_workspace)
+            let stopped = stop_workspace(ui, working_workspace, yes)
                 .map_err(|e| eyre!(e))
                 .wrap_err("Failed to stop current workspace")?;
 

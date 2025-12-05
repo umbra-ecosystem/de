@@ -36,6 +36,10 @@ pub enum Commands {
     Start {
         #[arg(short, long)]
         workspace: Option<Option<Slug>>,
+
+        /// Skip confirmation prompts and proceed with starting.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Spin down all projects in the workspace.
@@ -43,6 +47,10 @@ pub enum Commands {
         /// The name of the workspace to stop projects in. Defaults to the active workspace.
         #[arg(short, long)]
         workspace: Option<Slug>,
+
+        /// Skip confirmation prompts and proceed with stopping.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Run a command in the context of the current project.

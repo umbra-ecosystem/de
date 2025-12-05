@@ -44,8 +44,8 @@ fn main() -> eyre::Result<()> {
             name,
             workspace,
         } => commands::init(path, name, workspace),
-        Commands::Start { workspace } => commands::start(workspace),
-        Commands::Stop { workspace } => commands::stop(workspace),
+        Commands::Start { workspace, yes } => commands::start(workspace, yes),
+        Commands::Stop { workspace, yes } => commands::stop(workspace, yes),
         Commands::Run {
             command,
             project,
