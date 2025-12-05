@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-12-05
+
 ### Added
 
 - Added `de setup` command to apply workspace snapshots to a target directory. This enables initializing a workspace from a snapshot file, including setup steps and configuration.
