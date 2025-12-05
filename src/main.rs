@@ -9,12 +9,14 @@ mod commands;
 mod config;
 mod constants;
 mod project;
+mod setup;
 mod types;
 mod utils;
 mod workspace;
 
 use clap::Parser;
 use eyre::{Context, eyre};
+use tracing_subscriber::EnvFilter;
 
 use crate::{
     cli::{
@@ -25,7 +27,14 @@ use crate::{
 };
 
 fn main() -> eyre::Result<()> {
-    color_eyre::install()?;
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init()
+        .expect("Failed to initialize tracing subscriber");
+
+    color_eyre::config::HookBuilder::default()
+        .display_env_section(false)
+        .install()?;
 
     let cli = Cli::parse();
 
@@ -65,6 +74,10 @@ fn main() -> eyre::Result<()> {
         }
         Commands::Scan { dir, workspace } => commands::scan(dir, workspace),
         Commands::Update { all, workspace } => commands::update(all, workspace),
+        Commands::Setup {
+            snapshot,
+            target_dir: dir,
+        } => commands::setup(snapshot, dir),
         Commands::Task { command } => match command {
             TaskCommands::Check { task } => commands::task::check(task),
             TaskCommands::List => commands::task::list(),
@@ -106,6 +119,9 @@ fn main() -> eyre::Result<()> {
                 unset,
             } => commands::workspace::config(workspace, key, value, unset),
             WorkspaceCommands::Info { workspace } => commands::workspace::info(workspace),
+            WorkspaceCommands::Snapshot { workspace, profile } => {
+                commands::workspace::snapshot(workspace, profile)
+            }
         },
         Commands::Doctor { workspace } => commands::doctor(workspace),
         Commands::Status { workspace } => commands::status(workspace),
@@ -130,10 +146,9 @@ fn main() -> eyre::Result<()> {
         let error_prefix = theme.error("Error:");
         let cause_prefix = theme.dim("Caused by:");
 
-        if let Some(cause) = err.source() {
-            eprintln!("{error_prefix} {err}\n{cause_prefix} {cause}");
-        } else {
-            eprintln!("{error_prefix} {err}");
+        eprintln!("{error_prefix} {err}");
+        for cause in err.chain().skip(1) {
+            eprintln!("{cause_prefix} {cause}");
         }
 
         std::process::exit(1);

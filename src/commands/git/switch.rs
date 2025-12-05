@@ -215,7 +215,7 @@ fn get_target_branch_from_query(workspace: &Workspace, query: String) -> Result<
         println!("Found one matching branch: {}", matches[0].name);
         Ok(matches[0].name.clone())
     } else if matches.is_empty() {
-        return Err(eyre::eyre!("No branch found matching query '{}'", query));
+        Err(eyre::eyre!("No branch found matching query '{}'", query))
     } else {
         let branch_names: Vec<_> = matches.iter().map(|b| b.name.clone()).collect();
 
@@ -226,7 +226,7 @@ fn get_target_branch_from_query(workspace: &Workspace, query: String) -> Result<
             .default(0)
             .interact()?;
 
-        return Ok(branch_names[selection].clone());
+        Ok(branch_names[selection].clone())
     }
 }
 

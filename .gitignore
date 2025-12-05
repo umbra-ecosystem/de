@@ -1,3 +1,5 @@
 /.de
 /target
 .DS_Store
+.env
+de.zip

@@ -1,3 +1,25 @@
 [project]
 name = "de"
 workspace = "de"
+
+[setup]
+git = { "url" = "https://github.com/umbra-ecosystem/de.git", "branch" = "main" }
+
+[setup.profiles.dev]
+git = { branch = "develop" }
+
+[setup.steps.copy]
+name = "Demonstrate copy files"
+type = "copy_files"
+source = "(.*)\\.env\\.example"
+destination = "$1.env"
+
+[setup.steps.basic]
+name = "Demonstrate basic command"
+command = "echo 'Hello, World!'"
+
+[setup.steps.complex]
+name = "Demonstrate complex command"
+apply = { "command" = "tee ${FILE}", "stdin" = { "file" = "${DE_PROJECT_FILES}/${FILE}" } }
+export = { command = "cat ${FILE}", stdout = { "file" = "${FILE}" } }
+env = { FILE = "COMPLEX_COMMAND_FILE" }

@@ -116,6 +116,16 @@ pub enum Commands {
         workspace: Option<Option<Slug>>,
     },
 
+    /// Manage the workspace setup and configuration.
+    Setup {
+        /// The snapshot file to create or apply to the workspace.
+        snapshot: PathBuf,
+
+        /// The directory to apply the snapshot to. Defaults to the current directory.
+        #[arg(short, long)]
+        target_dir: Option<PathBuf>,
+    },
+
     /// Manage tasks defined in the project.
     Task {
         #[command(subcommand)]
@@ -334,5 +344,15 @@ pub enum WorkspaceCommands {
         /// The name of the workspace to get information about. Defaults to the active workspace.
         #[arg(short, long)]
         workspace: Option<Slug>,
+    },
+
+    Snapshot {
+        /// The name of the workspace to create a snapshot for. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// The profile to use for the snapshot. Defaults to "default".
+        #[arg(short, long, default_value = "default")]
+        profile: Slug,
     },
 }

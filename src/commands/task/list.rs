@@ -10,37 +10,34 @@ pub fn list() -> eyre::Result<()> {
     if let Some(project) = Project::current()
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get current project")?
+        && let Some(tasks) = project.manifest().tasks.as_ref()
+        && !tasks.is_empty()
     {
-        if let Some(tasks) = project.manifest().tasks.as_ref() {
-            if !tasks.is_empty() {
-                println!(
-                    "{} {}",
-                    theme.bold("Tasks in project:"),
-                    theme.highlight(project.manifest().project().name.as_str())
-                );
-                for (name, task) in tasks {
-                    println!("- {}: {}", name.as_str(), theme.dim(&task.command_str()));
-                }
-                found_tasks = true;
-            }
+        println!(
+            "{} {}",
+            theme.bold("Tasks in project:"),
+            theme.highlight(project.manifest().project().name.as_str())
+        );
+        for (name, task) in tasks {
+            println!("- {}: {}", name.as_str(), theme.dim(&task.command_str()));
         }
+        found_tasks = true;
     }
 
     // List workspace tasks
     if let Some(workspace) = Workspace::active()
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get active workspace")?
+        && !workspace.config().tasks.is_empty()
     {
-        if !workspace.config().tasks.is_empty() {
-            if found_tasks {
-                println!(); // Add a newline for separation if project tasks were listed
-            }
-            println!("Tasks in workspace '{}':", workspace.config().name);
-            for (name, command) in &workspace.config().tasks {
-                println!("  - {}: {}", theme.accent(name.as_str()), command);
-            }
-            found_tasks = true;
+        if found_tasks {
+            println!(); // Add a newline for separation if project tasks were listed
         }
+        println!("Tasks in workspace '{}':", workspace.config().name);
+        for (name, command) in &workspace.config().tasks {
+            println!("  - {}: {}", theme.accent(name.as_str()), command);
+        }
+        found_tasks = true;
     }
 
     if !found_tasks {

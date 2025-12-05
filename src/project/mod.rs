@@ -1,6 +1,6 @@
 pub mod config;
 mod task;
-pub use task::{Task, RawTask};
+pub use task::{RawTask, Task};
 
 use ::config::FileFormat;
 use eyre::{Context, eyre};

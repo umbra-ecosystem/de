@@ -1,10 +1,13 @@
 pub mod cli;
 pub mod formatter;
 pub mod git;
+pub mod path;
+pub mod serde;
 pub mod shim;
 pub mod theme;
 pub mod ui;
 pub mod unix;
+pub mod zip;
 
 use crate::constants::{ORGANIZATION_NAME, PROJECT_NAME};
 

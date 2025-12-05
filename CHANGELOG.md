@@ -11,11 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `de setup` command to apply workspace snapshots to a target directory. This enables initializing a workspace from a snapshot file, including setup steps and configuration.
+- Added `de workspace snapshot` command to create and export workspace snapshots. This bundles the workspace configuration and setup steps into a zip archive for sharing or backup.
+- When starting a workspace, `de` now detects if another workspace is already active and prompts you to either abort, deactivate the current workspace, or start the new one alongside the existing one.
 - Added `de shim reinstate` command to update or recreate all shims for project tasks. This command scans for all tasks with shims and rewrites all shim files, ensuring command aliases are up to date and consistent with your current configuration.
 - Added short flag `-d` for the `on-dirty` CLI option.
 
 ### Changed
 
+- Improved error output in the `fallthrough` command: now displays a styled error message and prints CLI help when a project or task is not found, instead of only bailing with an error.
 - Major UI refactoring: Introduced a `UserInterface` module for styled terminal output, refactored multiple commands to use it, added loading bars and improved messaging.
 - Pass extra arguments as trailing arguments in CLI. The shim exec call now adds '--' before extra arguments to improve argument handling and compatibility with various commands.
 - After program update, update all shims to ensure they are in sync with the latest project configuration.

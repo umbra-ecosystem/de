@@ -22,8 +22,13 @@ pub fn stop(workspace_name: Option<Slug>) -> eyre::Result<()> {
     };
 
     let ui = UserInterface::new();
+    stop_workspace(&ui, workspace)?;
 
-    let workspace_status = workspace_status(&ui, &workspace)
+    Ok(())
+}
+
+pub fn stop_workspace(ui: &UserInterface, workspace: Workspace) -> eyre::Result<bool> {
+    let workspace_status = workspace_status(ui, &workspace)
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to get workspace status")?;
 
@@ -39,7 +44,7 @@ pub fn stop(workspace_name: Option<Slug>) -> eyre::Result<()> {
 
         if !prompt {
             println!("Aborting stop operation.");
-            return Ok(());
+            return Ok(false);
         }
     }
 
@@ -51,7 +56,7 @@ pub fn stop(workspace_name: Option<Slug>) -> eyre::Result<()> {
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to deactivate workspace in config")?;
 
-    Ok(())
+    Ok(true)
 }
 
 fn deactivate_workspace_if_active(workspace_name: Slug) -> eyre::Result<()> {

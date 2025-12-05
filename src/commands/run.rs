@@ -73,19 +73,18 @@ pub fn run(
         if let Some(project) = Project::current()
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to get current project")?
+            && run_project_task(&project, &task_name, &args)?
         {
-            if run_project_task(&project, &task_name, &args)? {
-                return Ok(());
-            }
+            return Ok(());
         }
     }
 
     // If project task not found, try workspace task
-    if let Some(workspace) = workspace {
-        if workspace.config().tasks.contains_key(&task_name) {
-            println!("Running workspace task '{task_name}'...");
-            return super::workspace::run(None, task_name, args);
-        }
+    if let Some(workspace) = workspace
+        && workspace.config().tasks.contains_key(&task_name)
+    {
+        println!("Running workspace task '{task_name}'...");
+        return super::workspace::run(None, task_name, args);
     }
 
     Err(eyre!(
