@@ -24,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Works seamlessly in both no-config mode and with existing `de.toml` configurations
   - Helpful tip message shown when no tasks are found, listing supported detection sources
 
+- **Enhanced Git Operations (Phase 3)**: Git commands now work without requiring a workspace or `de.toml`.
+  - **`de git switch <branch>`** works on any git repository:
+    - Operates on current repository when no workspace is active
+    - Auto-detects default branch from git config (no workspace required)
+    - Supports fuzzy branch matching and fallback branches
+    - Handles dirty working directories with stash/force/prompt options
+  - **`de git base-reset [branch]`** works on single repositories:
+    - Resets current repository to base branch (defaults to auto-detected default branch)
+    - Works without workspace context
+    - Handles uncommitted changes and unpushed commits
+  - **`de status`** already worked in Phase 1 for inferred projects
+  - All git commands show helpful "💡 No de.toml found - working in inferred mode" messages
+  - Graceful fallback: workspace mode when workspace exists, single-repo mode otherwise
+
 - **No-Config Mode (Phase 1)**: `de` now works without requiring a `de.toml` configuration file for basic Docker Compose operations.
   - `de start`, `de stop`, and `de status` commands now work in any directory with Docker Compose files
   - Project name is automatically inferred from the directory name

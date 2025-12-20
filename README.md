@@ -32,10 +32,16 @@
   - 🔧 Load `.env` files and environment variable configuration
   - 🏷️ Support for local overrides and configuration hierarchy
 
+- **Git Operations**
+  - 🔀 Switch branches across workspace or in single repository with `de git switch`
+  - 🔄 Reset projects to base branch with `de git base-reset`
+  - 🎯 Works without workspace - operates on current git repository
+  - 🔍 Auto-detects default branch from git config
+  - 🧹 Handles dirty working directories with stash/force/prompt options
+
 - **Diagnostics & Status**
   - 🩺 Diagnose environment, dependencies, and configuration with `de doctor`
   - 📊 Get a concise, actionable summary of Git and Docker Compose status with `de status`
-  - 🧹 Easily reset all workspace projects to the base branch with `de git base-reset`
 
 ## Installation
 
@@ -92,6 +98,31 @@ de stop
 This means you can run `de` commands from any subdirectory of your project, and it will find the correct project root. For example, running `de status` from `my-project/src/controllers/` will find and use `my-project/` as the project root.
 
 The project name is inferred from the root directory name, and you'll see a helpful tip suggesting you run `de init` for more advanced features like workspace management, tasks, and dependencies.
+
+**Git Operations in Zero Config Mode**: Git commands also work without configuration!
+
+```bash
+# Switch branches in current repository
+de git switch feature-branch
+
+# Switch with fallback if branch doesn't exist
+de git switch feature-1 --fallback main
+
+# Reset current repository to base branch (auto-detects default branch)
+de git base-reset
+
+# Reset to specific branch
+de git base-reset main
+
+# Handle dirty working directory
+de git switch develop --on-dirty stash
+```
+
+Git commands automatically:
+- Work on the current git repository (no workspace required)
+- Auto-detect the default branch from git config
+- Support fuzzy branch name matching
+- Handle uncommitted changes with interactive prompts or `--on-dirty` flag
 
 ### Full Configuration Mode
 

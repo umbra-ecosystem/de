@@ -8,12 +8,11 @@ use itertools::Itertools;
 use crate::{
     cli::OnDirtyAction,
     project::Project,
-    types::Slug,
     utils::{
         git::{branch_exists, get_default_branch, run_git_command},
         ui::UserInterface,
     },
-    workspace::{Workspace, WorkspaceProject},
+    workspace::Workspace,
 };
 
 pub fn switch(
@@ -25,9 +24,26 @@ pub fn switch(
 
     ui.heading("Switch Branch")?;
 
-    let workspace =
-        Workspace::active()?.ok_or_else(|| eyre::eyre!("No active workspace found."))?;
+    // Check if we have a workspace or should work on inferred project
+    let workspace_opt = Workspace::active()?;
 
+    if let Some(workspace) = workspace_opt {
+        // Workspace mode - switch all projects in workspace
+        switch_workspace(&ui, workspace, query, fallback, on_dirty)
+    } else {
+        // Inferred mode - switch current project only
+        switch_current_project(&ui, query, fallback, on_dirty)
+    }
+}
+
+/// Switch branches for all projects in a workspace
+fn switch_workspace(
+    ui: &UserInterface,
+    workspace: Workspace,
+    query: Option<String>,
+    fallback: Option<String>,
+    on_dirty: Option<OnDirtyAction>,
+) -> Result<()> {
     let target_branch = get_target_branch(&workspace, query)?;
 
     ui.info_item(&format!("Workspace: {}", workspace.config().name))?;
@@ -40,7 +56,7 @@ pub fn switch(
     ui.heading("Preflight")?;
 
     if !dirty_projects.is_empty() {
-        handle_dirty_projects_preflight(&ui, &dirty_projects, &action)?;
+        handle_dirty_projects_preflight(ui, &dirty_projects, &action)?;
     } else {
         ui.success_item("No dirty projects found. Proceeding...", None)?;
     }
@@ -55,11 +71,14 @@ pub fn switch(
     let mut projects_with_issues = Vec::new();
 
     for (project_name, ws_project) in workspace.config().projects.iter() {
+        let project = Project::from_dir(&ws_project.dir)
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to load project '{project_name}'"))?;
+
         let success = switch_project_branch(
-            &ui,
-            &workspace,
-            ws_project,
-            project_name,
+            ui,
+            Some(&workspace),
+            &project,
             &target_branch,
             fallback.as_deref(),
             &action,
@@ -86,25 +105,95 @@ pub fn switch(
     Ok(())
 }
 
+/// Switch branch for current project only (no workspace)
+fn switch_current_project(
+    ui: &UserInterface,
+    query: Option<String>,
+    fallback: Option<String>,
+    on_dirty: Option<OnDirtyAction>,
+) -> Result<()> {
+    // Get current project (inferred if no de.toml)
+    let project = Project::current_or_inferred()?
+        .ok_or_else(|| eyre::eyre!("No project found in current directory"))?;
+
+    ui.info_item(&format!("Project: {}", project.manifest().project().name))?;
+
+    if project.is_inferred() {
+        ui.info_item("💡 No de.toml found - working in inferred mode")?;
+    }
+
+    // Determine target branch
+    let target_branch = if let Some(query) = query {
+        // Get branches from current project only
+        let branches = get_project_branches(project.dir())?;
+
+        // Fuzzy search for branch
+        find_branch_from_query(&branches, &query)?
+    } else {
+        return Err(eyre::eyre!("Target branch is required"));
+    };
+
+    ui.info_item(&format!("Target Branch: {target_branch}"))?;
+
+    // Auto-detect fallback branch if not provided
+    let fallback_branch = if let Some(fallback) = fallback {
+        fallback
+    } else {
+        // Try to get default branch from git
+        get_default_branch(project.dir()).unwrap_or_else(|_| "main".to_string())
+    };
+
+    let action = on_dirty.unwrap_or(OnDirtyAction::Prompt);
+
+    ui.new_line()?;
+    ui.heading("Switching Branch")?;
+
+    // Reuse the existing switch_project_branch logic
+    let success = switch_project_branch(
+        ui,
+        None, // No workspace in single-repo mode
+        &project,
+        &target_branch,
+        Some(&fallback_branch),
+        &action,
+    )?;
+
+    ui.new_line()?;
+    if success {
+        ui.success_item(&format!("✓ Switched to branch '{target_branch}'"), None)?;
+    } else {
+        return Err(eyre::eyre!("Branch switch failed"));
+    }
+
+    Ok(())
+}
+
 fn switch_project_branch(
     ui: &UserInterface,
-    workspace: &Workspace,
-    ws_project: &WorkspaceProject,
-    project_name: &Slug,
+    workspace: Option<&Workspace>,
+    project: &Project,
     target_branch: &str,
     fallback: Option<&str>,
     on_dirty: &OnDirtyAction,
 ) -> eyre::Result<bool> {
-    ui.subheading(&format!(
-        "{project_name} {}",
-        ui.theme.dim(&format!("({})", ws_project.dir.display()))
-    ))?;
+    // Only show subheading if we're in workspace mode (processing multiple projects)
+    if workspace.is_some() {
+        ui.subheading(&format!(
+            "{} {}",
+            project.manifest().project().name,
+            ui.theme.dim(&format!("({})", project.dir().display()))
+        ))?;
+    }
 
-    let project = Project::from_dir(&ws_project.dir)
-        .map_err(|e| eyre!(e))
-        .wrap_err_with(|| format!("Failed to load project '{project_name}'"))?;
+    let indent_if_workspace = |ui: &UserInterface, f: &dyn Fn(&UserInterface) -> Result<bool>| {
+        if workspace.is_some() {
+            ui.indented(f)
+        } else {
+            f(ui)
+        }
+    };
 
-    ui.indented(|ui| {
+    indent_if_workspace(ui, &|ui| {
         if !project.manifest().git.clone().unwrap_or_default().enabled {
             ui.info_item("Git is not enabled for this project. Skipping...")?;
             return Ok(true);
@@ -120,16 +209,20 @@ fn switch_project_branch(
 
         let fallback_branch = if let Some(fallback) = fallback {
             fallback.to_string()
-        } else if let Some(default_branch) = workspace.config().default_branch.as_deref() {
-            default_branch.to_string()
+        } else if let Some(ws) = workspace {
+            if let Some(default_branch) = ws.config().default_branch.as_deref() {
+                default_branch.to_string()
+            } else {
+                get_default_branch(project.dir()).unwrap_or_else(|_| "main".to_string())
+            }
         } else {
-            get_default_branch(&ws_project.dir).unwrap_or_else(|_| "main".to_string())
+            get_default_branch(project.dir()).unwrap_or_else(|_| "main".to_string())
         };
 
-        let checkout_branch = if branch_exists(target_branch, &ws_project.dir)? {
+        let checkout_branch = if branch_exists(target_branch, project.dir())? {
             ui.info_item("Target branch found.")?;
             target_branch
-        } else if branch_exists(&fallback_branch, &ws_project.dir)? {
+        } else if branch_exists(&fallback_branch, project.dir())? {
             ui.warning_item(
                 &format!("Target branch not found. Falling back to '{fallback_branch}'."),
                 None,
@@ -145,7 +238,7 @@ fn switch_project_branch(
             return Ok(true);
         };
 
-        if let Err(e) = run_git_command(&["checkout", checkout_branch], &ws_project.dir) {
+        if let Err(e) = run_git_command(&["checkout", checkout_branch], project.dir()) {
             ui.error_item(&format!("Failed to switch branch: {e}"), None)?;
         } else {
             ui.success_item("Switched to target branch.", None)?;
@@ -154,7 +247,7 @@ fn switch_project_branch(
         // Restore stashed changes if it was stashed previously
         if let DirtyResult::Stashed = dirty_result {
             ui.info_item("Restoring stashed changes...")?;
-            if let Err(e) = run_git_command(&["stash", "pop"], &ws_project.dir) {
+            if let Err(e) = run_git_command(&["stash", "pop"], project.dir()) {
                 ui.error_item(&format!("Failed to restore stashed changes: {e}"), None)?;
                 return Ok(false);
             } else {
@@ -162,7 +255,7 @@ fn switch_project_branch(
             }
         }
 
-        if is_project_dirty(&ws_project.dir)? {
+        if is_project_dirty(project.dir())? {
             ui.error_item(
                 &format!(
                     "{} detected. Please resolve manually.",
@@ -187,9 +280,13 @@ fn get_target_branch(workspace: &Workspace, query: Option<String>) -> Result<Str
 
 /// Fuzzy search through branches and return only match or use chosen branch
 fn get_target_branch_from_query(workspace: &Workspace, query: String) -> Result<String> {
-    use dialoguer::{Select, theme::ColorfulTheme};
-
     let branches = get_workspace_branches(workspace)?;
+    find_branch_from_query(&branches, &query)
+}
+
+/// Fuzzy search through a list of branches
+fn find_branch_from_query(branches: &[Branch], query: &str) -> Result<String> {
+    use dialoguer::{Select, theme::ColorfulTheme};
 
     // Fuzzy search: first, try for exact match (case-sensitive)
     if let Some(branch) = branches.iter().find(|b| b.name == query) {
@@ -197,10 +294,7 @@ fn get_target_branch_from_query(workspace: &Workspace, query: String) -> Result<
     }
 
     // Then, try for case-insensitive match
-    if let Some(branch) = branches
-        .iter()
-        .find(|b| b.name.eq_ignore_ascii_case(&query))
-    {
+    if let Some(branch) = branches.iter().find(|b| b.name.eq_ignore_ascii_case(query)) {
         return Ok(branch.name.clone());
     }
 
