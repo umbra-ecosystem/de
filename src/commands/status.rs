@@ -2,7 +2,7 @@ use crate::{
     project::Project,
     types::Slug,
     utils::{theme::Theme, ui::UserInterface},
-    workspace::{Workspace, WorkspaceProject},
+    workspace::{Workspace, WorkspaceOrProject, WorkspaceProject},
 };
 use console::style;
 use eyre::{WrapErr, eyre};
@@ -14,27 +14,25 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
     tracing::info!("Starting status command");
     let ui = UserInterface::new();
 
-    let workspace = if let Some(workspace_name) = workspace_name {
+    if let Some(workspace_name) = workspace_name {
         tracing::info!("Loading workspace '{}'", workspace_name);
-        Workspace::load_from_name(&workspace_name)
+        let workspace = Workspace::load_from_name(&workspace_name)
             .map_err(|e| eyre!(e))
             .wrap_err_with(|| format!("Failed to load workspace {workspace_name}"))?
-            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?
+            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
+
+        workspace_status(&ui, &workspace)?;
     } else {
-        match Workspace::active()? {
-            Some(ws) => ws,
-            None => {
-                // No active workspace - try to show current project status
-                if let Some(project) = Project::current_or_inferred()? {
-                    return show_inferred_project_status(&ui, &project);
-                }
-                ui.warning_item("No active workspace found.", None)?;
-                return Ok(());
+        // Use active_or_inferred to get context
+        match Workspace::active_or_inferred()? {
+            WorkspaceOrProject::Workspace(workspace) => {
+                workspace_status(&ui, &workspace)?;
+            }
+            WorkspaceOrProject::InferredProject(project) => {
+                show_inferred_project_status(&ui, &project)?;
             }
         }
-    };
-
-    workspace_status(&ui, &workspace)?;
+    }
 
     tracing::info!("Finished status command");
     Ok(())

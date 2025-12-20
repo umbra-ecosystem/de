@@ -103,6 +103,63 @@ Added Phase 1 implementation to Unreleased section:
 - Lists affected commands
 - Notes backward compatibility
 
+## Architecture Improvements
+
+### WorkspaceOrProject Enum
+
+Added a new enum to cleanly represent the execution context:
+
+```rust
+pub enum WorkspaceOrProject {
+    /// Running within a workspace context
+    Workspace(Workspace),
+    /// Running with an inferred project (no workspace)
+    InferredProject(Project),
+}
+```
+
+**New Method**: `Workspace::active_or_inferred() -> eyre::Result<WorkspaceOrProject>`
+- Tries to get active workspace first
+- Falls back to inferred project if no workspace
+- Returns error only if neither exists
+- Eliminates nested Option handling
+
+**Usage in `de status`**:
+```rust
+match Workspace::active_or_inferred()? {
+    WorkspaceOrProject::Workspace(workspace) => {
+        workspace_status(&ui, &workspace)?;
+    }
+    WorkspaceOrProject::InferredProject(project) => {
+        show_inferred_project_status(&ui, &project)?;
+    }
+}
+```
+
+This pattern:
+- ✅ Cleaner than nested `if let Some` checks
+- ✅ Explicit about the two contexts
+- ✅ Easier to extend in the future
+- ✅ Self-documenting code
+
+### ProjectStatus Refactoring
+
+Eliminated duplicate code by reusing `ProjectStatus` for both workspace and inferred projects:
+
+**New Methods**:
+1. `ProjectStatus::gather_from_project(project: &Project) -> Self`
+   - Public method for gathering status from any loaded Project
+   - Used for inferred projects
+
+2. `ProjectStatus::gather_from_project_with_flags(...) -> Self` (private)
+   - Internal helper shared by both workspace and inferred gathering
+   - Eliminates ~50 lines of duplicate logic
+
+**Benefits**:
+- Single source of truth for status display
+- Consistent formatting between workspace and inferred projects
+- Easier to maintain and test
+
 ## How It Works
 
 ### User Flow: No Configuration
@@ -223,18 +280,19 @@ de start
 ## Metrics
 
 ### Code Changes
-- **Files modified**: 5
+- **Files modified**: 6
   - `src/types/mod.rs`: Added `from_dir_name()` method
   - `src/project/mod.rs`: Added inferred project support (4 methods)
+  - `src/workspace/mod.rs`: Added `WorkspaceOrProject` enum and `active_or_inferred()` method
   - `src/commands/start.rs`: Updated to support inferred mode
   - `src/commands/stop.rs`: Updated to support inferred mode
-  - `src/commands/status.rs`: Updated to support inferred mode
+  - `src/commands/status.rs`: Updated to support inferred mode, refactored to reuse ProjectStatus
   
 - **Files documented**: 2
   - `README.md`: Added "Zero Configuration Mode" section
   - `CHANGELOG.md`: Added Phase 1 entry
 
-- **Lines of code**: ~150 added
+- **Lines of code**: ~150 added, ~65 removed (net: ~85 added)
 
 ### Compilation
 - ✅ Builds successfully

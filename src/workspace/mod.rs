@@ -14,6 +14,14 @@ pub use config::WorkspaceProject;
 pub use dependency::{DependencyGraph, DependencyGraphError};
 pub use utils::{add_project_to_workspace, spin_down_workspace, spin_up_workspace};
 
+/// Represents the context in which commands are running
+pub enum WorkspaceOrProject {
+    /// Running within a workspace context
+    Workspace(Workspace),
+    /// Running with an inferred project (no workspace)
+    InferredProject(Project),
+}
+
 #[derive(Debug)]
 pub struct Workspace {
     config: WorkspaceConfig,
@@ -178,6 +186,21 @@ impl Workspace {
             .wrap_err_with(|| format!("Failed to load workspace {workspace_name}"))?;
 
         Ok(workspace)
+    }
+
+    /// Get the active workspace or fall back to an inferred project
+    pub fn active_or_inferred() -> eyre::Result<WorkspaceOrProject> {
+        // Try to get active workspace first
+        if let Some(workspace) = Self::active()? {
+            return Ok(WorkspaceOrProject::Workspace(workspace));
+        }
+
+        // Fall back to inferred project
+        if let Some(project) = Project::current_or_inferred()? {
+            return Ok(WorkspaceOrProject::InferredProject(project));
+        }
+
+        Err(eyre!("No workspace or project context found"))
     }
 
     pub fn active() -> eyre::Result<Option<Self>> {
