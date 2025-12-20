@@ -8,6 +8,13 @@ use crate::{
     workspace::Workspace,
 };
 
+#[tracing::instrument(
+    skip_all,
+    fields(
+        command = ?args.get(0),
+        args = ?args.get(1..)
+    )
+)]
 pub fn fallthrough(args: Vec<String>) -> eyre::Result<()> {
     let theme = Theme::new();
 

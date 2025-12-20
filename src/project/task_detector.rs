@@ -390,21 +390,29 @@ impl TaskDetectorRegistry {
         let mut all_tasks = BTreeMap::new();
 
         for detector in &self.detectors {
-            if detector.can_detect(dir) {
-                match detector.detect(dir) {
-                    Ok(tasks) => {
-                        for task in tasks {
-                            // Only add if not already present (first detector wins)
-                            all_tasks.entry(task.name.clone()).or_insert(task);
-                        }
+            if !detector.can_detect(dir) {
+                continue;
+            }
+
+            match detector.detect(dir) {
+                Ok(tasks) => {
+                    tracing::debug!(
+                        "Detected {} tasks from {}",
+                        tasks.len(),
+                        detector.source().display_name()
+                    );
+
+                    for task in tasks {
+                        // Only add if not already present (first detector wins)
+                        all_tasks.entry(task.name.clone()).or_insert(task);
                     }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to detect tasks from {}: {}",
-                            detector.source().display_name(),
-                            e
-                        );
-                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to detect tasks from {}: {}",
+                        detector.source().display_name(),
+                        e
+                    );
                 }
             }
         }

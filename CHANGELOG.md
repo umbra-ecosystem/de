@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Enhanced Commands for No-Config Mode (Phase 4)**: Complete Docker Compose workflow and improved single-project operations.
+- **Enhanced Commands for No-Config Mode**: Complete Docker Compose workflow and improved single-project operations.
   - **Docker Compose Commands**: Added six new commands that work in both workspace and no-config mode:
     - **`de logs`** - View service logs with follow, tail, and service filtering options
     - **`de restart`** - Restart all services or specific service
@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Shows "(Running in no-config mode)" indicator
     - Provides useful diagnostics for any Docker-based project
 
-- **Task Auto-Detection (Phase 2)**: `de` now automatically detects tasks from common project configuration files.
+- **Task Auto-Detection**: `de` now automatically detects tasks from common project configuration files.
   - **`de task list`** displays both configured tasks (from `de.toml`) and detected tasks from:
     - `package.json` (npm/yarn/pnpm scripts)
     - `Makefile` (make targets)
@@ -52,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Works seamlessly in both no-config mode and with existing `de.toml` configurations
   - Helpful tip message shown when no tasks are found, listing supported detection sources
 
-- **Enhanced Git Operations (Phase 3)**: Git commands now work without requiring a workspace or `de.toml`.
+- **Enhanced Git Operations**: Git commands now work without requiring a workspace or `de.toml`.
   - **`de git switch <branch>`** works on any git repository:
     - Operates on current repository when no workspace is active
     - Auto-detects default branch from git config (no workspace required)
@@ -66,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All git commands show helpful "💡 No de.toml found - working in inferred mode" messages
   - Graceful fallback: workspace mode when workspace exists, single-repo mode otherwise
 
-- **No-Config Mode (Phase 1)**: `de` now works without requiring a `de.toml` configuration file for basic Docker Compose operations.
+- **No-Config Mode**: `de` now works without requiring a `de.toml` configuration file for basic Docker Compose operations.
   - `de start`, `de stop`, and `de status` commands now work in any directory with Docker Compose files
   - Project name is automatically inferred from the directory name
   - **Smart Project Root Detection**: Recursively searches upward to find project root

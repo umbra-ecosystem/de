@@ -3,6 +3,13 @@ use std::process::Command;
 
 use crate::{types::Slug, workspace::Workspace};
 
+#[tracing::instrument(
+    skip_all,
+    fields(
+        workspace_name = ?workspace_name,
+        command = ?command,
+    ),
+)]
 pub fn exec_all(workspace_name: Option<Slug>, command: Vec<String>) -> Result<()> {
     let mut command_iter = command.into_iter();
     let program = command_iter
