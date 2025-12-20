@@ -4,8 +4,8 @@ use clap::CommandFactory;
 use eyre::{Context, bail, eyre};
 
 use crate::{
-    cli::Cli, commands::run::run_project_task, project::Project, types::Slug, utils::theme::Theme,
-    workspace::Workspace,
+    cli::Cli, commands::run::run_project_task, project::Project, types::Slug,
+    utils::ui::UserInterface, workspace::Workspace,
 };
 
 #[tracing::instrument(
@@ -16,7 +16,7 @@ use crate::{
     )
 )]
 pub fn fallthrough(args: Vec<String>) -> eyre::Result<()> {
-    let theme = Theme::new();
+    let ui = UserInterface::new();
 
     let (command, args) = split_args(args)
         .map_err(|e| eyre!(e))
@@ -57,10 +57,7 @@ pub fn fallthrough(args: Vec<String>) -> eyre::Result<()> {
     match Project::current_or_inferred() {
         Ok(Some(project)) => {
             if project.is_inferred() {
-                println!(
-                    "{} Trying to run task in no-config mode (no de.toml found)",
-                    console::style("ℹ").cyan()
-                );
+                ui.info_item("Trying to run task in no-config mode (no de.toml found)")?;
             }
 
             if run_project_task(&project, &command, &args)? {
@@ -68,37 +65,38 @@ pub fn fallthrough(args: Vec<String>) -> eyre::Result<()> {
             }
 
             // If we reach here, task was not found
-            let error_prefix = theme.error("Error:");
-            eprintln!(
-                "{error_prefix} Task '{}' not found in the current project.",
-                command
-            );
-            eprintln!();
-            eprintln!("Searched in:");
-            eprintln!("  • Configured tasks (de.toml)");
-            eprintln!(
-                "  • Detected tasks (package.json, Makefile, justfile, Cargo.toml, pyproject.toml)"
-            );
-            eprintln!();
-            eprintln!(
+            ui.error_item(
+                &format!("Task '{}' not found in the current project.", command),
+                None,
+            )?;
+            ui.new_line()?;
+            ui.writeln("Searched in:")?;
+            ui.writeln("  • Configured tasks (de.toml)")?;
+            ui.writeln(
+                "  • Detected tasks (package.json, Makefile, justfile, Cargo.toml, pyproject.toml)",
+            )?;
+            ui.new_line()?;
+            ui.writeln(&format!(
                 "Run {} to see available tasks.",
-                theme.highlight("de task list")
-            );
+                ui.theme.highlight("de task list")
+            ))?;
 
             std::process::exit(1);
         }
         Ok(None) | Err(_) => {
-            let error_prefix = theme.error("Error:");
-            eprintln!(
-                "{error_prefix} Could not determine project context for command '{}'.",
-                command
-            );
-            eprintln!();
-            eprintln!("Tried:");
-            eprintln!("  • Active workspace projects");
-            eprintln!("  • Current project (de.toml)");
-            eprintln!("  • Inferred project (git repository or docker-compose files)");
-            eprintln!();
+            ui.error_item(
+                &format!(
+                    "Could not determine project context for command '{}'.",
+                    command
+                ),
+                None,
+            )?;
+            ui.new_line()?;
+            ui.writeln("Tried:")?;
+            ui.writeln("  • Active workspace projects")?;
+            ui.writeln("  • Current project (de.toml)")?;
+            ui.writeln("  • Inferred project (git repository or docker-compose files)")?;
+            ui.new_line()?;
         }
     }
 

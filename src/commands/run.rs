@@ -1,7 +1,7 @@
 use eyre::{Context, eyre};
 use std::process::Command;
 
-use crate::{project::Project, types::Slug, utils::theme::Theme, workspace::Workspace};
+use crate::{project::Project, types::Slug, utils::ui::UserInterface, workspace::Workspace};
 
 pub fn run(
     task_name: Slug,
@@ -9,7 +9,7 @@ pub fn run(
     project_name: Option<Slug>,
     workspace_name: Option<Slug>,
 ) -> eyre::Result<()> {
-    let theme = Theme::new();
+    let ui = UserInterface::new();
 
     let workspace = match workspace_name.as_ref() {
         Some(workspace_name) => Workspace::load_from_name(workspace_name)
@@ -81,10 +81,7 @@ pub fn run(
         {
             // Show helpful indicator for inferred projects
             if project.is_inferred() {
-                println!(
-                    "{} Running task in no-config mode (no de.toml found)",
-                    console::style("ℹ").cyan()
-                );
+                ui.info_item("Running task in no-config mode (no de.toml found)")?;
             }
 
             if run_project_task(&project, &task_name, &args)? {
@@ -105,24 +102,23 @@ pub fn run(
     };
 
     // Provide helpful error message
-    let error_prefix = theme.error("Error:");
-    eprintln!("{error_prefix} Task '{}' not found.", task_name);
-    eprintln!();
-    eprintln!("Searched in:");
+    ui.error_item(&format!("Task '{}' not found.", task_name), None)?;
+    ui.new_line()?;
+    ui.writeln("Searched in:")?;
     if has_workspace {
-        eprintln!("  • Current/inferred project tasks");
-        eprintln!("  • Workspace tasks");
+        ui.writeln("  • Current/inferred project tasks")?;
+        ui.writeln("  • Workspace tasks")?;
     } else {
-        eprintln!("  • Configured tasks (de.toml)");
-        eprintln!(
-            "  • Detected tasks (package.json, Makefile, justfile, Cargo.toml, pyproject.toml)"
-        );
+        ui.writeln("  • Configured tasks (de.toml)")?;
+        ui.writeln(
+            "  • Detected tasks (package.json, Makefile, justfile, Cargo.toml, pyproject.toml)",
+        )?;
     }
-    eprintln!();
-    eprintln!(
+    ui.new_line()?;
+    ui.writeln(&format!(
         "Run {} to see available tasks.",
-        theme.highlight("de task list")
-    );
+        ui.theme.highlight("de task list")
+    ))?;
 
     std::process::exit(1)
 }

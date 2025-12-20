@@ -1,14 +1,14 @@
 use eyre::{Context, Result, eyre};
 use std::process::Command;
 
-use crate::{project::Project, types::Slug, utils::theme::Theme, workspace::Workspace};
+use crate::{project::Project, types::Slug, utils::ui::UserInterface, workspace::Workspace};
 
 pub fn down(
     workspace_name: Option<Slug>,
     remove_volumes: bool,
     extra_args: Vec<String>,
 ) -> Result<()> {
-    let theme = Theme::new();
+    let ui = UserInterface::new();
 
     // Try workspace mode first
     if let Some(ws_name) = workspace_name {
@@ -17,11 +17,11 @@ pub fn down(
             .wrap_err("Failed to load workspace")?
             .ok_or_else(|| eyre!("Workspace '{}' not found", ws_name))?;
 
-        println!(
-            "{} Stopping and removing containers for workspace: {}\n",
-            console::style("ℹ").cyan(),
-            theme.highlight(&workspace.config().name.to_string())
-        );
+        ui.writeln(&format!(
+            "Stopping and removing containers for workspace: {}",
+            ui.theme.highlight(&workspace.config().name.to_string())
+        ))?;
+        ui.new_line()?;
 
         for (project_name, ws_project) in workspace.config().projects.iter() {
             let project = Project::from_dir(&ws_project.dir)
@@ -29,13 +29,12 @@ pub fn down(
                 .wrap_err_with(|| format!("Failed to load project '{}'", project_name))?;
 
             if let Some(compose_path) = project.docker_compose_path()? {
-                println!(
-                    "{} Stopping project: {}",
-                    console::style("→").cyan(),
-                    theme.highlight(&project_name.to_string())
-                );
+                ui.info_item(&format!(
+                    "Stopping project: {}",
+                    ui.theme.highlight(&project_name.to_string())
+                ))?;
                 down_services(&compose_path, remove_volumes, &extra_args)?;
-                println!();
+                ui.new_line()?;
             }
         }
 
@@ -49,10 +48,7 @@ pub fn down(
         .ok_or_else(|| eyre!("No project found in current directory"))?;
 
     if project.is_inferred() {
-        println!(
-            "{} Running in no-config mode (no de.toml found)",
-            console::style("ℹ").cyan()
-        );
+        ui.info_item("Running in no-config mode (no de.toml found)")?;
     }
 
     let compose_path = project

@@ -1,7 +1,7 @@
 use eyre::{Context, Result, bail};
 use std::process::Command;
 
-use crate::{project::Project, types::Slug, workspace::Workspace};
+use crate::{project::Project, types::Slug, utils::ui::UserInterface, workspace::Workspace};
 use eyre::eyre;
 
 pub fn exec(
@@ -9,6 +9,7 @@ pub fn exec(
     workspace_name: Option<Slug>,
     command: Vec<String>,
 ) -> Result<()> {
+    let ui = UserInterface::new();
     let mut command = command.into_iter();
     let program = command.next().ok_or_else(|| eyre!("No command provided"))?;
     let args = command.collect::<Vec<_>>();
@@ -58,10 +59,7 @@ pub fn exec(
         .ok_or_else(|| eyre!("No project found in current directory"))?;
 
     if project.is_inferred() {
-        println!(
-            "{} Running in no-config mode (no de.toml found)",
-            console::style("ℹ").cyan()
-        );
+        ui.info_item("Running in no-config mode (no de.toml found)")?;
     }
 
     let project_dir = project.dir();
