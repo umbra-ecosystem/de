@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Task Auto-Detection (Phase 2)**: `de` now automatically detects tasks from common project configuration files.
+  - **`de task list`** displays both configured tasks (from `de.toml`) and detected tasks from:
+    - `package.json` (npm/yarn/pnpm scripts)
+    - `Makefile` (make targets)
+    - `justfile` (just recipes)
+    - `Cargo.toml` (common cargo commands: build, test, run, check, clippy, fmt, etc.)
+    - `pyproject.toml` (poetry scripts, poe tasks, and common Python tools)
+  - **`de run <task>`** can execute detected tasks even if not defined in `de.toml`
+  - Detected tasks are grouped by source and displayed with their commands and descriptions
+  - Configured tasks always take precedence over detected tasks (no conflicts)
+  - Works seamlessly in both no-config mode and with existing `de.toml` configurations
+  - Helpful tip message shown when no tasks are found, listing supported detection sources
+
 - **No-Config Mode (Phase 1)**: `de` now works without requiring a `de.toml` configuration file for basic Docker Compose operations.
   - `de start`, `de stop`, and `de status` commands now work in any directory with Docker Compose files
   - Project name is automatically inferred from the directory name

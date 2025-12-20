@@ -1,4 +1,5 @@
 use eyre::{Context, eyre};
+use std::process::Command;
 
 use crate::{project::Project, types::Slug, workspace::Workspace};
 
@@ -70,7 +71,7 @@ pub fn run(
         }
     } else {
         // If no project specified, try to run the task in the current project
-        if let Some(project) = Project::current()
+        if let Some(project) = Project::current_or_inferred()
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to get current project")?
             && run_project_task(&project, &task_name, &args)?
@@ -98,6 +99,7 @@ pub fn run_project_task(
     task_name: &Slug,
     args: &Vec<String>,
 ) -> eyre::Result<bool> {
+    // First, try to find the task in configured tasks
     if let Some(task) = project
         .manifest()
         .tasks
@@ -120,6 +122,51 @@ pub fn run_project_task(
 
         if !status.success() {
             return Err(eyre!("Task '{}' failed with status: {}", task_name, status));
+        }
+
+        return Ok(true);
+    }
+
+    // If not found in configured tasks, try detected tasks
+    let detected_tasks = project
+        .detect_tasks()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to detect tasks")?;
+
+    if let Some(detected_task) = detected_tasks.get(task_name.as_str()) {
+        println!(
+            "Running detected task '{}' from {}",
+            task_name,
+            detected_task.source.display_name()
+        );
+
+        // Parse the command to extract program and arguments
+        let mut parts = detected_task.command.split_whitespace();
+        let program = parts
+            .next()
+            .ok_or_else(|| eyre!("Empty command for detected task"))?;
+        let task_args: Vec<&str> = parts.collect();
+
+        let mut command = Command::new(program);
+        command.current_dir(project.dir());
+        command.args(&task_args);
+
+        // Add any additional arguments passed by the user
+        if !args.is_empty() {
+            command.args(args);
+        }
+
+        let status = command
+            .status()
+            .map_err(|e| eyre!(e))
+            .wrap_err_with(|| format!("Failed to execute detected task '{}'", task_name))?;
+
+        if !status.success() {
+            return Err(eyre!(
+                "Detected task '{}' failed with status: {}",
+                task_name,
+                status
+            ));
         }
 
         return Ok(true);

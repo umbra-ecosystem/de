@@ -1,6 +1,8 @@
 pub mod config;
 mod task;
+pub mod task_detector;
 pub use task::{RawTask, Task};
+pub use task_detector::{DetectedTask, TaskDetectorRegistry};
 
 use ::config::FileFormat;
 use eyre::{Context, eyre};
@@ -125,6 +127,7 @@ impl Project {
     }
 
     /// Creates a project from a directory, inferring values if no de.toml exists
+    #[allow(dead_code)]
     pub fn from_dir_or_inferred(dir: &Path) -> eyre::Result<Self> {
         match Self::from_dir(dir) {
             Ok(project) => Ok(project),
@@ -233,6 +236,12 @@ impl Project {
 
     pub fn tasks(&self) -> Option<&BTreeMap<Slug, Task>> {
         self.manifest.tasks.as_ref()
+    }
+
+    /// Detect tasks from project configuration files
+    pub fn detect_tasks(&self) -> eyre::Result<BTreeMap<String, DetectedTask>> {
+        let registry = TaskDetectorRegistry::new();
+        registry.detect_all(self.dir())
     }
 
     pub fn manifest_path(&self) -> &PathBuf {

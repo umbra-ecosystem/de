@@ -17,10 +17,11 @@
 
 - **Task & Command Execution**
   - ⚡ Define and run both shell commands and Docker Compose service tasks
+  - 🔍 Auto-detect tasks from `package.json`, `Makefile`, `justfile`, `Cargo.toml`, and `pyproject.toml`
   - 🚀 Execute arbitrary commands within a project's environment
   - 🏃🏽‍♀️ Fallthrough for direct task execution without the `run` subcommand
   - 🔗 Create command shims/aliases for easy access
-  - ✅ Check and list available tasks
+  - ✅ Check and list available tasks (both configured and detected)
 
 - **Docker Compose Integration**
   - 🚀 Start and stop Docker Compose projects - current project + dependencies or entire workspace
@@ -153,6 +154,56 @@ de run build --release  # Pass additional arguments
 de run --project my-api test  # Run a task in a specific project
 de run --workspace my-workspace build-all  # Run a task in a specific workspace
 ```
+
+#### 3a. Task Auto-Detection
+
+`de` automatically detects tasks from common project configuration files, so you can run them even without defining them in `de.toml`. This works in both zero-config mode and with existing configurations.
+
+**Supported task sources:**
+
+- **`package.json`** - npm/yarn/pnpm scripts
+- **`Makefile`** - make targets
+- **`justfile`** - just recipes
+- **`Cargo.toml`** - common cargo commands (build, test, run, check, clippy, fmt, etc.)
+- **`pyproject.toml`** - poetry scripts, poe tasks, and common Python tools
+
+**List all tasks** (configured + detected):
+
+```bash
+de task list
+```
+
+Output example:
+```
+Configured tasks in project: my-api
+  test (cargo test)
+  dev (docker-compose exec api cargo watch -x run)
+
+Detected tasks in project: my-api
+  from Cargo.toml
+    build (cargo build) - Build the project
+    check (cargo check) - Check the project for errors
+    clippy (cargo clippy) - Run clippy lints
+    fmt (cargo fmt) - Format code
+  from Makefile
+    install (make install)
+    clean (make clean)
+```
+
+**Run detected tasks** directly:
+
+```bash
+# Run a detected npm script
+de run build
+
+# Run a detected make target
+de run install
+
+# Run a detected cargo command
+de run clippy
+```
+
+**Note:** Configured tasks in `de.toml` always take precedence over detected tasks if there's a name conflict.
 
 ### 4. Command Fallthrough (Direct Task Execution)
 
