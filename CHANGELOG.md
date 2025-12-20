@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-Config Mode (Phase 1)**: `de` now works without requiring a `de.toml` configuration file for basic Docker Compose operations.
   - `de start`, `de stop`, and `de status` commands now work in any directory with Docker Compose files
   - Project name is automatically inferred from the directory name
+  - **Smart Project Root Detection**: Recursively searches upward to find project root
+    - Prioritizes `.git` directory (respects repository boundaries)
+    - Falls back to Docker Compose file detection
+    - Works from any subdirectory of your project
+  - **WorkspaceOrProject enum**: Clean pattern for handling workspace vs inferred project contexts
+  - **Refactored status display**: Eliminated code duplication by reusing `ProjectStatus` for both workspace and inferred projects
   - Helpful tips suggest running `de init` to unlock more features (workspace management, tasks, dependencies)
   - Supports all existing functionality when `de.toml` is present (fully backward compatible)
 

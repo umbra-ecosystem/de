@@ -84,7 +84,13 @@ de stop
 - `docker-compose.yaml`
 - `docker-compose.yml`
 
-The project name is inferred from the directory name, and you'll see a helpful tip suggesting you run `de init` for more advanced features like workspace management, tasks, and dependencies.
+**Smart Project Root Detection**: `de` automatically finds your project root by searching upward for:
+1. `.git` directory (highest priority - respects repository boundaries)
+2. Docker Compose files (if no git repo found)
+
+This means you can run `de` commands from any subdirectory of your project, and it will find the correct project root. For example, running `de status` from `my-project/src/controllers/` will find and use `my-project/` as the project root.
+
+The project name is inferred from the root directory name, and you'll see a helpful tip suggesting you run `de init` for more advanced features like workspace management, tasks, and dependencies.
 
 ### Full Configuration Mode
 

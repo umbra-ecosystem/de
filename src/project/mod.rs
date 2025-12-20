@@ -17,6 +17,27 @@ use crate::{
     types::Slug,
 };
 
+/// Default Docker Compose file names in order of precedence
+/// https://docs.docker.com/compose/compose-file/
+const DEFAULT_COMPOSE_FILES: &[&str] = &[
+    "compose.yaml",
+    "compose.yml",
+    "docker-compose.yaml",
+    "docker-compose.yml",
+];
+
+/// Check if a Docker Compose file exists in the given directory
+/// Returns the path to the first matching compose file, or None if not found
+fn find_compose_file_in_dir(dir: &Path) -> Option<PathBuf> {
+    for filename in DEFAULT_COMPOSE_FILES {
+        let path = dir.join(filename);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    None
+}
+
 pub struct Project {
     dir: PathBuf,
     manifest: ProjectManifest,
@@ -113,15 +134,18 @@ impl Project {
 
     /// Creates a project with inferred values from the directory structure
     fn infer_from_dir(dir: &Path) -> eyre::Result<Self> {
+        // Find the project root by searching upward for indicators
+        let project_root = Self::find_inferred_project_root(dir);
+
         // Load .env if exists (same as from_dir)
-        let dot_env = dir.join(".env");
+        let dot_env = project_root.join(".env");
         if dot_env.exists() {
             dotenvy::from_path_override(&dot_env)
                 .map_err(|e| eyre!(e))
                 .wrap_err_with(|| {
                     format!(
                         "Failed to load environment variables from {}",
-                        dir.display()
+                        project_root.display()
                     )
                 })?;
         }
@@ -129,7 +153,7 @@ impl Project {
         // Create inferred manifest
         let manifest = ProjectManifest {
             project: ProjectMetadata {
-                name: Slug::from_dir_name(dir)?,
+                name: Slug::from_dir_name(&project_root)?,
                 workspace: Slug::from_str("default")
                     .map_err(|e| eyre!("Failed to create default workspace slug: {}", e))?,
                 docker_compose: None, // Auto-detected by docker_compose_path()
@@ -141,10 +165,40 @@ impl Project {
         };
 
         Ok(Self {
-            dir: dir.to_path_buf(),
+            dir: project_root.to_path_buf(),
             manifest,
-            manifest_path: dir.join("de.toml"), // Path for reference (doesn't exist)
+            manifest_path: project_root.join("de.toml"), // Path for reference (doesn't exist)
         })
+    }
+
+    /// Find the project root by searching upward for indicators like .git or docker-compose files
+    fn find_inferred_project_root(start_dir: &Path) -> PathBuf {
+        let mut current_dir = start_dir.to_path_buf();
+
+        // First pass: search upward for .git directory (strongest indicator)
+        let mut search_dir = start_dir.to_path_buf();
+        loop {
+            if search_dir.join(".git").is_dir() {
+                return search_dir;
+            }
+
+            if !search_dir.pop() {
+                break;
+            }
+        }
+
+        // Second pass: search upward for docker-compose files
+        loop {
+            if find_compose_file_in_dir(&current_dir).is_some() {
+                return current_dir;
+            }
+
+            // Try to go up one directory
+            if !current_dir.pop() {
+                // Reached filesystem root, return the starting directory
+                return start_dir.to_path_buf();
+            }
+        }
     }
 
     /// Gets the current project, with inferred values if no de.toml exists
@@ -237,19 +291,8 @@ impl Project {
         }
 
         // Check for default Docker Compose files in order of precedence
-        // https://docs.docker.com/compose/compose-file/
-        const DEFAULT_COMPOSE_FILES: &[&str] = &[
-            "compose.yaml",
-            "compose.yml",
-            "docker-compose.yaml",
-            "docker-compose.yml",
-        ];
-
-        for filename in DEFAULT_COMPOSE_FILES {
-            let docker_compose_path = self.dir().join(filename);
-            if let Some(path) = canonicalize(self, &docker_compose_path)? {
-                return Ok(Some(path));
-            }
+        if let Some(compose_path) = find_compose_file_in_dir(self.dir()) {
+            return canonicalize(self, &compose_path);
         }
 
         Ok(None)

@@ -105,6 +105,45 @@ Added Phase 1 implementation to Unreleased section:
 
 ## Architecture Improvements
 
+### Recursive Project Root Finding
+
+When inferring a project (no de.toml), `de` now intelligently searches upward to find the project root, similar to how git and other tools work.
+
+**Search Strategy** (in `find_inferred_project_root()`):
+1. **First pass**: Search upward for `.git` directory (strongest indicator of project boundary)
+2. **Second pass**: If no git repo found, search upward for docker-compose files
+3. **Fallback**: Use starting directory if no indicators found
+
+**Prioritization**:
+- `.git` directory takes precedence over docker-compose files
+- This prevents nested project confusion
+- Matches user expectations from git workflows
+
+**Example Behavior**:
+```
+/project-root/
+  .git/
+  compose.yaml
+  backend/
+    src/
+      controllers/  ← You run `de status` here
+```
+
+Result: Finds `/project-root` (because of .git), not `/project-root/backend`
+
+**Benefits**:
+- ✅ Works from any subdirectory of a project
+- ✅ Respects git repository boundaries
+- ✅ Intuitive behavior matching other dev tools
+- ✅ Handles nested projects correctly
+
+**Supported Project Indicators**:
+- `.git/` (highest priority)
+- `compose.yaml`
+- `compose.yml`
+- `docker-compose.yaml`
+- `docker-compose.yml`
+
 ### WorkspaceOrProject Enum
 
 Added a new enum to cleanly represent the execution context:
@@ -159,6 +198,74 @@ Eliminated duplicate code by reusing `ProjectStatus` for both workspace and infe
 - Single source of truth for status display
 - Consistent formatting between workspace and inferred projects
 - Easier to maintain and test
+
+### Docker Compose File Detection Refactoring
+
+Extracted Docker Compose file detection into a reusable helper function:
+
+**New Helper Function**: `find_compose_file_in_dir(dir: &Path) -> Option<PathBuf>`
+- Checks for Docker Compose files in order of precedence
+- Returns the first matching file, or None
+- Used in multiple places:
+  - `find_inferred_project_root()` - Finding project root by detecting compose files
+  - `docker_compose_path()` - Finding the compose file to use for operations
+
+**Before (duplicated logic)**:
+```rust
+// In find_inferred_project_root()
+for file in DEFAULT_COMPOSE_FILES {
+    if current_dir.join(file).exists() {
+        return current_dir;
+    }
+}
+
+// In docker_compose_path()
+for filename in DEFAULT_COMPOSE_FILES {
+    let docker_compose_path = self.dir().join(filename);
+    if let Some(path) = canonicalize(self, &docker_compose_path)? {
+        return Ok(Some(path));
+    }
+}
+```
+
+**After (DRY with helper function)**:
+```rust
+// Shared constant
+const DEFAULT_COMPOSE_FILES: &[&str] = &[
+    "compose.yaml",
+    "compose.yml", 
+    "docker-compose.yaml",
+    "docker-compose.yml",
+];
+
+// Reusable helper
+fn find_compose_file_in_dir(dir: &Path) -> Option<PathBuf> {
+    for filename in DEFAULT_COMPOSE_FILES {
+        let path = dir.join(filename);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+// Usage in find_inferred_project_root()
+if find_compose_file_in_dir(&current_dir).is_some() {
+    return current_dir;
+}
+
+// Usage in docker_compose_path()
+if let Some(compose_path) = find_compose_file_in_dir(self.dir()) {
+    return canonicalize(self, &compose_path);
+}
+```
+
+**Benefits**:
+- ✅ Eliminates code duplication
+- ✅ Single place to update compose file detection logic
+- ✅ More testable (can test the function in isolation)
+- ✅ Clearer intent with dedicated function
+- ✅ Consistent behavior across all uses
 
 ## How It Works
 
@@ -292,7 +399,7 @@ de start
   - `README.md`: Added "Zero Configuration Mode" section
   - `CHANGELOG.md`: Added Phase 1 entry
 
-- **Lines of code**: ~150 added, ~65 removed (net: ~85 added)
+- **Lines of code**: ~200 added, ~80 removed (net: ~120 added)
 
 ### Compilation
 - ✅ Builds successfully
