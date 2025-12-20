@@ -50,65 +50,11 @@ fn show_inferred_project_status(ui: &UserInterface, project: &Project) -> eyre::
 
     ui.new_line()?;
 
-    // Show Docker Compose status
-    if let Ok(Some(compose_path)) = project.docker_compose_path() {
-        ui.writeln(&format!(
-            "Docker Compose: {}",
-            ui.theme
-                .success(compose_path.file_name().unwrap().to_string_lossy().as_ref())
-        ))?;
+    // Gather project status using the same logic as workspace projects
+    let status = ProjectStatus::gather_from_project(project);
 
-        if let Some(services) = get_docker_services(&compose_path) {
-            ui.new_line()?;
-            ui.writeln("Services:")?;
-            for service in services {
-                let status_text = if service.status.contains("Up") {
-                    ui.theme.success(&service.status)
-                } else {
-                    ui.theme.error(&service.status)
-                };
-                ui.writeln(&format!(
-                    "  {} - {}",
-                    ui.theme.bold(&service.name),
-                    status_text
-                ))?;
-            }
-        }
-    } else {
-        ui.writeln(&format!("Docker Compose: {}", ui.theme.dim("none")))?;
-    }
-
-    ui.new_line()?;
-
-    // Show Git status if in a git repo
-    let dir = project.dir();
-    let git_status = GitStatus::gather(dir);
-
-    if git_status.is_repo {
-        ui.writeln("Git:")?;
-
-        if let Some(branch) = &git_status.branch {
-            ui.writeln(&format!("  Branch: {}", ui.theme.accent(branch)))?;
-        }
-
-        if git_status.dirty {
-            ui.writeln(&format!("  Status: {}", ui.theme.error("dirty")))?;
-        } else {
-            ui.writeln(&format!("  Status: {}", ui.theme.success("clean")))?;
-        }
-
-        if let Some(ahead) = git_status.ahead {
-            if ahead > 0 {
-                ui.writeln(&format!("  Ahead: {} commit(s)", ahead))?;
-            }
-        }
-
-        if let Some(behind) = git_status.behind {
-            if behind > 0 {
-                ui.writeln(&format!("  Behind: {} commit(s)", behind))?;
-            }
-        }
-    }
+    // Print using existing display logic
+    status.print(ui)?;
 
     Ok(())
 }
@@ -218,29 +164,12 @@ impl ProjectStatus {
                         && &p.manifest().project().name == project_name
                 });
 
-                let dc_path = project.docker_compose_path().unwrap_or(None);
-                let docker_services = dc_path.as_ref().and_then(|compose_path| {
-                    tracing::debug!("Checking Docker Compose services for '{}'", project_name);
-                    get_docker_services(compose_path)
-                });
-                let downed_services = dc_path
-                    .as_ref()
-                    .and_then(|compose_path| get_downed_services(compose_path));
-
-                let git = if project.manifest().git.clone().unwrap_or_default().enabled {
-                    GitStatus::gather(dir)
-                } else {
-                    GitStatus::disabled()
-                };
-
-                ProjectStatus {
-                    slug: project_name.clone(),
-                    present: true,
+                Self::gather_from_project_with_flags(
+                    &project,
+                    project_name.clone(),
+                    present,
                     current,
-                    docker_services,
-                    downed_services,
-                    git,
-                }
+                )
             }
             Err(e) => {
                 tracing::error!("Failed to load project '{}': {:?}", project_name, e);
@@ -253,6 +182,46 @@ impl ProjectStatus {
                     git: GitStatus::not_repo(),
                 }
             }
+        }
+    }
+
+    /// Gather status from a loaded Project (for inferred projects)
+    fn gather_from_project(project: &Project) -> Self {
+        let project_name = project.manifest().project().name.clone();
+        Self::gather_from_project_with_flags(project, project_name, true, true)
+    }
+
+    /// Internal helper to gather status from a project with custom flags
+    fn gather_from_project_with_flags(
+        project: &Project,
+        slug: Slug,
+        present: bool,
+        current: bool,
+    ) -> Self {
+        let dir = project.dir();
+
+        let dc_path = project.docker_compose_path().unwrap_or(None);
+        let docker_services = dc_path.as_ref().and_then(|compose_path| {
+            tracing::debug!("Checking Docker Compose services for '{}'", slug);
+            get_docker_services(compose_path)
+        });
+        let downed_services = dc_path
+            .as_ref()
+            .and_then(|compose_path| get_downed_services(compose_path));
+
+        let git = if project.manifest().git.clone().unwrap_or_default().enabled {
+            GitStatus::gather(dir)
+        } else {
+            GitStatus::disabled()
+        };
+
+        ProjectStatus {
+            slug,
+            present,
+            current,
+            docker_services,
+            downed_services,
+            git,
         }
     }
 
