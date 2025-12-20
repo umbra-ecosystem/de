@@ -389,7 +389,7 @@ Projects are configured using `de.toml` files with the following structure:
 [project]
 name = "project-name"
 workspace = "workspace-name"
-docker_compose = "docker-compose.yml"    # Optional: path to docker-compose file
+docker_compose = "docker-compose.yml"    # Optional: path to docker-compose file (see Docker Compose section below)
 depends_on = ["database", "cache"]       # Optional: projects that must start before this one
 
 [tasks]
@@ -401,6 +401,36 @@ service-task = { service = "service-name", command = "command in service" }
 
 # Complex shell command
 complex-task = { command = "multi part command with args" }
+```
+
+#### Docker Compose Integration
+
+The `docker_compose` field is optional. If not specified, `de` will automatically detect Docker Compose files in your project directory using the standard file naming conventions, checking in this order:
+
+1. `compose.yaml`
+2. `compose.yml`
+3. `docker-compose.yaml`
+4. `docker-compose.yml`
+
+The first file found will be used. This matches Docker Compose's default behavior.
+
+**Examples:**
+
+```toml
+# Explicitly specify a Docker Compose file
+[project]
+name = "my-api"
+workspace = "backend"
+docker_compose = "docker-compose.dev.yml"
+```
+
+```toml
+# Let de auto-detect the Docker Compose file
+# Will use compose.yaml, compose.yml, docker-compose.yaml, or docker-compose.yml
+[project]
+name = "my-api"
+workspace = "backend"
+# docker_compose field omitted - auto-detection will be used
 ```
 
 #### Project Dependencies

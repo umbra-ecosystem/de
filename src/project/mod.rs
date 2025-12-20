@@ -168,8 +168,23 @@ impl Project {
             return canonicalize(self, docker_compose);
         }
 
-        let docker_compose_path = self.dir().join("docker-compose.yml");
-        canonicalize(self, &docker_compose_path)
+        // Check for default Docker Compose files in order of precedence
+        // https://docs.docker.com/compose/compose-file/
+        const DEFAULT_COMPOSE_FILES: &[&str] = &[
+            "compose.yaml",
+            "compose.yml",
+            "docker-compose.yaml",
+            "docker-compose.yml",
+        ];
+
+        for filename in DEFAULT_COMPOSE_FILES {
+            let docker_compose_path = self.dir().join(filename);
+            if let Some(path) = canonicalize(self, &docker_compose_path)? {
+                return Ok(Some(path));
+            }
+        }
+
+        Ok(None)
     }
 
     /// Runs `docker-compose up -d` for the project, starting all services defined in the Docker Compose file.
