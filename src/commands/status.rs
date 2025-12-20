@@ -24,6 +24,10 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
         match Workspace::active()? {
             Some(ws) => ws,
             None => {
+                // No active workspace - try to show current project status
+                if let Some(project) = Project::current_or_inferred()? {
+                    return show_inferred_project_status(&ui, &project);
+                }
                 ui.warning_item("No active workspace found.", None)?;
                 return Ok(());
             }
@@ -33,6 +37,79 @@ pub fn status(workspace_name: Option<Slug>) -> eyre::Result<()> {
     workspace_status(&ui, &workspace)?;
 
     tracing::info!("Finished status command");
+    Ok(())
+}
+
+/// Show status for an inferred project (no workspace context)
+fn show_inferred_project_status(ui: &UserInterface, project: &Project) -> eyre::Result<()> {
+    ui.heading(&format!("Project: {}", project.manifest().project().name))?;
+
+    if project.is_inferred() {
+        ui.info_item("💡 Tip: Run 'de init' to create a de.toml for more features")?;
+    }
+
+    ui.new_line()?;
+
+    // Show Docker Compose status
+    if let Ok(Some(compose_path)) = project.docker_compose_path() {
+        ui.writeln(&format!(
+            "Docker Compose: {}",
+            ui.theme
+                .success(compose_path.file_name().unwrap().to_string_lossy().as_ref())
+        ))?;
+
+        if let Some(services) = get_docker_services(&compose_path) {
+            ui.new_line()?;
+            ui.writeln("Services:")?;
+            for service in services {
+                let status_text = if service.status.contains("Up") {
+                    ui.theme.success(&service.status)
+                } else {
+                    ui.theme.error(&service.status)
+                };
+                ui.writeln(&format!(
+                    "  {} - {}",
+                    ui.theme.bold(&service.name),
+                    status_text
+                ))?;
+            }
+        }
+    } else {
+        ui.writeln(&format!("Docker Compose: {}", ui.theme.dim("none")))?;
+    }
+
+    ui.new_line()?;
+
+    // Show Git status if in a git repo
+    let dir = project.dir();
+    let git_status = GitStatus::gather(dir);
+
+    if git_status.is_repo {
+        ui.writeln("Git:")?;
+
+        if let Some(branch) = &git_status.branch {
+            ui.writeln(&format!("  Branch: {}", ui.theme.accent(branch)))?;
+        }
+
+        if git_status.dirty {
+            ui.writeln(&format!("  Status: {}", ui.theme.error("dirty")))?;
+        } else {
+            ui.writeln(&format!("  Status: {}", ui.theme.success("clean")))?;
+        }
+
+        if let Some(ahead) = git_status.ahead {
+            if ahead > 0 {
+                ui.writeln(&format!("  Ahead: {} commit(s)", ahead))?;
+            }
+        }
+
+        if let Some(behind) = git_status.behind {
+            if behind > 0 {
+                ui.writeln(&format!("  Behind: {} commit(s)", behind))?;
+            }
+        }
+    }
+
     Ok(())
 }
 

@@ -10,6 +10,25 @@ impl Slug {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Creates a Slug from a directory name.
+    ///
+    /// This sanitizes the directory name to create a valid slug.
+    /// Used for inferring project names from directory names.
+    pub fn from_dir_name(dir: &std::path::Path) -> eyre::Result<Self> {
+        let dir_name = dir
+            .file_name()
+            .ok_or_else(|| eyre::eyre!("Failed to extract directory name"))?
+            .to_str()
+            .ok_or_else(|| eyre::eyre!("Directory name is not valid UTF-8"))?;
+
+        Self::sanitize(dir_name).ok_or_else(|| {
+            eyre::eyre!(
+                "Failed to create valid slug from directory name '{}'",
+                dir_name
+            )
+        })
+    }
 }
 
 impl Slug {

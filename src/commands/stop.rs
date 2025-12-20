@@ -1,6 +1,7 @@
 use crate::{
     commands::status::workspace_status,
     config::Config,
+    project::Project,
     types::Slug,
     utils::ui::UserInterface,
     workspace::{Workspace, spin_down_workspace},
@@ -9,20 +10,48 @@ use dialoguer::Confirm;
 use eyre::{Context, eyre};
 
 pub fn stop(workspace_name: Option<Slug>, yes: bool) -> eyre::Result<()> {
-    let workspace = if let Some(workspace_name) = workspace_name {
-        Workspace::load_from_name(&workspace_name)
+    let ui = UserInterface::new();
+
+    if let Some(workspace_name) = workspace_name {
+        // Workspace mode - existing logic
+        let workspace = Workspace::load_from_name(&workspace_name)
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to load workspace")?
-            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?
-    } else {
-        Workspace::active()
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to get current workspace")?
-            .ok_or_else(|| eyre!("No workspace is currently active"))?
-    };
+            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
 
-    let ui = UserInterface::new();
-    stop_workspace(&ui, workspace, yes)?;
+        stop_workspace(&ui, workspace, yes)?;
+    } else {
+        // Current project mode - can use inferred project
+        let project = Project::current_or_inferred()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to get current project")?
+            .ok_or_else(|| eyre!("No current project found"))?;
+
+        if project.is_inferred() {
+            // Simple stop for inferred projects
+            ui.writeln(
+                &ui.theme
+                    .bold(&format!("Stopping {}:", project.manifest().project().name)),
+            )?;
+
+            let stopped = project
+                .docker_compose_down()
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to stop docker compose services")?;
+
+            if !stopped {
+                ui.warning_item("No docker-compose file found", None)?;
+            }
+        } else {
+            // Existing logic for configured projects with workspace
+            let workspace = Workspace::active()
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to get current workspace")?
+                .ok_or_else(|| eyre!("No workspace is currently active"))?;
+
+            stop_workspace(&ui, workspace, yes)?;
+        }
+    }
 
     Ok(())
 }

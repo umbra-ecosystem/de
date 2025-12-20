@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **No-Config Mode (Phase 1)**: `de` now works without requiring a `de.toml` configuration file for basic Docker Compose operations.
+  - `de start`, `de stop`, and `de status` commands now work in any directory with Docker Compose files
+  - Project name is automatically inferred from the directory name
+  - Helpful tips suggest running `de init` to unlock more features (workspace management, tasks, dependencies)
+  - Supports all existing functionality when `de.toml` is present (fully backward compatible)
+
 ### Changed
 
 - Docker Compose file auto-detection now checks all standard file names in order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`. Previously only `docker-compose.yml` was checked by default.

@@ -35,29 +35,52 @@ pub fn start(workspace_name: Option<Option<Slug>>, yes: bool) -> eyre::Result<()
         let _ = workspace_status(&ui, &workspace);
     } else {
         // Start current project and its dependencies
-        let project = Project::current()
+        let project = Project::current_or_inferred()
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to get current project")?
             .ok_or_else(|| eyre!("No current project found"))?;
 
-        let workspace_name = project.manifest().project().workspace.clone();
+        // Show hint if inferred
+        if project.is_inferred() {
+            ui.info_item("💡 Tip: Run 'de init' to create a de.toml for more features (workspace management, tasks, dependencies)")?;
+            ui.new_line()?;
+        }
 
-        let workspace = Workspace::load_from_name(&workspace_name)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to load workspace")?
-            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
+        // For inferred projects, skip workspace/dependency logic
+        if project.is_inferred() {
+            ui.writeln(
+                &ui.theme
+                    .bold(&format!("Starting {}:", project.manifest().project().name)),
+            )?;
 
-        spin_up_project_and_dependencies(&ui, &workspace, &project.manifest().project().name)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to spin up project and dependencies")?;
+            let started = project
+                .docker_compose_up()
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to start docker compose services")?;
 
-        Config::mutate_persisted(|config| {
-            config.set_active_workspace(Some(workspace_name));
-        })?;
+            if !started {
+                ui.warning_item("No docker-compose file found", None)?;
+            }
+        } else {
+            // Existing logic for configured projects with workspace/dependencies
+            let workspace_name = project.manifest().project().workspace.clone();
+            let workspace = Workspace::load_from_name(&workspace_name)
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to load workspace")?
+                .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
 
-        // We ignore the error here because we want to proceed even if the status check fails
-        ui.new_line()?;
-        let _ = workspace_status(&ui, &workspace);
+            spin_up_project_and_dependencies(&ui, &workspace, &project.manifest().project().name)
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to spin up project and dependencies")?;
+
+            Config::mutate_persisted(|config| {
+                config.set_active_workspace(Some(workspace_name));
+            })?;
+
+            // We ignore the error here because we want to proceed even if the status check fails
+            ui.new_line()?;
+            let _ = workspace_status(&ui, &workspace);
+        }
     }
 
     Ok(())

@@ -9,9 +9,13 @@ use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
     process::Command,
+    str::FromStr,
 };
 
-use crate::{project::config::ProjectManifest, types::Slug};
+use crate::{
+    project::config::{ProjectGitSettings, ProjectManifest, ProjectMetadata},
+    types::Slug,
+};
 
 pub struct Project {
     dir: PathBuf,
@@ -97,6 +101,70 @@ impl Project {
             .wrap_err("Failed to get current working directory")?;
 
         Self::from_dir_recursive(&current_dir)
+    }
+
+    /// Creates a project from a directory, inferring values if no de.toml exists
+    pub fn from_dir_or_inferred(dir: &Path) -> eyre::Result<Self> {
+        match Self::from_dir(dir) {
+            Ok(project) => Ok(project),
+            Err(_) => Self::infer_from_dir(dir),
+        }
+    }
+
+    /// Creates a project with inferred values from the directory structure
+    fn infer_from_dir(dir: &Path) -> eyre::Result<Self> {
+        // Load .env if exists (same as from_dir)
+        let dot_env = dir.join(".env");
+        if dot_env.exists() {
+            dotenvy::from_path_override(&dot_env)
+                .map_err(|e| eyre!(e))
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to load environment variables from {}",
+                        dir.display()
+                    )
+                })?;
+        }
+
+        // Create inferred manifest
+        let manifest = ProjectManifest {
+            project: ProjectMetadata {
+                name: Slug::from_dir_name(dir)?,
+                workspace: Slug::from_str("default")
+                    .map_err(|e| eyre!("Failed to create default workspace slug: {}", e))?,
+                docker_compose: None, // Auto-detected by docker_compose_path()
+                depends_on: None,
+            },
+            git: Some(ProjectGitSettings::default()),
+            tasks: None,
+            setup: None,
+        };
+
+        Ok(Self {
+            dir: dir.to_path_buf(),
+            manifest,
+            manifest_path: dir.join("de.toml"), // Path for reference (doesn't exist)
+        })
+    }
+
+    /// Gets the current project, with inferred values if no de.toml exists
+    pub fn current_or_inferred() -> eyre::Result<Option<Self>> {
+        let current_dir = std::env::current_dir()
+            .map_err(|e| eyre!(e))
+            .wrap_err("Failed to get current working directory")?;
+
+        // Try recursive search first
+        if let Some(project) = Self::from_dir_recursive(&current_dir)? {
+            return Ok(Some(project));
+        }
+
+        // Fall back to inferred from current directory
+        Ok(Some(Self::infer_from_dir(&current_dir)?))
+    }
+
+    /// Checks if this project was inferred (no de.toml)
+    pub fn is_inferred(&self) -> bool {
+        !self.manifest_path.exists()
     }
 }
 

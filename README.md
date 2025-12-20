@@ -60,9 +60,37 @@ This will automatically download and install the latest release from GitHub.
 
 ## Quick Start
 
-Get started with `de` in just a few steps. This section covers initializing a project, defining tasks, running commands, and key workspace operations.
+### Zero Configuration Mode
 
-### 1. Initialize a Project
+`de` works out-of-the-box with projects that have Docker Compose files - no configuration required!
+
+```bash
+# Navigate to any project with a compose file
+cd /path/to/your-project
+
+# Start Docker Compose services automatically
+de start
+
+# Check status
+de status
+
+# Stop services
+de stop
+```
+
+`de` automatically detects these Docker Compose files (in order of precedence):
+- `compose.yaml`
+- `compose.yml`
+- `docker-compose.yaml`
+- `docker-compose.yml`
+
+The project name is inferred from the directory name, and you'll see a helpful tip suggesting you run `de init` for more advanced features like workspace management, tasks, and dependencies.
+
+### Full Configuration Mode
+
+For more powerful features, you can create a `de.toml` configuration file:
+
+#### 1. Initialize a Project
 
 Create a new project and add it to a workspace:
 
@@ -87,7 +115,7 @@ de init /path/to/project --workspace my-workspace
 
 This creates a `de.toml` configuration file in your project directory.
 
-### 2. Define Tasks
+#### 2. Define Tasks
 
 Edit the generated `de.toml` file to define tasks:
 
@@ -108,7 +136,7 @@ dev = { service = "api", command = "cargo watch -x run" }
 build = { command = "docker build -t my-api ." }
 ```
 
-### 3. Run Tasks
+#### 3. Running Tasks
 
 Execute defined tasks from anywhere in your project. If a task is not found in the project, `de` will attempt to run a workspace task with the same name.
 
