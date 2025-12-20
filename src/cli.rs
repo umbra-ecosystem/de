@@ -53,6 +53,104 @@ pub enum Commands {
         yes: bool,
     },
 
+    /// Show logs from Docker Compose services.
+    Logs {
+        /// The name of the workspace to show logs for.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// The specific service to show logs for.
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Follow log output.
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Number of lines to show from the end of the logs.
+        #[arg(short, long)]
+        tail: Option<usize>,
+
+        /// Additional arguments to pass to docker compose logs.
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+
+    /// Restart Docker Compose services.
+    Restart {
+        /// The name of the workspace to restart services for.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// The specific service to restart.
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Additional arguments to pass to docker compose restart.
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+
+    /// Show status of Docker Compose containers.
+    Ps {
+        /// The name of the workspace to show containers for.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// Additional arguments to pass to docker compose ps.
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+
+    /// Stop and remove Docker Compose containers, networks, and volumes.
+    Down {
+        /// The name of the workspace to tear down.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// Remove named volumes declared in the `volumes` section of the Compose file.
+        #[arg(short = 'v', long)]
+        volumes: bool,
+
+        /// Additional arguments to pass to docker compose down.
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+
+    /// Pull Docker Compose service images.
+    Pull {
+        /// The name of the workspace to pull images for.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// The specific service to pull images for.
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Additional arguments to pass to docker compose pull.
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+
+    /// Build or rebuild Docker Compose services.
+    Build {
+        /// The name of the workspace to build images for.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+
+        /// The specific service to build.
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Do not use cache when building the image.
+        #[arg(long)]
+        no_cache: bool,
+
+        /// Additional arguments to pass to docker compose build.
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+
     /// Run a command in the context of the current project.
     Run {
         /// The command to run listed in config file.
@@ -73,8 +171,9 @@ pub enum Commands {
 
     /// Execute a command in a project's context.
     Exec {
-        /// The name of the project to execute the command in.
-        project: Slug,
+        /// The name of the project to execute the command in. If not provided, uses the current/inferred project.
+        #[clap(short, long)]
+        project: Option<Slug>,
 
         /// The name of the workspace to execute the command in. Defaults to the active workspace.
         #[clap(short, long)]

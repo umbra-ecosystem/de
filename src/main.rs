@@ -46,6 +46,35 @@ fn main() -> eyre::Result<()> {
         } => commands::init(path, name, workspace),
         Commands::Start { workspace, yes } => commands::start(workspace, yes),
         Commands::Stop { workspace, yes } => commands::stop(workspace, yes),
+        Commands::Logs {
+            workspace,
+            service,
+            follow,
+            tail,
+            args,
+        } => commands::logs(workspace, service, follow, tail, args),
+        Commands::Restart {
+            workspace,
+            service,
+            args,
+        } => commands::restart(workspace, service, args),
+        Commands::Ps { workspace, args } => commands::ps(workspace, args),
+        Commands::Down {
+            workspace,
+            volumes,
+            args,
+        } => commands::down(workspace, volumes, args),
+        Commands::Pull {
+            workspace,
+            service,
+            args,
+        } => commands::pull(workspace, service, args),
+        Commands::Build {
+            workspace,
+            service,
+            no_cache,
+            args,
+        } => commands::build(workspace, service, no_cache, args),
         Commands::Run {
             command,
             project,

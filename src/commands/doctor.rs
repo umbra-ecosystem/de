@@ -90,16 +90,26 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
         .unwrap_or(true)
     {
         formatter.heading("Project Configuration:")?;
-        let project_result = check_project_configuration(&formatter, &theme)?;
+        let project_result = check_project_configuration(&formatter, &theme, workspace_name.as_ref())?;
         println!();
         Some(project_result)
     } else {
         None
     };
 
-    // Check workspace configuration
-    formatter.heading("Workspace Configuration:")?;
-    let workspace_result = check_workspace_configuration(&formatter, workspace_name.as_ref())?;
+    // Check workspace configuration (skip if running in single-project mode without workspace)
+    let workspace_result =
+        if workspace_name.is_some() || Workspace::active().ok().flatten().is_some() {
+            formatter.heading("Workspace Configuration:")?;
+            let result = check_workspace_configuration(&formatter, workspace_name.as_ref())?;
+            println!();
+            Some(result)
+        } else {
+            // Running in no-config/single-project mode
+            formatter.info(&theme.dim("(Running in no-config mode - no workspace detected)"))?;
+            println!();
+            None
+        };
 
     // Calculate totals and print status
     let total_errors = system_result.errors
@@ -107,13 +117,19 @@ pub fn doctor(workspace_name: Option<Slug>) -> eyre::Result<()> {
             .as_ref()
             .map(|v| v.errors)
             .unwrap_or_default()
-        + workspace_result.errors;
+        + workspace_result
+            .as_ref()
+            .map(|v| v.errors)
+            .unwrap_or_default();
     let total_warnings = system_result.warnings
         + project_result
             .as_ref()
             .map(|v| v.warnings)
             .unwrap_or_default()
-        + workspace_result.warnings;
+        + workspace_result
+            .as_ref()
+            .map(|v| v.warnings)
+            .unwrap_or_default();
 
     println!();
     formatter.heading("Status:")?;
@@ -184,6 +200,7 @@ fn check_system_dependencies(formatter: &Formatter) -> eyre::Result<DiagnosticRe
 fn check_project_configuration(
     formatter: &Formatter,
     theme: &Theme,
+    workspace_name: Option<&Slug>,
 ) -> eyre::Result<DiagnosticResult> {
     let mut result = DiagnosticResult::new();
 
@@ -196,11 +213,35 @@ fn check_project_configuration(
             check_project_details(formatter, theme, &project, &mut result)?;
         }
         Ok(None) => {
-            result.add_warning(
-                formatter,
-                "Not in a de project directory".to_string(),
-                Some("Run 'de init' to initialize a project here".to_string()),
-            )?;
+            // Try inferred project if no workspace is specified or active
+            if workspace_name.is_none() && Workspace::active().ok().flatten().is_none() {
+                match Project::current_or_inferred() {
+                    Ok(Some(project)) if project.is_inferred() => {
+                        result.add_info(
+                            formatter,
+                            theme.dim("Running in no-config mode (no de.toml found)"),
+                        )?;
+                        result.add_success(
+                            formatter,
+                            format!("Inferred project root: {}", project.dir().display()),
+                        )?;
+                        check_inferred_project_details(formatter, theme, &project, &mut result)?;
+                    }
+                    _ => {
+                        result.add_warning(
+                            formatter,
+                            "Not in a de project directory".to_string(),
+                            Some("Run 'de init' to initialize a project here".to_string()),
+                        )?;
+                    }
+                }
+            } else {
+                result.add_warning(
+                    formatter,
+                    "Not in a de project directory".to_string(),
+                    Some("Run 'de init' to initialize a project here".to_string()),
+                )?;
+            }
         }
         Err(e) => {
             result.add_error(formatter, format!("Project check failed: {e}"), None)?;
@@ -719,6 +760,61 @@ fn check_for_dependency_issues(
                 Some("This should not happen, please report this issue".to_string()),
             )?;
         }
+    }
+
+    Ok(())
+}
+
+fn check_inferred_project_details(
+    formatter: &Formatter,
+    theme: &Theme,
+    project: &Project,
+    result: &mut DiagnosticResult,
+) -> eyre::Result<()> {
+    // Check for Docker Compose file
+    match project.docker_compose_path() {
+        Ok(Some(compose_path)) => {
+            if let Err(e) = validate_docker_compose(&compose_path) {
+                result.add_error(formatter, format!("Docker Compose file invalid: {e}"), None)?;
+            } else {
+                result.add_success(
+                    formatter,
+                    format!(
+                        "Docker Compose file: {}",
+                        compose_path.file_name().unwrap().to_string_lossy()
+                    ),
+                )?;
+            }
+        }
+        Ok(None) => {
+            result.add_info(formatter, theme.dim("Docker Compose: not configured"))?;
+        }
+        Err(e) => {
+            result.add_error(formatter, format!("Docker Compose check failed: {e}"), None)?;
+        }
+    }
+
+    // Check for detected tasks
+    let detector_registry = crate::project::task_detector::TaskDetectorRegistry::new();
+    let detected_tasks = detector_registry.detect_all(project.dir())?;
+
+    if !detected_tasks.is_empty() {
+        result.add_success(
+            formatter,
+            format!("Detected tasks: {} found", detected_tasks.len()),
+        )?;
+    } else {
+        result.add_info(
+            formatter,
+            theme.dim("No tasks detected (no package.json, Makefile, justfile, etc.)"),
+        )?;
+    }
+
+    // Check for .git directory
+    if project.dir().join(".git").exists() {
+        result.add_success(formatter, "Git repository: initialized".to_string())?;
+    } else {
+        result.add_info(formatter, theme.dim("Git repository: not initialized"))?;
     }
 
     Ok(())

@@ -1,7 +1,7 @@
 use eyre::{Context, eyre};
 use std::process::Command;
 
-use crate::{project::Project, types::Slug, workspace::Workspace};
+use crate::{project::Project, types::Slug, utils::theme::Theme, workspace::Workspace};
 
 pub fn run(
     task_name: Slug,
@@ -9,13 +9,13 @@ pub fn run(
     project_name: Option<Slug>,
     workspace_name: Option<Slug>,
 ) -> eyre::Result<()> {
+    let theme = Theme::new();
+
     let workspace = match workspace_name.as_ref() {
         Some(workspace_name) => Workspace::load_from_name(workspace_name)
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to load workspace")?,
-        None => Workspace::active()
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to get active workspace")?,
+        None => Workspace::active().ok().flatten(),
     };
 
     if let Some(project_name) = project_name {
@@ -52,46 +52,79 @@ pub fn run(
             ));
         }
     } else if let Some(workspace_name) = workspace_name.as_ref() {
-        // If a workspace is specified, check if the current project is part of that workspace
-        if let Some(project) = Project::current()
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to get current project")?
-        {
-            if &project.manifest().project().workspace == workspace_name {
-                if run_project_task(&project, &task_name, &args)? {
-                    return Ok(());
+        // If a workspace is specified but no project, check if current project is part of that workspace
+        if let Some(_workspace) = &workspace {
+            if let Some(project) = Project::current()
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to get current project")?
+            {
+                if &project.manifest().project().workspace == workspace_name {
+                    if run_project_task(&project, &task_name, &args)? {
+                        return Ok(());
+                    }
+                } else {
+                    tracing::info!(
+                        "Current project '{}' is not in workspace '{}', skipping task execution.",
+                        project.manifest().project().name,
+                        workspace_name
+                    );
                 }
-            } else {
-                tracing::info!(
-                    "Current project '{}' is not in workspace '{}', skipping task execution.",
-                    project.manifest().project().name,
-                    workspace_name
-                );
             }
+        } else {
+            return Err(eyre!("Workspace '{}' not found", workspace_name));
         }
     } else {
-        // If no project specified, try to run the task in the current project
+        // No project or workspace specified - try current/inferred project (no-config mode)
         if let Some(project) = Project::current_or_inferred()
             .map_err(|e| eyre!(e))
-            .wrap_err("Failed to get current project")?
-            && run_project_task(&project, &task_name, &args)?
+            .wrap_err("Failed to detect project")?
         {
-            return Ok(());
+            // Show helpful indicator for inferred projects
+            if project.is_inferred() {
+                println!(
+                    "{} Running task in no-config mode (no de.toml found)",
+                    console::style("ℹ").cyan()
+                );
+            }
+
+            if run_project_task(&project, &task_name, &args)? {
+                return Ok(());
+            }
         }
     }
 
     // If project task not found, try workspace task
-    if let Some(workspace) = workspace
-        && workspace.config().tasks.contains_key(&task_name)
-    {
-        println!("Running workspace task '{task_name}'...");
-        return super::workspace::run(None, task_name, args);
-    }
+    let has_workspace = if let Some(ref workspace) = workspace {
+        if workspace.config().tasks.contains_key(&task_name) {
+            println!("Running workspace task '{task_name}'...");
+            return super::workspace::run(None, task_name, args);
+        }
+        true
+    } else {
+        false
+    };
 
-    Err(eyre!(
-        "Task '{}' not found in project or active workspace",
-        task_name
-    ))
+    // Provide helpful error message
+    let error_prefix = theme.error("Error:");
+    eprintln!("{error_prefix} Task '{}' not found.", task_name);
+    eprintln!();
+    eprintln!("Searched in:");
+    if has_workspace {
+        eprintln!("  • Current/inferred project tasks");
+        eprintln!("  • Workspace tasks");
+    } else {
+        eprintln!("  • Configured tasks (de.toml)");
+        eprintln!(
+            "  • Detected tasks (package.json, Makefile, justfile, Cargo.toml, pyproject.toml)"
+        );
+    }
+    eprintln!();
+    eprintln!(
+        "Run {} to see available tasks.",
+        theme.highlight("de task list")
+    );
+
+    std::process::exit(1)
 }
 
 pub fn run_project_task(

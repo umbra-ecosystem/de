@@ -18,15 +18,22 @@
 - **Task & Command Execution**
   - ⚡ Define and run both shell commands and Docker Compose service tasks
   - 🔍 Auto-detect tasks from `package.json`, `Makefile`, `justfile`, `Cargo.toml`, and `pyproject.toml`
-  - 🚀 Execute arbitrary commands within a project's environment
-  - 🏃🏽‍♀️ Fallthrough for direct task execution without the `run` subcommand
+  - 🚀 Execute arbitrary commands within a project's environment with `de exec`
+  - 💡 Simplified exec - `de exec <command>` works without project name in single-project mode
+  - 🏃🏽‍♀️ Enhanced fallthrough with better error messages and no-config support
   - 🔗 Create command shims/aliases for easy access
   - ✅ Check and list available tasks (both configured and detected)
 
 - **Docker Compose Integration**
   - 🚀 Start and stop Docker Compose projects - current project + dependencies or entire workspace
+  - 📋 View logs with `de logs` - supports follow mode, tail, and service filtering
+  - 🔄 Restart services with `de restart` - all services or specific ones
+  - 📊 Check container status with `de ps`
+  - 🛑 Clean teardown with `de down` - optionally remove volumes
+  - 🖼️ Pull and build images with `de pull` and `de build`
   - 📦 Manage services across multiple projects
   - 🧩 Manage project dependencies with `depends_on` in `de.toml`
+  - 🎯 All Docker Compose commands work without configuration (no-config mode)
 
 - **Environment & Configuration**
   - 🔧 Load `.env` files and environment variable configuration
@@ -41,6 +48,7 @@
 
 - **Diagnostics & Status**
   - 🩺 Diagnose environment, dependencies, and configuration with `de doctor`
+  - 🔍 Works in no-config mode - validates inferred projects, compose files, and detected tasks
   - 📊 Get a concise, actionable summary of Git and Docker Compose status with `de status`
 
 ## Installation
@@ -396,7 +404,9 @@ This will:
 
 ---
 
-### 11. Start/Stop Docker Compose Projects
+### 11. Docker Compose Operations
+
+#### Start/Stop Projects
 
 Start Docker Compose projects:
 
@@ -418,6 +428,116 @@ de stop
 de stop --workspace my-workspace
 ```
 
+#### View Logs
+
+View logs from Docker Compose services:
+
+```bash
+# View logs from current project
+de logs
+
+# Follow logs in real-time
+de logs --follow
+de logs -f
+
+# Show last 100 lines
+de logs --tail 100
+
+# Filter by specific service
+de logs --service api
+
+# Workspace mode - show logs from all projects
+de logs --workspace my-workspace
+
+# Combine options
+de logs -f --service web --tail 50
+```
+
+#### Restart Services
+
+Restart Docker Compose services:
+
+```bash
+# Restart all services in current project
+de restart
+
+# Restart specific service
+de restart --service api
+
+# Restart services in workspace
+de restart --workspace my-workspace
+```
+
+#### Show Container Status
+
+Display running containers and their status:
+
+```bash
+# Show containers for current project
+de ps
+
+# Show containers for all projects in workspace
+de ps --workspace my-workspace
+
+# Pass additional docker compose ps flags
+de ps -- --all
+```
+
+#### Stop and Remove Containers
+
+Stop and remove containers, networks, and optionally volumes:
+
+```bash
+# Stop and remove containers
+de down
+
+# Also remove volumes
+de down --volumes
+de down -v
+
+# Workspace mode
+de down --workspace my-workspace --volumes
+```
+
+#### Pull Images
+
+Pull the latest images for services:
+
+```bash
+# Pull images for current project
+de pull
+
+# Pull specific service image
+de pull --service api
+
+# Pull images for workspace
+de pull --workspace my-workspace
+```
+
+#### Build Images
+
+Build or rebuild service images:
+
+```bash
+# Build images for current project
+de build
+
+# Build without using cache
+de build --no-cache
+
+# Build specific service
+de build --service api
+
+# Build images for workspace
+de build --workspace my-workspace --no-cache
+```
+
+All Docker Compose commands work in both **workspace mode** (when `-w/--workspace` is specified) and **no-config mode** (when run in a directory with a compose file). They automatically detect and use these compose files in order of precedence:
+- `compose.yaml`
+- `compose.yml`
+- `docker-compose.yaml`
+- `docker-compose.yml`
+
 ### 12. List Projects
 
 View all projects in your current workspace (or the active workspace if set):
@@ -432,12 +552,55 @@ Or list projects in a specific workspace:
 de list --workspace my-workspace
 ```
 
-### 13. Check Project and Environment Health
+### 13. Execute Commands in Project Context
+
+Execute arbitrary commands in a project's directory:
+
+```bash
+# In workspace mode (specify project)
+de exec api npm install
+de exec api --workspace my-workspace npm test
+
+# In single-project mode (no project name needed)
+cd my-project
+de exec npm install
+de exec npm test
+de exec bundle install
+```
+
+The simplified `de exec` automatically detects the current/inferred project when no project name is provided, making it more convenient for single-project workflows.
+
+### 14. Check Project and Environment Health
 
 Diagnose and check the health of your `de` environment:
 
 ```bash
 de doctor
+```
+
+This command now works in **no-config mode** and will check:
+- System dependencies (Docker, Docker Compose)
+- Current/inferred project configuration
+- Docker Compose file validation
+- Detected tasks
+- Git repository status
+- Workspace configuration (if applicable)
+
+Example output in no-config mode:
+```
+System Dependencies:
+  ✓ Docker: 24.0.6
+  ✓ Docker Compose: v2.23.0
+
+Project Configuration:
+  - Running in no-config mode (no de.toml found)
+  ✓ Inferred project root: /Users/you/myproject
+  ✓ Docker Compose file: compose.yaml
+  ✓ Detected tasks: 12 found
+  ✓ Git repository: initialized
+
+Status:
+  ✓ All systems operational
 ```
 
 This command will check for common issues, missing files, and misconfigurations in your workspace and projects.

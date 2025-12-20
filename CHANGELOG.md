@@ -11,6 +11,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Enhanced Commands for No-Config Mode (Phase 4)**: Complete Docker Compose workflow and improved single-project operations.
+  - **Docker Compose Commands**: Added six new commands that work in both workspace and no-config mode:
+    - **`de logs`** - View service logs with follow, tail, and service filtering options
+    - **`de restart`** - Restart all services or specific service
+    - **`de ps`** - Show container status
+    - **`de down`** - Stop and remove containers, networks, and optionally volumes
+    - **`de pull`** - Pull service images
+    - **`de build`** - Build or rebuild service images with optional no-cache flag
+  - **Simplified `de exec`**: Now works without project name parameter
+    - `de exec <command>` runs command in current/inferred project
+    - Workspace mode (`de exec <project> <command>`) still fully supported
+    - Automatically detects project context
+  - **Enhanced `de run`**: Improved to work seamlessly in no-config mode
+    - No longer requires active workspace
+    - Shows helpful "no-config mode" indicator for inferred projects
+    - Better error messages showing search locations
+    - Suggests `de task list` when task not found
+  - **Enhanced Fallthrough**: Improved task resolution with better error messages
+    - Works with inferred projects (no workspace required)
+    - Shows detailed search locations when task not found
+    - Suggests `de task list` to see available tasks
+    - Includes both configured and detected tasks in search
+  - **Single-Project Doctor**: `de doctor` now works without workspace
+    - Detects and validates inferred projects
+    - Checks Docker Compose files, detected tasks, and git repository
+    - Shows "(Running in no-config mode)" indicator
+    - Provides useful diagnostics for any Docker-based project
+
 - **Task Auto-Detection (Phase 2)**: `de` now automatically detects tasks from common project configuration files.
   - **`de task list`** displays both configured tasks (from `de.toml`) and detected tasks from:
     - `package.json` (npm/yarn/pnpm scripts)

@@ -9,50 +9,90 @@ use crate::{
 };
 
 pub fn fallthrough(args: Vec<String>) -> eyre::Result<()> {
-    let workspace = Workspace::active()
-        .map_err(|e| eyre!(e))
-        .wrap_err("Failed to get active workspace")?
-        .ok_or_else(|| eyre!("No current workspace found"))?;
+    let theme = Theme::new();
 
     let (command, args) = split_args(args)
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to parse command and arguments")?;
 
-    if let Some(ws_project) = workspace.config().projects.get(&command) {
-        let project = Project::from_dir(&ws_project.dir)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to load project from directory")?;
+    // Try workspace mode first if available
+    if let Ok(Some(workspace)) = Workspace::active() {
+        // Check if command matches a project name in the workspace
+        if let Some(ws_project) = workspace.config().projects.get(&command) {
+            let project = Project::from_dir(&ws_project.dir)
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to load project from directory")?;
 
-        let (command, args) = split_args(args)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to parse command and arguments")?;
+            let (task_command, task_args) = split_args(args)
+                .map_err(|e| eyre!(e))
+                .wrap_err("Failed to parse command and arguments")?;
 
-        if run_project_task(&project, &command, &args)? {
-            return Ok(());
-        } else {
-            bail!(
-                "Task '{}' not found in project '{}'",
-                command,
-                project.manifest().project().name
-            );
+            if run_project_task(&project, &task_command, &task_args)? {
+                return Ok(());
+            } else {
+                bail!(
+                    "Task '{}' not found in project '{}'",
+                    task_command,
+                    project.manifest().project().name
+                );
+            }
+        }
+
+        // Check if current project has the task
+        if let Ok(Some(project)) = Project::current() {
+            if run_project_task(&project, &command, &args)? {
+                return Ok(());
+            }
         }
     }
 
-    if let Some(project) = Project::current()
-        .map_err(|e| eyre!(e))
-        .wrap_err("Failed to get current project")?
-        && run_project_task(&project, &command, &args)?
-    {
-        return Ok(());
-    }
+    // Try current/inferred project (no-config mode)
+    match Project::current_or_inferred() {
+        Ok(Some(project)) => {
+            if project.is_inferred() {
+                println!(
+                    "{} Trying to run task in no-config mode (no de.toml found)",
+                    console::style("ℹ").cyan()
+                );
+            }
 
-    {
-        let theme = Theme::new();
-        let error_prefix = theme.error("Error:");
-        eprintln!(
-            "{error_prefix} Project or task not found for '{command}' in the current context."
-        );
-        eprintln!();
+            if run_project_task(&project, &command, &args)? {
+                return Ok(());
+            }
+
+            // If we reach here, task was not found
+            let error_prefix = theme.error("Error:");
+            eprintln!(
+                "{error_prefix} Task '{}' not found in the current project.",
+                command
+            );
+            eprintln!();
+            eprintln!("Searched in:");
+            eprintln!("  • Configured tasks (de.toml)");
+            eprintln!(
+                "  • Detected tasks (package.json, Makefile, justfile, Cargo.toml, pyproject.toml)"
+            );
+            eprintln!();
+            eprintln!(
+                "Run {} to see available tasks.",
+                theme.highlight("de task list")
+            );
+
+            std::process::exit(1);
+        }
+        Ok(None) | Err(_) => {
+            let error_prefix = theme.error("Error:");
+            eprintln!(
+                "{error_prefix} Could not determine project context for command '{}'.",
+                command
+            );
+            eprintln!();
+            eprintln!("Tried:");
+            eprintln!("  • Active workspace projects");
+            eprintln!("  • Current project (de.toml)");
+            eprintln!("  • Inferred project (git repository or docker-compose files)");
+            eprintln!();
+        }
     }
 
     Cli::command()
