@@ -20,6 +20,8 @@ pub fn stop(workspace_name: Option<Slug>, yes: bool) -> eyre::Result<()> {
             .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
 
         stop_workspace(&ui, workspace, yes)?;
+    } else if let Some(active_workspace) = Workspace::active()? {
+        stop_workspace(&ui, active_workspace, yes)?;
     } else {
         // Current project mode - can use inferred project
         let project = Project::current_or_inferred()
