@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `de stop` not stopping active workspace when in no-config mode.
+
 ## [0.6.0] - 2025-12-20
 
 ### Added
