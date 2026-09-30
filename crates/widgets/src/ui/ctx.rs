@@ -88,6 +88,14 @@ impl Inputs {
         }
     }
 
+    /// A taller single-line input for the search strips, which are 48px tall so it has some air.
+    pub fn search(&self, field: &Field) -> AnyElement {
+        match self.map.get(field) {
+            Some(TextBox::Line(e)) => Input::new(e).h(px(36.0)).into_any_element(),
+            _ => div().into_any_element(),
+        }
+    }
+
     pub fn area(&self, field: &Field) -> AnyElement {
         match self.map.get(field) {
             Some(TextBox::Area(e)) => Textarea::new(e).into_any_element(),

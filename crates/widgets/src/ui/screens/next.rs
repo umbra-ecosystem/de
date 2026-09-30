@@ -273,11 +273,11 @@ pub fn next(ui: &Ui, inputs: &Inputs, vm: &NextVm) -> AnyElement {
         .flex_none()
         .items_center()
         .gap_2()
-        .h_10()
+        .h(px(48.0))
         .px_6()
         .border_b_1()
         .border_color(pal.border)
-        .child(div().flex_1().child(inputs.line(&Field::NextFilter)))
+        .child(div().flex_1().child(inputs.search(&Field::NextFilter)))
         .child(toggle);
     let body = if vm.cards.is_empty() {
         empty_state(pal, "Nothing to do.").into_any_element()

@@ -49,7 +49,8 @@ fn uat_cell(w: f32) -> Div {
 pub fn on_uat(ui: &Ui, inputs: &Inputs, v: &OnUatVm) -> AnyElement {
     let pal = &ui.pal;
     let filters = strip(pal)
-        .child(div().flex_1().child(inputs.line(&Field::UatFilter)))
+        .h(px(48.0))
+        .child(div().flex_1().child(inputs.search(&Field::UatFilter)))
         .child(div().flex().gap_1().children(v.repos.iter().map(|r| {
             chip(
                 ui,
