@@ -60,6 +60,7 @@ use super::model::{Health, RemoteComment, RemoteTicket};
 use super::traits::{TicketProvider, TicketWriter};
 use crate::config::Config;
 use crate::domain::TicketKey;
+use crate::synclog;
 use crate::overlay::{CommandOutput, CommandRunner, ExternalCommand, ProcessRunner, TimedOut};
 
 pub use adf::{adf_to_text, body_to_text};
@@ -117,9 +118,20 @@ impl<R: CommandRunner> Acli<R> {
     }
 
     fn run_raw(&self, args: &[&str]) -> ProviderResult<CommandOutput> {
-        self.runner
-            .run(&Self::command(args))
-            .map_err(|e| spawn_error(&e))
+        synclog::log(format!("$ {PROGRAM} {}", args.join(" ")));
+        let started = std::time::Instant::now();
+        let result = self.runner.run(&Self::command(args));
+        let took = started.elapsed().as_secs_f64();
+        match &result {
+            Ok(out) => {
+                let exit = out.code.map_or("signal".to_string(), |c| c.to_string());
+                synclog::log(format!("exit {exit} in {took:.2}s"));
+                synclog::log_block("stdout", &out.stdout);
+                synclog::log_block("stderr", &out.stderr);
+            }
+            Err(e) => synclog::log(format!("could not run it after {took:.2}s: {e:#}")),
+        }
+        result.map_err(|e| spawn_error(&e))
     }
 }
 

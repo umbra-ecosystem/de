@@ -113,6 +113,10 @@ pub trait Store {
     fn workspace(&self) -> WorkspaceVm;
     fn audit(&self) -> Vec<AuditRow>;
     fn settings(&self) -> SettingsVm;
+    /// The sync logs on disk, newest first, and the line that says how many are kept.
+    fn logs(&self) -> (Vec<LogRunVm>, String);
+    /// The text of one log. Total: a file that is gone reads as a sentence, not an error.
+    fn log_text(&self, id: &str) -> String;
     fn simulate(&self) -> Vec<SimGroup>;
     /// The comment count at which a ticket was last marked seen (for "new" markers).
     fn comments_seen(&self, key: &TicketKey) -> u32;

@@ -754,3 +754,15 @@ pub struct Busy {
     pub stale: bool,
     pub message: String,
 }
+
+/// The sync log screen: the runs on disk and the text of the selected one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LogsVm {
+    /// Newest first.
+    pub runs: Vec<LogRunVm>,
+    /// Says how many are kept and where that is set.
+    pub note: String,
+    pub selected: Option<String>,
+    /// The selected log, one entry per line. Shared so a frame does not copy a large file.
+    pub lines: std::rc::Rc<Vec<String>>,
+}

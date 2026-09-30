@@ -40,8 +40,10 @@ fn search_and_cache(
     what: &str,
     jql: &str,
 ) -> Result<Option<Vec<RemoteTicket>>, Problem> {
+    crate::synclog::log(format!("{what}: {jql}"));
     match jira.search(jql) {
         Ok(found) => {
+            crate::synclog::log(format!("{what}: {} ticket(s)", found.len()));
             for t in &found {
                 jira_cache::upsert_remote(ctx.cache, t, ctx.now).map_err(local)?;
             }

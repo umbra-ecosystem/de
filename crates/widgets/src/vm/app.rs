@@ -56,6 +56,7 @@ pub enum ScreenVm {
     OnUat(OnUatVm),
     Workspace(WorkspaceVm),
     Audit(Vec<AuditRow>),
+    Logs(LogsVm),
     Settings(SettingsVm),
     Missing(String),
 }

@@ -6,7 +6,7 @@ use gpui_kit::*;
 
 use super::ticket::audit_rows;
 use crate::ui::ctx::{Inputs, Ui};
-use crate::ui::theme::Pal;
+use crate::ui::theme::{Pal, mono};
 use crate::ui::widgets::*;
 use crate::vm::*;
 
@@ -164,6 +164,112 @@ pub fn audit(ui: &Ui, rows: &[AuditRow]) -> Div {
     } else {
         audit_rows(ui, rows, true).into_any_element()
     })
+}
+
+/// The raw sync logs: the runs on the left, the selected one on the right. A log can be large, so its lines are a
+/// `uniform_list` of fixed-height rows (long lines are cut at the edge; the file on disk has them whole).
+pub fn logs(ui: &Ui, cx: &App, v: &LogsVm) -> Div {
+    let pal = &ui.pal;
+    if v.runs.is_empty() {
+        return div().size_full().py_8().flex().justify_center().child(empty_panel(
+            ui,
+            &EmptyVm::new(
+                "No sync logs yet",
+                "Every sync writes a raw log of what it asked Jira for and what came back. Run a sync and it appears here.",
+            )
+            .action(Btn::new("Sync now", Intent::Do(Command::Sync)).primary()),
+        ));
+    }
+    let list = div()
+        .flex()
+        .flex_col()
+        .flex_none()
+        .w(px(280.0))
+        .h_full()
+        .border_r_1()
+        .border_color(pal.border.opacity(0.6))
+        .child(div().px_4().py_3().child(faint(pal, v.note.clone())))
+        .child(
+            div()
+                .id("log-runs")
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .children(v.runs.iter().map(|r| {
+                    let on = v.selected.as_deref() == Some(r.id.as_str());
+                    div()
+                        .id(hash_id("log-run", &r.id))
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .h_9()
+                        .px_4()
+                        .text_sm()
+                        .cursor_pointer()
+                        .when(on, |d| d.bg(pal.border.opacity(0.35)))
+                        .hover(|d| d.bg(pal.border.opacity(0.2)))
+                        .on_click(ui.on_click(Intent::SelectLog(r.id.clone())))
+                        .child(r.when.clone())
+                        .child(faint(pal, r.size.clone()))
+                })),
+        );
+
+    let lines = v.lines.clone();
+    let font = mono(cx);
+    let viewer = div()
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_w_0()
+        .h_full()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .h_10()
+                .px_4()
+                .border_b_1()
+                .border_color(pal.border.opacity(0.6))
+                .child(faint(
+                    pal,
+                    match &v.selected {
+                        Some(_) => format!("{} lines, times are UTC", v.lines.len()),
+                        None => "Pick a run".to_string(),
+                    },
+                ))
+                .children(v.selected.iter().map(|id| {
+                    button_ghost(ui, &Btn::new("Reload", Intent::SelectLog(id.clone())))
+                })),
+        )
+        .child(if v.selected.is_some() {
+            uniform_list("log-lines", lines.len(), move |range, _, _| {
+                range
+                    .map(|i| {
+                        div()
+                            .h_5()
+                            .px_4()
+                            .flex()
+                            .items_center()
+                            .font_family(font.clone())
+                            .text_xs()
+                            .whitespace_nowrap()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .child(lines[i].clone())
+                            .into_any_element()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .w_full()
+            .flex_1()
+            .into_any_element()
+        } else {
+            div().into_any_element()
+        });
+    div().flex().size_full().child(list).child(viewer)
 }
 
 pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {

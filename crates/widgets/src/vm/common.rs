@@ -192,6 +192,8 @@ pub enum Route {
     OnUat,
     Workspace,
     Audit,
+    /// Raw logs of sync runs.
+    Logs,
     Settings,
 }
 
@@ -219,6 +221,16 @@ pub enum StepState {
     Now,
     Done,
     Bad,
+}
+
+/// One sync run's log file, as the list shows it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LogRunVm {
+    /// The store's own key for the file; sent back in [`Intent::SelectLog`](super::Intent::SelectLog).
+    pub id: String,
+    /// When the run started (UTC).
+    pub when: String,
+    pub size: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]

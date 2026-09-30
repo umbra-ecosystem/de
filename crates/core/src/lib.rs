@@ -12,6 +12,7 @@ pub mod overlay;
 pub mod project;
 pub mod providers;
 pub mod store;
+pub mod synclog;
 pub mod sync;
 pub mod types;
 pub mod utils;

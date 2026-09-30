@@ -85,6 +85,20 @@ In the app, use **Sync now** (the app also syncs once when it opens). The status
 
 A failed sync never deletes cached data. Tickets are removed from the cache only after a sync that completed fully shows they left the pool.
 
+## Sync logs
+
+Every sync writes a raw log of what it asked Jira for and what came back: the `acli` commands, their exit codes and timings, and the output as `acli` printed it. One file per run, named by its start time in UTC (`sync-20261001-094012.log`), in `<data dir>/logs` (on macOS `~/Library/Application Support/Umbra.de/logs`).
+
+- In the app, open **System → Sync logs** to pick a run and read it. `de sync` prints the path of its log when it finishes.
+- The newest 20 runs are kept; older ones are deleted when a new run starts. Change that in `config.toml`:
+
+```toml
+[logs]
+keep = 50
+```
+
+- The files contain ticket titles and comments as Jira returned them (each output is cut at 256 KB). Review a log before sharing it.
+
 ## Diagnosing
 
 - `de providers probe` prints the raw `acli` output if tickets look wrong. It can contain ticket titles, so review it before sharing.

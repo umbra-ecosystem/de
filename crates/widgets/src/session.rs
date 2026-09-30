@@ -3,6 +3,7 @@
 //! The session is the only writer of UI state. Views emit [`Intent`]s into [`Session::handle`] and draw [`Session::view`].
 //! It depends on no GPUI, so the whole interaction model is unit-tested headless (see the tests below).
 
+use std::rc::Rc;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::sim::Sim;
@@ -67,6 +68,8 @@ pub struct Session {
     composer: Option<(TicketKey, PrNumber, String, LineAnchor)>,
     texts: BTreeMap<Field, String>,
     seen_snap: BTreeMap<TicketKey, u32>,
+    /// The sync log being read: its id and lines, loaded once when selected.
+    log_view: Option<(String, Rc<Vec<String>>)>,
 }
 
 impl Session {
@@ -94,6 +97,7 @@ impl Session {
             composer: None,
             texts: BTreeMap::new(),
             seen_snap: BTreeMap::new(),
+            log_view: None,
         }
     }
 
@@ -170,6 +174,7 @@ impl Session {
                 self.close_tab(&key);
             }
             Intent::Diagnose => self.sheet = Some(Sheet::Diagnose),
+            Intent::SelectLog(id) => self.select_log(id),
             Intent::PinTab(key) => {
                 if let Some(t) = self.tabs.iter_mut().find(|t| t.key == key) {
                     t.pinned = true;
@@ -325,7 +330,19 @@ impl Session {
         }
     }
 
+    fn select_log(&mut self, id: String) {
+        let text = self.store.log_text(&id);
+        let lines: Vec<String> = text.lines().map(str::to_string).collect();
+        self.log_view = Some((id, Rc::new(lines)));
+    }
+
     fn go(&mut self, route: Route) {
+        if route == Route::Logs
+            && self.log_view.is_none()
+            && let Some(first) = self.store.logs().0.first()
+        {
+            self.select_log(first.id.clone());
+        }
         if self.sheet.is_some() && matches!(self.sheet, Some(Sheet::Palette)) {
             self.sheet = None;
         }
@@ -564,6 +581,7 @@ impl Session {
                 title: "System".to_string(),
                 items: vec![
                     item("Audit log", Route::Audit, 0),
+                    item("Sync logs", Route::Logs, 0),
                     item("Settings", Route::Settings, 0),
                 ],
             },
@@ -577,6 +595,7 @@ impl Session {
             Route::OnUat => "On uat".to_string(),
             Route::Workspace => "Workspace".to_string(),
             Route::Audit => "Audit log".to_string(),
+            Route::Logs => "Sync logs".to_string(),
             Route::Settings => "Settings".to_string(),
             Route::Ticket { key, .. } => key.to_string(),
         };
@@ -752,6 +771,19 @@ impl Session {
             }
             Route::Workspace => ScreenVm::Workspace(self.store.workspace()),
             Route::Audit => ScreenVm::Audit(self.store.audit()),
+            Route::Logs => {
+                let (runs, note) = self.store.logs();
+                let shown = self
+                    .log_view
+                    .as_ref()
+                    .filter(|(id, _)| runs.iter().any(|r| r.id == *id));
+                ScreenVm::Logs(LogsVm {
+                    selected: shown.map(|(id, _)| id.clone()),
+                    lines: shown.map(|(_, l)| l.clone()).unwrap_or_default(),
+                    runs,
+                    note,
+                })
+            }
             Route::Settings => {
                 let mut v = self.store.settings();
                 v.appearance = ThemeChoice::LIST
@@ -799,6 +831,7 @@ impl Session {
 
     pub fn view(&self) -> AppVm {
         let counts = self.store.counts();
+        let right = self.store.right_panel(&self.route);
         AppVm {
             route: self.route.clone(),
             nav: self.nav(&counts),
@@ -813,8 +846,8 @@ impl Session {
                 _ => "Activity",
             }
             .to_string(),
-            right: self.store.right_panel(&self.route),
-            right_open: self.right_open,
+            right_open: self.right_open && !right.is_empty(),
+            right,
             theme: self.theme,
             screen: self.screen_vm(),
             sheet: self.sheet_vm(),
@@ -1583,6 +1616,48 @@ mod tests {
             panic!()
         };
         assert!(text.contains("not logged into any GitHub hosts"));
+    }
+
+    #[test]
+    fn the_log_screen_opens_on_the_newest_run_and_switches_by_intent() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Logs));
+        let ScreenVm::Logs(v) = s.view().screen else {
+            panic!("not the log screen")
+        };
+        assert_eq!(v.selected.as_deref(), Some("sync-run-0.log"));
+        assert!(v.lines[0].contains("sync-run-0.log"));
+        assert!(v.runs.len() > 1 && !v.note.is_empty());
+
+        s.handle(Intent::SelectLog("sync-run-2.log".into()));
+        let ScreenVm::Logs(v) = s.view().screen else {
+            panic!()
+        };
+        assert_eq!(v.selected.as_deref(), Some("sync-run-2.log"));
+        assert!(v.lines[0].contains("sync-run-2.log"));
+    }
+
+    #[test]
+    fn a_selected_log_that_was_pruned_is_not_shown() {
+        let mut s = Session::demo();
+        s.handle(Intent::SelectLog("sync-gone.log".into()));
+        s.handle(Intent::Go(Route::Logs));
+        let ScreenVm::Logs(v) = s.view().screen else {
+            panic!()
+        };
+        assert_eq!(v.selected, None);
+        assert!(v.lines.is_empty());
+    }
+
+    #[test]
+    fn screens_that_are_the_record_have_no_side_panel_echoing_it() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Audit));
+        assert!(s.view().right.is_empty());
+        s.handle(Intent::Go(Route::Logs));
+        assert!(s.view().right.is_empty());
+        s.handle(Intent::Go(Route::Settings));
+        assert!(!s.view().right.is_empty());
     }
 
     #[test]

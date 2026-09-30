@@ -142,6 +142,7 @@ fn apply_env(session: &mut Session) {
         Some("uat") => Route::OnUat,
         Some("workspace") => Route::Workspace,
         Some("audit") => Route::Audit,
+        Some("logs") => Route::Logs,
         Some("settings") => Route::Settings,
         Some("ticket") => {
             let key = parts.next().unwrap_or("PROJ-142");
@@ -365,6 +366,7 @@ impl AppView {
             ScreenVm::OnUat(v) => env::on_uat(ui, &self.inputs, v),
             ScreenVm::Workspace(v) => env::workspace(ui, v).into_any_element(),
             ScreenVm::Audit(rows) => env::audit(ui, rows).into_any_element(),
+            ScreenVm::Logs(v) => env::logs(ui, cx, v).into_any_element(),
             ScreenVm::Settings(v) => env::settings(ui, v).into_any_element(),
             ScreenVm::Missing(msg) => div().p_8().child(msg.clone()).into_any_element(),
         }
@@ -393,7 +395,11 @@ impl AppView {
         // Lists own their scrolling (a uniform list needs a bounded height); every other screen scrolls as a page.
         let is_list = matches!(
             self.vm.screen,
-            ScreenVm::Next(_) | ScreenVm::Tickets(_) | ScreenVm::OnUat(_) | ScreenVm::Ticket { .. }
+            ScreenVm::Next(_)
+                | ScreenVm::Tickets(_)
+                | ScreenVm::OnUat(_)
+                | ScreenVm::Logs(_)
+                | ScreenVm::Ticket { .. }
         );
         // Every screen is edge to edge: it draws its own strips, rows and hairlines, and pads only its text.
         let body = if is_list {

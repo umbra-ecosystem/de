@@ -960,6 +960,8 @@ impl Store for Sim {
                 .map(|t| self.right_ticket(t))
                 .unwrap_or_default(),
             Route::Next => self.right_next(),
+            // These screens are themselves the record; a side panel of the same rows would only echo them.
+            Route::Audit | Route::Logs => Vec::new(),
             _ => {
                 let mut out: Vec<RightSection> = self.sync_section().into_iter().collect();
                 out.push(RightSection {
@@ -1013,6 +1015,11 @@ impl Store for Sim {
             label: "Audit log".into(),
             hint: "screen".into(),
             intent: Intent::Go(Route::Audit),
+        });
+        items.push(PaletteItem {
+            label: "Sync logs".into(),
+            hint: "screen".into(),
+            intent: Intent::Go(Route::Logs),
         });
         items.push(PaletteItem {
             label: "Settings".into(),
@@ -1254,6 +1261,26 @@ impl Store for Sim {
 
     fn audit(&self) -> Vec<AuditRow> {
         self.audit.iter().map(audit_row).collect()
+    }
+
+    fn logs(&self) -> (Vec<LogRunVm>, String) {
+        let runs = (0..3)
+            .map(|i| LogRunVm {
+                id: format!("sync-run-{i}.log"),
+                when: format!("2026-10-01 09:{:02}:00", 40 - i * 10),
+                size: "12 KB".to_string(),
+            })
+            .collect();
+        (
+            runs,
+            "Keeping the latest 20 runs. Change logs.keep in config.toml.".to_string(),
+        )
+    }
+
+    fn log_text(&self, id: &str) -> String {
+        format!(
+            "[+   0.000s] run started ({id})\n[+   0.002s] sync started: only all sources, force true\n[+   0.003s] $ acli jira workitem search --jql status = \"In Review\" --paginate --json\n[+   2.400s] exit 0 in 2.40s\n[+   2.401s] run ended\n"
+        )
     }
 
     fn settings(&self) -> SettingsVm {

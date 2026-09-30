@@ -244,6 +244,25 @@ fn search_combines_pages_and_maps_fields() {
 }
 
 #[test]
+fn every_acli_call_is_written_to_the_run_log() {
+    let _serial = crate::synclog::TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let (jira, _fake) = reader(Fake::default().on(&search_argv("project = PROJ"), ok(SEARCH)));
+
+    let run = crate::synclog::begin(dir.path(), 1_700_000_000, 5).unwrap();
+    jira.search("project = PROJ").unwrap();
+    drop(run);
+
+    let files = crate::synclog::list(dir.path()).unwrap();
+    let text = crate::synclog::read(dir.path(), &files[0].name).unwrap();
+    assert!(text.contains("$ acli jira workitem search --jql project = PROJ"), "{text}");
+    assert!(text.contains("exit 0 in"), "{text}");
+    assert!(text.contains("Fix login redirect"), "raw stdout is kept: {text}");
+}
+
+#[test]
 fn search_never_asks_for_updated_which_real_acli_rejects() {
     // `--fields ...,updated` makes the real acli exit 1: "field 'updated' is not allowed".
     let fields: Vec<&str> = SEARCH_FIELDS.split(',').collect();

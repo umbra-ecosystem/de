@@ -232,6 +232,8 @@ pub enum Intent {
     CloseTab(TicketKey),
     ForceCloseTab(TicketKey),
     Diagnose,
+    /// Show this sync log (again: read it again, it may still be growing).
+    SelectLog(String),
     PinTab(TicketKey),
     ToggleAttention,
     ToggleSimulate,

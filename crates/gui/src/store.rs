@@ -7,10 +7,13 @@
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use de_core::config::Config;
+use de_core::synclog;
 use de_widgets::sim::Sim;
 use de_widgets::vm::*;
 use de_widgets::{Outcome, ReviewSel, Store};
 
+use crate::logs;
 use crate::sync::{SyncDone, load_cached, sync_real};
 
 pub struct CoreStore {
@@ -143,6 +146,19 @@ impl Store for CoreStore {
     }
     fn settings(&self) -> SettingsVm {
         self.sim.settings()
+    }
+    fn logs(&self) -> (Vec<LogRunVm>, String) {
+        match (synclog::default_dir(), Config::load()) {
+            (Ok(dir), Ok(config)) => logs::runs_in(&dir, config.log_keep()),
+            (Ok(dir), Err(_)) => logs::runs_in(&dir, synclog::DEFAULT_KEEP),
+            (Err(_), _) => (Vec::new(), String::new()),
+        }
+    }
+    fn log_text(&self, id: &str) -> String {
+        match synclog::default_dir() {
+            Ok(dir) => logs::text_in(&dir, id),
+            Err(e) => format!("The log folder could not be found: {e:#}"),
+        }
     }
     fn simulate(&self) -> Vec<SimGroup> {
         self.sim.simulate()

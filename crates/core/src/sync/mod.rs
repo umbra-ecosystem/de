@@ -68,6 +68,12 @@ pub fn sync_all(
     only: Option<SyncSource>,
 ) -> SyncReport {
     let mut report = SyncReport::default();
+    crate::synclog::log(format!(
+        "sync started: only {}, force {}, {} hosted repo(s)",
+        only.map_or("all sources", SyncSource::as_str),
+        ctx.force,
+        repos.len()
+    ));
 
     if only.is_none_or(|s| s == SyncSource::Jira) {
         report.sources.push(match jira {
@@ -109,5 +115,11 @@ pub fn sync_all(
         }
     }
 
+    for source in &report.sources {
+        crate::synclog::log(format!(
+            "{}: {:?}; {:?}; notes {:?}",
+            source.source, source.outcome, source.counts, source.notes
+        ));
+    }
     report
 }

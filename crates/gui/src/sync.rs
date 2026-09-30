@@ -64,6 +64,8 @@ pub fn sync_real(now: i64) -> SyncDone {
         .and_then(|c| Ok((c, Store::open_default(Kind::State)?, Store::open_default(Kind::Cache)?)));
     match opened {
         Ok((config, state, cache)) => {
+            // Kept until the sync is done; dropping it ends the run.
+            let _run_log = de_core::synclog::begin_default(now, &config);
             let providers = Providers::from_config(&config);
             sync_now(&state, &cache, &config, providers.jira.as_deref(), now)
         }

@@ -16,7 +16,7 @@ use super::ctx::Ui;
 use super::theme::{Pal, mono};
 use crate::vm::*;
 
-fn hash_id(prefix: &str, what: &impl std::fmt::Debug) -> SharedString {
+pub fn hash_id(prefix: &str, what: &impl std::fmt::Debug) -> SharedString {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     format!("{what:?}").hash(&mut h);
     format!("{prefix}-{:x}", h.finish()).into()

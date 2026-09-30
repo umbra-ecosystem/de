@@ -17,6 +17,17 @@ pub struct Config {
     /// Pipeline settings (`[pipelines]`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pipelines: Option<PipelinesConfig>,
+    /// Sync log settings (`[logs]`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logs: Option<LogsConfig>,
+}
+
+/// `[logs]` in the global config.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogsConfig {
+    /// How many sync log files to keep (one per run, oldest removed first). Default 20.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep: Option<usize>,
 }
 
 /// `[jira]` in the global config. Everything is optional so existing files keep loading.
@@ -177,6 +188,15 @@ impl Config {
     /// The `[jira]` section, or an empty one.
     pub fn jira(&self) -> JiraConfig {
         self.jira.clone().unwrap_or_default()
+    }
+
+    /// How many sync logs to keep; at least one.
+    pub fn log_keep(&self) -> usize {
+        self.logs
+            .as_ref()
+            .and_then(|l| l.keep)
+            .unwrap_or(crate::synclog::DEFAULT_KEEP)
+            .max(1)
     }
 
     /// The JQL of the Review pool: the configured `review_jql`, else every ticket in the review status updated

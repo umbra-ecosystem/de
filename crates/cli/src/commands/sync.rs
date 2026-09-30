@@ -67,6 +67,7 @@ pub fn sync(only: Option<SyncSource>, force: bool) -> eyre::Result<()> {
 
     let providers = Providers::from_config(&config);
     let now = now()?;
+    let run_log = de_core::synclog::begin_default(now, &config);
     let ctx = SyncContext {
         state: &state,
         cache: &cache,
@@ -79,6 +80,9 @@ pub fn sync(only: Option<SyncSource>, force: bool) -> eyre::Result<()> {
 
     for line in render_sync_report(&report) {
         ui.writeln(&line)?;
+    }
+    if let Some(run_log) = &run_log {
+        ui.writeln(&format!("Raw log: {}", run_log.path().display()))?;
     }
     Ok(())
 }
