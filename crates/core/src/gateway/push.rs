@@ -117,9 +117,14 @@ impl Gateway<'_> {
             if rec.merge.repo != repo.repo {
                 continue;
             }
+            // Only a merge the remote's `uat` (as prepared) still contains counts; after a
+            // reset of `uat` an old record must not stop the push.
             if git
                 .is_ancestor(&repo.ticket_tip, &rec.merge.commit)
                 .unwrap_or(false)
+                && git
+                    .is_ancestor(&rec.merge.commit, &repo.uat_before)
+                    .unwrap_or(false)
             {
                 return Ok(true);
             }

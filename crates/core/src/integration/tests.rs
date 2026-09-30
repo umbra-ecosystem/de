@@ -795,6 +795,71 @@ fn a_push_of_an_inactive_ticket_is_refused_by_the_gateway() {
     assert!(err.to_string().contains("not active"), "{err}");
 }
 
+#[test]
+fn a_recorded_merge_that_uat_no_longer_contains_is_pushed_again() {
+    // uat is long-lived but teams do reset it. A merge recorded earlier must not make the
+    // ticket count as "already pushed" when the remote uat no longer contains it.
+    let env = Env::active();
+    let prep = env.prepare();
+    assert!(env.push(&prep).all_done());
+    let first = prep.repos[0].repo.clone();
+    let before = ready(&prep.repos[0].outcome).uat_before.clone();
+    env.repo(&first).git(&[
+        "push",
+        "--force",
+        "origin",
+        &format!("{before}:refs/heads/uat"),
+    ]);
+
+    let again = env.prepare();
+    assert!(
+        matches!(env.outcome(&again, &first), RepoOutcome::Ready(_)),
+        "{:?}",
+        env.outcome(&again, &first)
+    );
+    // The repo whose uat still has the merge stays "already pushed".
+    let second = prep.repos[1].repo.clone();
+    assert!(matches!(
+        env.outcome(&again, &second),
+        RepoOutcome::AlreadyPushed { .. }
+    ));
+
+    // And it really is pushed again (the gateway does not skip it on the stale record), and
+    // the ticket can then be finalized.
+    let new_merge = ready(env.outcome(&again, &first)).merge_commit.clone();
+    assert!(env.push(&again).all_done());
+    assert_eq!(env.repo(&first).origin_sha("uat"), new_merge);
+    finalize_integration(
+        &env.fx.store,
+        &env.fx.runner,
+        env.data.path(),
+        &again,
+        &env.fx.repos(),
+        60,
+    )
+    .unwrap();
+    assert_eq!(env.status(), LocalStatus::Integrated);
+}
+
+#[cfg(unix)]
+#[test]
+fn hooks_of_the_repo_do_not_stop_the_merge_commit_from_being_worded() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let env = Env::active();
+    for name in ["api-client", "worker"] {
+        let hook = env.repo(name).dir.join(".git/hooks/pre-commit");
+        std::fs::write(&hook, "#!/bin/sh\necho 'lint failed' >&2\nexit 1\n").unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let prep = env.prepare();
+    assert!(
+        prep.is_ready(),
+        "a failing pre-commit hook blocked the integration: {:?}",
+        prep.repos.iter().map(|r| &r.outcome).collect::<Vec<_>>()
+    );
+}
+
 // ---------------------------------------------------------- deploy status
 
 struct Deploys {
