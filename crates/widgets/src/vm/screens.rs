@@ -237,7 +237,10 @@ pub struct TicketSection {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TicketListVm {
-    pub group: Group,
+    /// The local state column is shown only where it is not implied (the list of all tickets).
+    pub show_local: bool,
+    /// What the empty list says when there is nothing at all (not when filters hide everything).
+    pub empty: String,
     pub sections: Vec<TicketSection>,
     /// Filled in by the session, which owns the search text, filters and sort.
     pub options: TicketFilterOptions,
@@ -552,27 +555,10 @@ pub struct ShipVm {
 
 /* ------------------------------ environment ------------------------------ */
 
-/// One ticket on uat: what it is and which repos it landed in (sorted).
-#[derive(Clone, Debug, PartialEq)]
-pub struct UatRow {
-    pub key: TicketKey,
-    pub title: String,
-    pub repos: Vec<RepoName>,
-    pub jira: Badge,
-    /// The first deploy that is not healthy, if any; silence means every landing deployed.
-    pub problem: Option<DeployChip>,
-}
-
+/// What is on uat: the same table as every ticket list (deploy state is a flag like anywhere else), plus overlaps.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OnUatVm {
-    /// Rows after the filters.
-    pub rows: Vec<UatRow>,
-    /// Every repo that has something on uat (the filter chips) and the ones currently chosen.
-    pub repos: Vec<RepoName>,
-    pub chosen: Vec<RepoName>,
-    pub problems_only: bool,
-    /// Rows before filtering, to tell "nothing on uat" from "nothing matches".
-    pub total: usize,
+    pub table: TicketListVm,
     pub overlaps: Vec<String>,
 }
 

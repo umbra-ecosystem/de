@@ -1,7 +1,7 @@
 //! `Store` for the simulation: builds every view model and routes every command.
 
 use super::Sim;
-use super::detail::{deploy_chip, jira_badge, local_badge, priority_tone};
+use super::detail::{jira_badge, local_badge, priority_tone};
 use super::model::*;
 use super::rules::Sug;
 use crate::store::{Outcome, ReviewSel, Store};
@@ -1008,7 +1008,12 @@ impl Store for Sim {
             })
             .find(|(_, n)| *n > 0);
         TicketListVm {
-            group,
+            show_local: group == Group::All,
+            empty: if group == Group::All {
+                "No tickets.".to_string()
+            } else {
+                format!("Nothing in {}.", group.label().to_lowercase())
+            },
             sections,
             options: TicketFilterOptions::default(),
             filters: TicketFilters::default(),
@@ -1052,7 +1057,6 @@ impl Store for Sim {
 
     fn on_uat(&self) -> OnUatVm {
         let mut overlaps = Vec::new();
-        let mut rows: Vec<UatRow> = Vec::new();
         for r in &self.repos {
             let list: Vec<&Ticket> = self
                 .tickets
@@ -1078,40 +1082,43 @@ impl Store for Sim {
                 }
             }
         }
+        let mut rows: Vec<TicketRowVm> = Vec::new();
         for t in self
             .tickets
             .iter()
             .filter(|t| self.repos.iter().any(|r| t.has_landed(&r.name)))
         {
-            let landed: Vec<_> = self
+            let mut row = self.ticket_row(t);
+            // On uat a ticket's repos are the ones it landed in, not every repo it has a PR in.
+            row.repos = self
                 .repos
                 .iter()
-                .filter_map(|r| Some((r.name.clone(), t.landing(&r.name)?)))
+                .filter(|r| t.has_landed(&r.name))
+                .map(|r| r.name.clone())
                 .collect();
-            let mut repos: Vec<RepoName> = landed.iter().map(|(n, _)| n.clone()).collect();
-            repos.sort();
-            rows.push(UatRow {
-                key: t.key.clone(),
-                title: t.title.clone(),
-                repos,
-                jira: jira_badge(t.jira),
-                problem: landed
-                    .iter()
-                    .map(|(_, l)| deploy_chip(&l.deploy))
-                    .find(|c| c.tone != Tone::Ok),
-            });
+            row.repos.sort();
+            rows.push(row);
         }
         rows.sort_by(|a, b| a.key.cmp(&b.key));
-        let mut repos: Vec<RepoName> = rows.iter().flat_map(|r| r.repos.clone()).collect();
-        repos.sort();
-        repos.dedup();
         let total = rows.len();
         OnUatVm {
-            rows,
-            repos,
-            chosen: Vec::new(),
-            problems_only: false,
-            total,
+            table: TicketListVm {
+                show_local: false,
+                empty: "Nothing of yours is on uat.".to_string(),
+                sections: if rows.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![TicketSection {
+                        heading: None,
+                        rows,
+                    }]
+                },
+                options: TicketFilterOptions::default(),
+                filters: TicketFilters::default(),
+                sort: None,
+                total,
+                elsewhere: None,
+            },
             overlaps,
         }
     }

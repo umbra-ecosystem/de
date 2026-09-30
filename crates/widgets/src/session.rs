@@ -53,8 +53,6 @@ pub struct Session {
     toasts: Vec<Toast>,
     next_toast: u64,
     show_all: bool,
-    uat_repos: Vec<RepoName>,
-    uat_problems: bool,
     ticket_filters: TicketFilters,
     ticket_sort: Option<(TicketSort, bool)>,
     attention_open: bool,
@@ -82,8 +80,6 @@ impl Session {
             toasts: Vec::new(),
             next_toast: 0,
             show_all: false,
-            uat_repos: Vec::new(),
-            uat_problems: false,
             ticket_filters: TicketFilters::default(),
             ticket_sort: None,
             attention_open: false,
@@ -193,17 +189,6 @@ impl Session {
                     _ => Some((col, true)),
                 }
             }
-            Intent::ToggleUatProblems => self.uat_problems = !self.uat_problems,
-            Intent::ClearUatFilters => {
-                self.uat_repos.clear();
-                self.uat_problems = false;
-            }
-            Intent::ToggleUatRepo(r) => match self.uat_repos.iter().position(|x| x == &r) {
-                Some(i) => {
-                    self.uat_repos.remove(i);
-                }
-                None => self.uat_repos.push(r),
-            },
             Intent::OpenPalette => {
                 self.texts.remove(&Field::Palette);
                 self.sheet = Some(Sheet::Palette);
@@ -367,6 +352,12 @@ impl Session {
                 }
             }
         } else {
+            // Each list starts fresh: search, filters and sort belong to the list they were set on.
+            if route != self.route {
+                self.ticket_filters = TicketFilters::default();
+                self.ticket_sort = None;
+                self.texts.remove(&Field::TicketFilter);
+            }
             self.screen = route.clone();
         }
         self.route = route;
@@ -537,24 +528,23 @@ impl Session {
             route,
             count,
         };
-        let mut tickets = vec![item(
-            Group::All.label(),
-            Route::Tickets(Group::All),
-            counts.group(Group::All),
-        )];
-        tickets.extend(
-            Group::NAV
-                .iter()
-                .map(|g| item(g.label(), Route::Tickets(*g), counts.group(*g))),
-        );
+        let list = |g: Group| item(g.label(), Route::Tickets(g), counts.group(g));
         vec![
             NavSection {
                 title: String::new(),
-                items: vec![item("Next", Route::Next, counts.suggestions)],
+                items: vec![
+                    item("Next", Route::Next, counts.suggestions),
+                    list(Group::Pool),
+                    list(Group::All),
+                ],
             },
             NavSection {
-                title: "Tickets".to_string(),
-                items: tickets,
+                title: "Status".to_string(),
+                items: Group::NAV
+                    .iter()
+                    .filter(|g| **g != Group::Pool)
+                    .map(|g| list(*g))
+                    .collect(),
             },
             NavSection {
                 title: "Environment".to_string(),
@@ -657,6 +647,55 @@ impl Session {
         })
     }
 
+    /// Apply the search, filters and sort of the ticket table (shared by every ticket list) and list what the
+    /// filter menu may offer, from the rows before they are narrowed.
+    fn narrow_tickets(&self, v: &mut TicketListVm) {
+        let q = self.text(&Field::TicketFilter).trim().to_lowercase();
+        let mut options = TicketFilterOptions::default();
+        for r in v.sections.iter().flat_map(|s| &s.rows) {
+            options.repos.extend(r.repos.iter().cloned());
+            options.jira.push(r.jira.text.clone());
+            options.priority.push(r.priority.text.clone());
+        }
+        for f in [&mut options.jira, &mut options.priority] {
+            f.sort();
+            f.dedup();
+        }
+        options.repos.sort();
+        options.repos.dedup();
+        // What is chosen stays listed even if nothing is left to pick it from.
+        for r in &self.ticket_filters.repos {
+            if !options.repos.contains(r) {
+                options.repos.push(r.clone());
+            }
+        }
+        let filters = self.ticket_filters.clone();
+        let sort = self.ticket_sort;
+        for s in &mut v.sections {
+            s.rows.retain(|r| {
+                filters.keeps(r)
+                    && (q.is_empty()
+                        || r.title.to_lowercase().contains(&q)
+                        || r.key.to_lowercase().contains(&q)
+                        || r.sub.to_lowercase().contains(&q))
+            });
+            if let Some((col, asc)) = sort {
+                s.rows.sort_by(|a, b| {
+                    let o = match col {
+                        TicketSort::Key => a.key.cmp(&b.key),
+                        TicketSort::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+                        TicketSort::Jira => a.jira.text.cmp(&b.jira.text),
+                    };
+                    if asc { o } else { o.reverse() }
+                });
+            }
+        }
+        v.sections.retain(|s| !s.rows.is_empty());
+        v.options = options;
+        v.filters = filters;
+        v.sort = sort;
+    }
+
     fn screen_vm(&self) -> ScreenVm {
         match &self.route {
             Route::Next => {
@@ -675,69 +714,12 @@ impl Session {
             }
             Route::Tickets(g) => {
                 let mut v = self.store.tickets(*g);
-                let q = self.text(&Field::TicketFilter).trim().to_lowercase();
-                let rows = || v.sections.iter().flat_map(|s| &s.rows);
-                let mut options = TicketFilterOptions::default();
-                for r in rows() {
-                    options.repos.extend(r.repos.iter().cloned());
-                    options.jira.push(r.jira.text.clone());
-                    options.priority.push(r.priority.text.clone());
-                }
-                for f in [&mut options.jira, &mut options.priority] {
-                    f.sort();
-                    f.dedup();
-                }
-                options.repos.sort();
-                options.repos.dedup();
-                // What is chosen stays listed even if nothing is left to pick it from.
-                for r in &self.ticket_filters.repos {
-                    if !options.repos.contains(r) {
-                        options.repos.push(r.clone());
-                    }
-                }
-                let filters = self.ticket_filters.clone();
-                let sort = self.ticket_sort;
-                for s in &mut v.sections {
-                    s.rows.retain(|r| {
-                        filters.keeps(r)
-                            && (q.is_empty()
-                                || r.title.to_lowercase().contains(&q)
-                                || r.key.to_lowercase().contains(&q)
-                                || r.sub.to_lowercase().contains(&q))
-                    });
-                    if let Some((col, asc)) = sort {
-                        s.rows.sort_by(|a, b| {
-                            let o = match col {
-                                TicketSort::Key => a.key.cmp(&b.key),
-                                TicketSort::Title => {
-                                    a.title.to_lowercase().cmp(&b.title.to_lowercase())
-                                }
-                                TicketSort::Jira => a.jira.text.cmp(&b.jira.text),
-                            };
-                            if asc { o } else { o.reverse() }
-                        });
-                    }
-                }
-                v.sections.retain(|s| !s.rows.is_empty());
-                v.options = options;
-                v.filters = filters;
-                v.sort = sort;
+                self.narrow_tickets(&mut v);
                 ScreenVm::Tickets(v)
             }
             Route::OnUat => {
                 let mut v = self.store.on_uat();
-                let q = self.text(&Field::UatFilter).trim().to_lowercase();
-                v.chosen = self.uat_repos.clone();
-                v.problems_only = self.uat_problems;
-                let problems = self.uat_problems;
-                v.rows.retain(|r| {
-                    (!problems || r.problem.is_some())
-                        && (v.chosen.is_empty() || r.repos.iter().any(|x| v.chosen.contains(x)))
-                        && (q.is_empty()
-                            || r.title.to_lowercase().contains(&q)
-                            || r.key.to_lowercase().contains(&q)
-                            || r.jira.text.to_lowercase().contains(&q))
-                });
+                self.narrow_tickets(&mut v.table);
                 ScreenVm::OnUat(v)
             }
             Route::Workspace => ScreenVm::Workspace(self.store.workspace()),
@@ -1636,37 +1618,46 @@ mod tests {
     }
 
     #[test]
-    fn the_sidebar_lists_the_ticket_groups_under_their_own_title() {
+    fn the_sidebar_lists_the_statuses_under_their_own_title() {
         let s = Session::demo();
         let nav = s.view().nav;
-        assert_eq!(nav[0].items.len(), 1, "Next stands alone");
-        assert_eq!(nav[1].title, "Tickets");
-        assert_eq!(nav[1].items[0].label, "All tickets");
-        assert_eq!(nav[1].items.len(), Group::NAV.len() + 1);
+        let labels =
+            |i: usize| -> Vec<&str> { nav[i].items.iter().map(|x| x.label.as_str()).collect() };
+        assert_eq!(labels(0), ["Next", "Review pool", "All tickets"]);
+        assert_eq!(nav[1].title, "Status");
+        assert_eq!(
+            labels(1),
+            [
+                "In review",
+                "Active",
+                "Parked",
+                "Awaiting alpha",
+                "Returned",
+                "Done"
+            ]
+        );
     }
 
     #[test]
-    fn the_uat_table_filters_by_text_and_by_repo() {
+    fn on_uat_shares_the_ticket_table_and_each_list_starts_fresh() {
         let mut s = Session::demo();
         s.handle(Intent::Go(Route::OnUat));
         let rows = |s: &Session| match s.view().screen {
-            ScreenVm::OnUat(v) => v.rows.len(),
+            ScreenVm::OnUat(v) => v.table.sections.iter().map(|x| x.rows.len()).sum::<usize>(),
             _ => panic!("not the uat screen"),
         };
         let all = rows(&s);
         assert!(all >= 2);
-        s.handle(Intent::SetText(Field::UatFilter, "zzz-no-such".into()));
-        assert_eq!(rows(&s), 0);
-        s.handle(Intent::SetText(Field::UatFilter, String::new()));
-        assert_eq!(rows(&s), all);
-        s.handle(Intent::ToggleUatRepo(RepoName::from("worker")));
+        s.handle(Intent::ToggleTicketFilter(TicketFilter::Repo(
+            RepoName::from("worker"),
+        )));
         assert_eq!(rows(&s), 0, "nothing on uat touches worker");
-        s.handle(Intent::ToggleUatRepo(RepoName::from("worker")));
-        assert_eq!(rows(&s), all, "toggling again clears the filter");
-        s.handle(Intent::ToggleUatProblems);
-        s.handle(Intent::ToggleUatRepo(RepoName::from("web")));
-        s.handle(Intent::ClearUatFilters);
-        assert_eq!(rows(&s), all, "show everything clears every uat filter");
+        s.handle(Intent::SetText(Field::TicketFilter, "x".into()));
+        // moving to another list clears what was set here
+        s.handle(Intent::go_tickets(Group::All));
+        assert_eq!(s.text(&Field::TicketFilter), "");
+        s.handle(Intent::Go(Route::OnUat));
+        assert_eq!(rows(&s), all);
     }
 
     #[test]

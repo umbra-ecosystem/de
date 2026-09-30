@@ -223,8 +223,6 @@ pub enum Field {
     NextFilter,
     /// The search box of the ticket table.
     TicketFilter,
-    /// The filter box of On uat.
-    UatFilter,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -240,15 +238,10 @@ pub enum Intent {
     TogglePanel,
     SetTheme(ThemeChoice),
     ToggleShowAll,
-    /// Show only tickets that touch this repo (several repos: any of them).
-    ToggleUatRepo(RepoName),
-    /// Show only tickets whose deploy is not healthy.
-    ToggleUatProblems,
     ToggleTicketFilter(TicketFilter),
     ClearTicketFilters,
     /// Sort the ticket table by a column; again to flip the direction, a third time to clear.
     SortTickets(TicketSort),
-    ClearUatFilters,
     OpenPalette,
     ClosePalette,
     /// Send a command. A remote write always opens a confirm sheet first; some local ones do too.

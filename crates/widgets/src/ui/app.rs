@@ -78,11 +78,8 @@ fn needs(vm: &AppVm) -> Vec<Need> {
     if matches!(vm.screen, ScreenVm::Next(_)) {
         add(Field::NextFilter, false, "Search suggestions…");
     }
-    if matches!(vm.screen, ScreenVm::Tickets(_)) {
+    if matches!(vm.screen, ScreenVm::Tickets(_) | ScreenVm::OnUat(_)) {
         add(Field::TicketFilter, false, "Search tickets…");
-    }
-    if matches!(vm.screen, ScreenVm::OnUat(_)) {
-        add(Field::UatFilter, false, "Filter tickets on uat…");
     }
     match &vm.sheet {
         Some(SheetVm::Confirm { preview, .. }) if preview.type_key.is_some() => {

@@ -1,14 +1,11 @@
 //! Screens that are not about one ticket: what is on uat, the workspace, the audit log, settings.
 //! Edge to edge: strips, columns and row hairlines reach the panel edges; text keeps the page margin.
 
-use std::rc::Rc;
-
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::ticket::audit_rows;
 use crate::ui::ctx::{Inputs, Ui};
-use crate::ui::filter_menu::{FilterGroup, FilterRow, filter_menu};
 use crate::ui::theme::Pal;
 use crate::ui::widgets::*;
 use crate::vm::*;
@@ -39,145 +36,20 @@ fn row(pal: &Pal) -> Div {
         .border_color(pal.border.opacity(0.4))
 }
 
-const UAT_ROW_H: f32 = 44.0;
-
-fn uat_cell(w: f32) -> Div {
-    div().flex_none().w(px(w)).px_2()
-}
-
-/// Tickets on uat as a table: a filter strip and a column header that stay put, a uniform list of rows under
-/// them. Overlaps are exceptions: they get a band under the table only when there are some.
+/// What is on uat: the ticket table every list uses, then the overlaps. Overlaps are exceptions, so there is a
+/// band for them only when there are some.
 pub fn on_uat(ui: &Ui, inputs: &Inputs, v: &OnUatVm) -> AnyElement {
     let pal = &ui.pal;
-    let mut groups = vec![FilterGroup {
-        title: "Repos",
-        rows: v
-            .repos
-            .iter()
-            .map(|r| {
-                FilterRow::new(
-                    r.to_string(),
-                    v.chosen.contains(r),
-                    Intent::ToggleUatRepo(r.clone()),
-                )
-            })
-            .collect(),
-    }];
-    groups.push(FilterGroup {
-        title: "Deploy",
-        rows: vec![FilterRow::new(
-            "Problems only",
-            v.problems_only,
-            Intent::ToggleUatProblems,
-        )],
-    });
-    let filters = strip(pal)
-        .h(px(48.0))
-        .px_4()
-        .gap_2()
-        .child(div().flex_1())
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .max_w(px(360.0))
-                .child(inputs.search(&Field::UatFilter)),
-        )
-        .child(filter_menu(
-            ui,
-            "uat-filters",
-            groups,
-            Some(Intent::ClearUatFilters),
-        ));
-    let head_cell = |w: f32, t: &str| uat_cell(w).child(t.to_uppercase());
-    let header = div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .px_4()
-        .py_1()
-        .border_b_1()
-        .border_color(pal.border.opacity(0.6))
-        .text_xs()
-        .text_color(pal.faint)
-        .child(head_cell(90.0, "Key"))
-        .child(div().flex_1().px_2().child("TITLE"))
-        .child(head_cell(200.0, "Repos"))
-        .child(head_cell(130.0, "Jira"))
-        .child(head_cell(130.0, "Deploy"));
-    let body = if v.rows.is_empty() {
-        empty_state(
-            pal,
-            if v.total == 0 {
-                "Nothing of yours is on uat."
-            } else {
-                "No ticket on uat matches."
-            },
-        )
-        .into_any_element()
-    } else {
-        let rows = Rc::new(v.rows.clone());
-        let ui = ui.clone();
-        uniform_list("uat-list", rows.len(), move |range, _, _| {
-            range
-                .map(|i| {
-                    let r = &rows[i];
-                    let pal = &ui.pal;
-                    div()
-                        .id(SharedString::from(format!("uat-{}", r.key)))
-                        .flex()
-                        .items_center()
-                        .w_full()
-                        .h(px(UAT_ROW_H))
-                        .px_4()
-                        .border_b_1()
-                        .border_color(pal.border.opacity(0.5))
-                        .cursor_pointer()
-                        .hover(|s| s.bg(pal.hover))
-                        .on_click(ui.on_click(Intent::go_ticket(r.key.clone(), TicketTab::Ship)))
-                        .child(uat_cell(90.0).child(key_text(&ui, &r.key)))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .px_2()
-                                .truncate()
-                                .child(r.title.clone()),
-                        )
-                        .child(
-                            uat_cell(200.0)
-                                .truncate()
-                                .text_xs()
-                                .font_family(ui.mono.clone())
-                                .text_color(pal.muted)
-                                .child(
-                                    r.repos
-                                        .iter()
-                                        .map(|x| x.to_string())
-                                        .collect::<Vec<_>>()
-                                        .join(", "),
-                                ),
-                        )
-                        .child(uat_cell(130.0).child(pill(pal, &r.jira)))
-                        .child(
-                            uat_cell(130.0)
-                                .when_some(r.problem.clone(), |d, c| d.child(deploy_chip(pal, &c))),
-                        )
-                        .into_any_element()
-                })
-                .collect::<Vec<_>>()
-        })
-        .w_full()
-        .flex_1()
-        .into_any_element()
-    };
     div()
         .flex()
         .flex_col()
         .size_full()
-        .child(filters)
-        .child(header)
-        .child(body)
+        .child(
+            div()
+                .flex_1()
+                .min_h_0()
+                .child(super::tickets::tickets(ui, inputs, &v.table)),
+        )
         .when(!v.overlaps.is_empty(), |d| {
             d.child(band(
                 pal,

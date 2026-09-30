@@ -6,6 +6,7 @@
 
 use std::rc::Rc;
 
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -20,8 +21,35 @@ const KEY_W: f32 = 90.0;
 const URGENT_W: f32 = 24.0;
 const REPOS_W: f32 = 140.0;
 const JIRA_W: f32 = 120.0;
-const LOCAL_W: f32 = 84.0;
+const LOCAL_W: f32 = 110.0;
 const FLAGS_W: f32 = 170.0;
+
+/// A status as a dot and a word: how Jira status and local state both read, so the two columns match.
+fn status(ui: &Ui, badge: Option<&Badge>, none: &str) -> Div {
+    let pal = &ui.pal;
+    let (color, text) = match badge {
+        Some(b) if b.tone != Tone::Neutral => (pal.tone(b.tone), b.text.clone()),
+        Some(b) => (pal.faint, b.text.clone()),
+        None => (pal.faint, none.to_string()),
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .text_sm()
+        .text_color(pal.muted)
+        .child(dot(color))
+        .child(text)
+}
+
+/// The repos a ticket touches, sorted, at most two named and the rest counted, so the column cannot grow.
+fn repos_text(repos: &[RepoName]) -> String {
+    let named: Vec<String> = repos.iter().take(2).map(|r| r.to_string()).collect();
+    match repos.len().saturating_sub(2) {
+        0 => named.join(", "),
+        n => format!("{} +{n}", named.join(", ")),
+    }
+}
 
 fn cell(w: f32) -> Div {
     div().flex_none().w(px(w)).px_2()
@@ -92,7 +120,6 @@ fn header(ui: &Ui, vm: &TicketListVm, show_local: bool) -> Div {
 pub fn ticket_row(ui: &Ui, r: &TicketRowVm, show_local: bool) -> Stateful<Div> {
     let pal = &ui.pal;
     let intent = Intent::go_ticket(r.key.clone(), TicketTab::Overview);
-    let tone = pal.tone(r.jira.tone);
     div()
         .id(SharedString::from(format!("row-{}", r.key)))
         .flex()
@@ -136,45 +163,28 @@ pub fn ticket_row(ui: &Ui, r: &TicketRowVm, show_local: bool) -> Stateful<Div> {
                 .child(div().truncate().child(faint(pal, r.sub.clone()))),
         )
         .child(
-            cell(REPOS_W)
-                .truncate()
-                .text_xs()
-                .font_family(ui.mono.clone())
-                .text_color(pal.muted)
-                .child(
-                    r.repos
-                        .iter()
-                        .map(|x| x.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                ),
-        )
-        .child(
-            cell(JIRA_W).child(
+            cell(REPOS_W).child(
                 div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .text_sm()
+                    .id(SharedString::from(format!("repos-{}", r.key)))
+                    .truncate()
+                    .text_xs()
+                    .font_family(ui.mono.clone())
                     .text_color(pal.muted)
-                    .child(dot(if r.jira.tone == Tone::Neutral {
-                        pal.faint
-                    } else {
-                        tone
-                    }))
-                    .child(r.jira.text.clone()),
+                    .child(repos_text(&r.repos))
+                    .when(r.repos.len() > 2, |d| {
+                        let all = r
+                            .repos
+                            .iter()
+                            .map(|x| x.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        d.tooltip(move |window, cx| Tooltip::new(all.clone()).build(window, cx))
+                    }),
             ),
         )
+        .child(cell(JIRA_W).child(status(ui, Some(&r.jira), "")))
         .when(show_local, |d| {
-            d.child(
-                cell(LOCAL_W)
-                    .text_xs()
-                    .text_color(pal.muted)
-                    .child(match &r.local {
-                        Some(b) => b.text.clone(),
-                        None => "unclaimed".to_string(),
-                    }),
-            )
+            d.child(cell(LOCAL_W).child(status(ui, r.local.as_ref(), "unclaimed")))
         })
         .child(
             cell(FLAGS_W)
@@ -256,7 +266,7 @@ fn filter_groups(vm: &TicketListVm) -> Vec<FilterGroup> {
 
 pub fn tickets(ui: &Ui, inputs: &Inputs, vm: &TicketListVm) -> AnyElement {
     let pal = &ui.pal;
-    let show_local = vm.group == Group::All;
+    let show_local = vm.show_local;
     let items: Vec<Item> = vm
         .sections
         .iter()
@@ -296,7 +306,7 @@ pub fn tickets(ui: &Ui, inputs: &Inputs, vm: &TicketListVm) -> AnyElement {
             ("No ticket here matches.".to_string(), None)
         } else {
             (
-                format!("Nothing in {}.", vm.group.label().to_lowercase()),
+                vm.empty.clone(),
                 vm.elsewhere.map(|(g, n)| {
                     Btn::new(
                         format!("{n} in {}", g.label().to_lowercase()),
