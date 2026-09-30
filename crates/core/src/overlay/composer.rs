@@ -161,7 +161,10 @@ pub fn scan_composer_json(lines: &[(Option<u32>, &str)], packages: &[&str]) -> V
         .map(|package| {
             // composer.json may spell the slash as `\/`.
             let name = regex::escape(package).replace('/', r"\\?/");
-            Regex::new(&format!(r#""{name}"\s*:\s*"\*""#)).expect("valid regex")
+            // Any spelling of "match anything": spaces and a stability flag (`*@dev`) included,
+            // and composer package names are case-insensitive.
+            Regex::new(&format!(r#"(?i)"{name}"\s*:\s*"\s*\*\s*(@\w+)?\s*""#))
+                .expect("valid regex")
         })
         .collect();
     for (line, text) in lines {

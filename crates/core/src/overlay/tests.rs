@@ -567,3 +567,75 @@ fn the_working_tree_check_sees_an_applied_overlay_and_only_that() {
     // No composer files at all is fine.
     assert!(!working_tree_has_overlay(&fx.docs.dir, PACKAGES).unwrap());
 }
+
+// ------------------------------------------------- guard: evasion attempts
+
+const OVERLAY_JSON_ONE_LINE: &str = "{\"require\":{\"acme/api-client\":\"*\"},\"repositories\":[{\"type\":\"path\",\"url\":\"../api-client\",\"options\":{\"symlink\":true}}]}";
+
+fn assert_leak(web: &Repo, base: &str) {
+    let result = check_range_for_overlay(&web.open(), base, "HEAD", PACKAGES);
+    assert!(
+        matches!(result, Err(OverlayGuardError::Leak(_))),
+        "the guard let an overlay through: {result:?}"
+    );
+}
+
+#[test]
+fn a_leak_added_only_by_a_merge_commit_is_found() {
+    let fx = Fixture::new();
+    let web = &fx.web;
+    web.git(&["switch", "-c", "feature/PROJ-1-web"]);
+    web.commit("a.txt", "one\n", "feature work");
+    web.git(&["switch", "develop"]);
+    web.commit("d.txt", "d\n", "develop work");
+    let base = web.git(&["rev-parse", "develop"]);
+    // The integration merge, with the overlay slipped in while resolving.
+    web.git(&["merge", "--no-ff", "--no-commit", "feature/PROJ-1-web"]);
+    web.write("composer.json", OVERLAY_JSON_ONE_LINE);
+    web.commit_all("Merge feature/PROJ-1-web");
+
+    assert_leak(web, &base);
+}
+
+#[test]
+fn a_leak_in_a_root_commit_is_found() {
+    let fx = Fixture::new();
+    let web = &fx.web;
+    web.git(&["checkout", "--orphan", "history"]);
+    web.git(&["rm", "-rf", "."]);
+    web.write("composer.json", OVERLAY_JSON_ONE_LINE);
+    web.commit_all("unrelated root with the overlay");
+
+    assert_leak(web, "develop");
+}
+
+#[test]
+fn a_leak_moved_into_composer_json_by_a_rename_is_found() {
+    let fx = Fixture::new();
+    let web = &fx.web;
+    web.git(&["switch", "-c", "feature/PROJ-1-web"]);
+    web.git(&["rm", "-q", "composer.json", "composer.lock"]);
+    web.commit("scratch.json", OVERLAY_JSON_ONE_LINE, "innocent looking file");
+    web.git(&["mv", "scratch.json", "composer.json"]);
+    web.commit_all("rename it into place");
+
+    assert_leak(web, "develop");
+}
+
+#[test]
+fn spellings_of_the_wildcard_constraint_are_all_leaks() {
+    for constraint in ["*", " * ", "*@dev", "*@stable", "* "] {
+        let line = format!("        \"acme/api-client\": \"{constraint}\"");
+        assert_eq!(
+            composer::scan_composer_json(&[(Some(1), &line)], PACKAGES).len(),
+            1,
+            "constraint {constraint:?} slipped through"
+        );
+    }
+    // Composer package names are case-insensitive.
+    let line = "\"Acme/API-Client\": \"*\"";
+    assert_eq!(
+        composer::scan_composer_json(&[(Some(1), line)], PACKAGES).len(),
+        1
+    );
+}

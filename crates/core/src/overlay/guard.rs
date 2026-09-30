@@ -9,7 +9,7 @@ use std::path::Path;
 use eyre::Context;
 
 use super::composer::{Finding, LeakKind, scan_composer_json, scan_composer_lock};
-use crate::git::{GitRepo, LineKind, short_sha};
+use crate::git::{FileDiff, GitRepo, LineKind, short_sha};
 
 /// One overlay-looking line found in a commit that is about to be pushed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,9 +75,9 @@ fn is_composer_file(path: &str, name: &str) -> bool {
 /// package names the repo's config maps as overlay packages.
 ///
 /// Each commit is checked on its own, so a leak added in a middle commit and removed by a
-/// later one is still reported: the commit is pushed either way. Merge commits are skipped
-/// (their changes are the commits they merge, which are either in the range or already in
-/// `base`), and so is a root commit, which has nothing to diff against.
+/// later one is still reported: the commit is pushed either way. A merge commit is checked
+/// for the lines it adds relative to every parent (what its conflict resolution wrote); a
+/// root commit against the empty tree; renames are not followed, so a moved file counts as new.
 pub fn check_range_for_overlay(
     repo: &GitRepo,
     base: &str,
@@ -105,45 +105,63 @@ fn scan_range(
     commits.reverse();
 
     for commit in commits {
-        if repo.commit(&commit.sha)?.parent_count() != 1 {
-            continue;
-        }
-        let diff = repo
-            .diff(&format!("{}^", commit.sha), &commit.sha)
+        // One diff per parent, without rename detection: a leak moved into place by a rename,
+        // or written into a root commit or a merge's conflict resolution, still shows up as
+        // added lines.
+        let per_parent = repo
+            .commit_diffs(&commit.sha)
             .wrap_err_with(|| format!("Failed to diff commit {}", short_sha(&commit.sha)))?;
 
-        for file in &diff.files {
-            let is_json = is_composer_file(&file.path, "composer.json");
-            let is_lock = is_composer_file(&file.path, "composer.lock");
-            if !is_json && !is_lock {
-                continue;
-            }
-
-            let added: Vec<(Option<u32>, &str)> = file
-                .hunks
-                .iter()
-                .flat_map(|h| &h.lines)
-                .filter(|l| l.kind == LineKind::Added)
-                .map(|l| (l.new_lineno, l.content.as_str()))
-                .collect();
-            let findings = if is_json {
-                scan_composer_json(&added, packages)
-            } else {
-                scan_composer_lock(&added)
-            };
-
-            leaks.extend(findings.into_iter().map(|f| LeakedChange {
-                commit: commit.sha.clone(),
-                summary: commit.summary.clone(),
-                file: file.path.clone(),
-                line: f.line,
-                text: f.text,
-                kind: f.kind,
-            }));
+        let mut per_parent_findings = per_parent.iter().map(|files| scan_files(files, packages));
+        let mut findings = per_parent_findings.next().unwrap_or_default();
+        // A merge introduces only what differs from every parent; the rest is the history it
+        // joins, checked commit by commit.
+        for other in per_parent_findings {
+            findings.retain(|(file, f)| {
+                other
+                    .iter()
+                    .any(|(f2, o)| f2 == file && o.kind == f.kind && o.text == f.text)
+            });
         }
+
+        leaks.extend(findings.into_iter().map(|(file, f)| LeakedChange {
+            commit: commit.sha.clone(),
+            summary: commit.summary.clone(),
+            file,
+            line: f.line,
+            text: f.text,
+            kind: f.kind,
+        }));
     }
 
     Ok(leaks)
+}
+
+/// Overlay signatures in the lines a set of file diffs adds to composer files.
+fn scan_files(files: &[FileDiff], packages: &[&str]) -> Vec<(String, Finding)> {
+    let mut found = Vec::new();
+    for file in files {
+        let is_json = is_composer_file(&file.path, "composer.json");
+        let is_lock = is_composer_file(&file.path, "composer.lock");
+        if !is_json && !is_lock {
+            continue;
+        }
+
+        let added: Vec<(Option<u32>, &str)> = file
+            .hunks
+            .iter()
+            .flat_map(|h| &h.lines)
+            .filter(|l| l.kind == LineKind::Added)
+            .map(|l| (l.new_lineno, l.content.as_str()))
+            .collect();
+        let findings = if is_json {
+            scan_composer_json(&added, packages)
+        } else {
+            scan_composer_lock(&added)
+        };
+        found.extend(findings.into_iter().map(|f| (file.path.clone(), f)));
+    }
+    found
 }
 
 /// Overlay signatures in the `composer.json` and `composer.lock` at the root of the checkout
