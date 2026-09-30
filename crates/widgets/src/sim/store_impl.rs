@@ -70,6 +70,11 @@ impl Sim {
             hotfix: s.hotfix,
             info: s.info,
             ticket: s.ticket.clone(),
+            open: s
+                .ticket
+                .clone()
+                .zip(s.rule.tab())
+                .map(|(k, tab)| Intent::go_ticket(k, tab)),
             title: s.title.clone(),
             reason: s.reason.clone(),
             level: s.level,

@@ -59,6 +59,39 @@ pub enum Rule {
 }
 
 impl Rule {
+    /// The ticket tab where this suggestion's subject is: clicking the row opens it there. `None` for rules that
+    /// are not about one ticket (sync, locks, tools), whose rows are not clickable.
+    pub fn tab(self) -> Option<TicketTab> {
+        match self {
+            Rule::SyncStale | Rule::StaleLock | Rule::AdapterUnavailable => None,
+            Rule::ThreadsReturn
+            | Rule::ThreadsWaiting
+            | Rule::UatConflict
+            | Rule::ReReview
+            | Rule::StartReview
+            | Rule::FinishReview => Some(TicketTab::Review),
+            Rule::PrMissingReturn
+            | Rule::PrWaiting
+            | Rule::ReturnedToReview
+            | Rule::ReturnedMention
+            | Rule::ActivateReviewed
+            | Rule::ClaimNew => Some(TicketTab::Overview),
+            Rule::ParkActive => Some(TicketTab::Test),
+            Rule::UatMoved
+            | Rule::PrepushChecks
+            | Rule::DeployFailed
+            | Rule::IntegrationBlocked
+            | Rule::ApprovePrs
+            | Rule::IntegrateReady
+            | Rule::PushReady
+            | Rule::ComposeDeployComment
+            | Rule::PostDeployComment
+            | Rule::TransitionAlpha
+            | Rule::RemergeNeeded
+            | Rule::DeployWaiting => Some(TicketTab::Ship),
+        }
+    }
+
     fn band(self) -> i32 {
         match self {
             Rule::StaleLock => 880,

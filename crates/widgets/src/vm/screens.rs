@@ -114,6 +114,8 @@ pub struct SuggestionCard {
     pub hotfix: bool,
     pub info: bool,
     pub ticket: Option<TicketKey>,
+    /// Where clicking the row goes (the ticket, at the tab that matters). `None`: the row is not clickable.
+    pub open: Option<Intent>,
     pub title: String,
     pub reason: String,
     pub level: Level,

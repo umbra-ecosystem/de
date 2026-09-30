@@ -1,6 +1,6 @@
 //! Next: the ranked suggestions, each with the reason it exists. A uniform list of fixed-height rows, like Zed's.
 //!
-//! The row is the control: clicking it does the suggestion's primary action. Snooze and dismiss are icon buttons
+//! Clicking a row opens its ticket at the tab that matters; the primary action is the button on hover. Snooze and dismiss are icon buttons
 //! that appear on hover; what a suggestion is (hotfix, automatic, sends to a remote) is an icon with a tooltip.
 
 use std::rc::Rc;
@@ -223,10 +223,13 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
         .px_4()
         .border_b_1()
         .border_color(pal.border.opacity(0.5))
-        .cursor_pointer()
-        .hover(|d| d.bg(pal.hover))
         .when(dim, |d| d.opacity(0.55))
-        .on_click(ui.on_click(s.primary.intent.clone()))
+        // The row opens the ticket; the action is the button that appears on hover. A row about no ticket is inert.
+        .when_some(s.open.clone(), |d, open| {
+            d.cursor_pointer()
+                .hover(|d| d.bg(pal.hover))
+                .on_click(ui.on_click(open))
+        })
         .child(
             div()
                 .flex()

@@ -1107,6 +1107,24 @@ mod tests {
     const JIRA_ALPHA_LABEL: &str = "Alpha Testing";
 
     #[test]
+    fn a_suggestion_row_opens_its_ticket_and_only_ticket_rows_are_clickable() {
+        let s = Session::demo();
+        let cards = s.store().next(true).cards;
+        assert!(!cards.is_empty());
+        for c in &cards {
+            assert_eq!(c.open.is_some(), c.ticket.is_some(), "{}", c.title);
+        }
+        let start = cards
+            .iter()
+            .find(|c| c.title == "Start the review")
+            .expect("the demo suggests starting a review");
+        assert_eq!(
+            start.open,
+            Some(Intent::go_ticket("PROJ-142", TicketTab::Review))
+        );
+    }
+
+    #[test]
     fn activating_a_ticket_opens_its_test_tab() {
         let mut s = Session::demo();
         let key = k("PROJ-142");
