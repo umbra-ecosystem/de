@@ -156,6 +156,10 @@ pub fn integration_dir(data_dir: &Path, ticket: &TicketKey) -> PathBuf {
     data_dir.join("integration").join(ticket.as_str())
 }
 
+fn tmp_ref(ticket: &TicketKey) -> String {
+    format!("refs/heads/{}", temp_branch(ticket))
+}
+
 fn temp_branch(ticket: &TicketKey) -> String {
     format!("de/integrate/{ticket}")
 }
@@ -404,7 +408,17 @@ fn prepare_inner(
     let merge_commit = match merged {
         MergeOutcome::Conflict { files } => return Ok(RepoOutcome::Conflict { files }),
         MergeOutcome::UpToDate => return Ok(RepoOutcome::UpToDate { uat: uat_before }),
-        MergeOutcome::Merged { commit } => commit,
+        MergeOutcome::Merged { .. } => {
+            // The merge was made from the fully qualified ref (so a tag cannot shadow the
+            // branch), which puts `refs/heads/...` and the temporary branch name in the
+            // message. Rewrite it, unpushed as it is, to what belongs in uat's history.
+            let message = format!("Merge branch '{}' into {}", r.ticket_branch, r.uat_branch);
+            let wt_runner = GitRunner::new(&worktree);
+            wt_runner
+                .run(&["commit", "--amend", "--only", "-m", &message])
+                .wrap_err("Failed to word the merge commit")?;
+            git.rev_parse(&tmp_ref(ctx.ticket))?
+        }
     };
 
     // The overlay guard, on SHAs.

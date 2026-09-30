@@ -185,6 +185,10 @@ fn a_clean_merge_is_ready_and_pushes_nothing_and_disturbs_nothing() {
         let parents = repo.git(&["rev-list", "--parents", "-n1", &merge.merge_commit]);
         let tip = repo.git(&["rev-parse", &entry.ticket_branch]);
         assert_eq!(
+            repo.git(&["log", "-1", "--format=%s", &merge.merge_commit]),
+            format!("Merge branch '{}' into uat", entry.ticket_branch)
+        );
+        assert_eq!(
             parents,
             format!("{} {} {}", merge.merge_commit, merge.uat_before, tip)
         );
