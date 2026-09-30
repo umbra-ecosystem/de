@@ -56,13 +56,13 @@ pub fn build_ticket_writer(_config: &Config) -> ProviderResult<Box<dyn TicketWri
 }
 
 /// The Bitbucket reader. **Plug-in point for the `bkt` adapter (read).**
-pub fn build_code_host(_config: &Config) -> ProviderResult<Box<dyn CodeHost>> {
-    Err(adapter_unavailable("bkt"))
+pub fn build_code_host(config: &Config) -> ProviderResult<Box<dyn CodeHost>> {
+    Ok(Box::new(super::bkt::BktHost::new(config)?))
 }
 
 /// The Bitbucket writer, for the write gateway only. **Plug-in point for the `bkt` adapter (write).**
-pub fn build_code_host_writer(_config: &Config) -> ProviderResult<Box<dyn CodeHostWriter>> {
-    Err(adapter_unavailable("bkt"))
+pub fn build_code_host_writer(config: &Config) -> ProviderResult<Box<dyn CodeHostWriter>> {
+    Ok(Box::new(super::bkt::BktHostWriter::new(config)?))
 }
 
 #[cfg(test)]
@@ -78,11 +78,9 @@ mod tests {
             providers.jira.err().map(|e| e.kind()),
             Some(ProviderErrorKind::NotInstalled)
         );
-        assert_eq!(
-            providers.code_host.err().map(|e| e.kind()),
-            Some(ProviderErrorKind::NotInstalled)
-        );
+        // The bkt adapter is built without spawning anything; a missing binary shows up in `health`.
+        assert!(providers.code_host.is_ok());
+        assert!(build_code_host_writer(&config).is_ok());
         assert!(build_ticket_writer(&config).is_err());
-        assert!(build_code_host_writer(&config).is_err());
     }
 }

@@ -1,0 +1,32 @@
+{
+  "workspace": "acme",
+  "repo": "web",
+  "pull_requests": [
+    {
+      "id": 42,
+      "title": "PROJ-101 Add invoice export",
+      "state": "OPEN",
+      "draft": false,
+      "created_on": "2026-09-01T09:00:00.000000+00:00",
+      "updated_on": "2026-09-02T10:30:15.123456+00:00",
+      "author": {"display_name": "Ann Author", "username": "", "uuid": "{aaaa}", "account_id": "557058:ann"},
+      "source": {"branch": {"name": "feature/PROJ-101-invoice-export"}, "commit": {"hash": "1111111111111111111111111111111111111111"}},
+      "destination": {"branch": {"name": "develop"}, "commit": {"hash": "2222222222222222222222222222222222222222"}},
+      "links": {"html": {"href": "https://bitbucket.org/acme/web/pull-requests/42"}},
+      "reviewers": [{"uuid": "{rrrr}", "username": "", "nickname": "rita", "account_id": "557058:rita", "display_name": "Rita Reviewer"}],
+      "summary": {"raw": "Adds CSV export"}
+    },
+    {
+      "id": 43,
+      "title": "PROJ-102 Hotfix totals",
+      "state": "OPEN",
+      "created_on": "2026-09-03T09:00:00Z",
+      "updated_on": "2026-09-03T09:05:00Z",
+      "author": {"display_name": "Ann Author", "account_id": "557058:ann"},
+      "source": {"branch": {"name": "hotfix/PROJ-102"}},
+      "destination": {"branch": {"name": "master"}},
+      "links": {"html": {"href": "https://bitbucket.org/acme/web/pull-requests/43"}},
+      "reviewers": []
+    }
+  ]
+}

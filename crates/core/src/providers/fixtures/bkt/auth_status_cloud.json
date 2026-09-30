@@ -1,0 +1,9 @@
+{
+  "active_context": "cloud-prod",
+  "hosts": [
+    {"key": "api.bitbucket.org", "kind": "cloud", "base_url": "https://api.bitbucket.org/2.0", "username": "dev@acme.example", "auth_method": "basic", "token_source": "keyring"}
+  ],
+  "contexts": [
+    {"name": "cloud-prod", "host": "api.bitbucket.org", "workspace": "acme", "active": true}
+  ]
+}

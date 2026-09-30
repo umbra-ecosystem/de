@@ -1,0 +1,10 @@
+{
+  "page": 1, "pagelen": 100, "size": 3,
+  "values": [
+    {"type": "pipeline_step", "uuid": "{s1}", "name": "Build", "state": {"name": "COMPLETED", "result": {"name": "SUCCESSFUL"}}},
+    {"type": "pipeline_step", "uuid": "{s2}", "name": "Deploy to alpha", "state": {"name": "COMPLETED", "result": {"name": "SUCCESSFUL"}},
+     "environment": {"type": "deployment_environment", "uuid": "{env-alpha}"}},
+    {"type": "pipeline_step", "uuid": "{s3}", "name": "Deploy to production", "state": {"name": "PENDING"},
+     "environment": {"type": "deployment_environment", "uuid": "{env-prod}", "name": "Production"}}
+  ]
+}

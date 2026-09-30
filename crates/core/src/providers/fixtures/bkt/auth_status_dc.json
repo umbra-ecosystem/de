@@ -1,0 +1,9 @@
+{
+  "active_context": "dc-prod",
+  "hosts": [
+    {"key": "bitbucket.corp.example", "kind": "dc", "base_url": "https://bitbucket.corp.example", "username": "alice", "auth_method": "basic", "token_source": "keyring"}
+  ],
+  "contexts": [
+    {"name": "dc-prod", "host": "bitbucket.corp.example", "project_key": "ABC", "active": true}
+  ]
+}

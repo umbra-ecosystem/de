@@ -1,0 +1,10 @@
+{
+  "workspace": "acme",
+  "repo": "web",
+  "comments": [
+    {"id": 902, "content": {"raw": "Second, inline on old side"}, "user": {"display_name": "Rita Reviewer", "nickname": "rita", "account_id": "557058:rita"}, "created_on": "2026-09-02T11:00:00Z", "deleted": false, "resolution": null, "parent": null, "inline": {"path": "src/a.php", "from": 7, "to": null}},
+    {"id": 901, "content": {"raw": "First, general"}, "user": {"display_name": "Rita Reviewer", "nickname": "rita", "account_id": "557058:rita"}, "created_on": "2026-09-02T10:00:00Z", "deleted": false, "resolution": null, "parent": null},
+    {"id": 903, "content": {"raw": ""}, "user": {"display_name": "Gone", "account_id": "1"}, "created_on": "2026-09-02T12:00:00Z", "deleted": true},
+    {"id": 904, "content": {"raw": "Third, inline new side"}, "user": null, "created_on": "2026-09-02T13:00:00Z", "deleted": false, "inline": {"path": "src/b.php", "from": null, "to": 12}}
+  ]
+}

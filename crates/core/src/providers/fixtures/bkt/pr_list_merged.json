@@ -1,0 +1,17 @@
+{
+  "workspace": "acme",
+  "repo": "web",
+  "pull_requests": [
+    {
+      "id": 40,
+      "title": "PROJ-90 Old thing",
+      "state": "MERGED",
+      "created_on": "2026-08-01T09:00:00Z",
+      "updated_on": "2026-08-02T09:00:00Z",
+      "author": {"display_name": "Bob", "account_id": "557058:bob"},
+      "source": {"branch": {"name": "feature/PROJ-90"}},
+      "destination": {"branch": {"name": "develop"}},
+      "links": {"html": {"href": "https://bitbucket.org/acme/web/pull-requests/40"}}
+    }
+  ]
+}

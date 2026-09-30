@@ -1,0 +1,28 @@
+{
+  "workspace": "acme",
+  "repo": "web",
+  "pull_request": {
+    "id": 42,
+    "title": "PROJ-101 Add invoice export",
+    "state": "OPEN",
+    "created_on": "2026-09-01T09:00:00.000000+00:00",
+    "updated_on": "2026-09-02T10:30:15.123456+00:00",
+    "author": {"display_name": "Ann Author", "username": "", "uuid": "{aaaa}", "account_id": "557058:ann"},
+    "source": {"branch": {"name": "feature/PROJ-101-invoice-export"}, "commit": {"hash": "1111111111111111111111111111111111111111"}},
+    "destination": {"branch": {"name": "master"}, "commit": {"hash": "2222222222222222222222222222222222222222"}},
+    "links": {"html": {"href": "https://bitbucket.org/acme/web/pull-requests/42"}},
+    "reviewers": [
+      {"uuid": "{rrrr}", "nickname": "rita", "account_id": "557058:rita", "display_name": "Rita Reviewer"},
+      {"uuid": "{cccc}", "nickname": "carl", "account_id": "557058:carl", "display_name": "Carl Checker"},
+      {"uuid": "{nnnn}", "nickname": "nina", "account_id": "557058:nina", "display_name": "Nina Newcomer"}
+    ],
+    "participants": [
+      {"user": {"uuid": "{rrrr}", "account_id": "557058:rita", "nickname": "rita"}, "role": "REVIEWER", "approved": true, "state": "approved"},
+      {"user": {"uuid": "{cccc}", "account_id": "557058:carl", "nickname": "carl"}, "role": "REVIEWER", "approved": false, "state": "changes_requested"},
+      {"user": {"uuid": "{nnnn}", "account_id": "557058:nina", "nickname": "nina"}, "role": "REVIEWER", "approved": false, "state": null},
+      {"user": {"uuid": "{aaaa}", "account_id": "557058:ann", "nickname": "ann"}, "role": "PARTICIPANT", "approved": false, "state": null},
+      {"user": {"uuid": "{oooo}", "account_id": "557058:olga", "nickname": "olga"}, "role": "PARTICIPANT", "approved": true, "state": "approved"}
+    ],
+    "summary": {"raw": "Adds CSV export"}
+  }
+}
