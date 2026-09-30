@@ -1,8 +1,9 @@
-mod config;
 mod compose;
+mod config;
 mod exec;
 mod exec_all;
 mod fallthrough;
+pub mod git;
 mod init;
 mod list;
 pub(crate) mod run;
@@ -15,8 +16,8 @@ pub mod workspace;
 
 pub mod task;
 
-pub use config::config;
 pub use compose::compose;
+pub use config::config;
 pub use exec::exec;
 pub use exec_all::exec_all;
 pub use fallthrough::fallthrough;

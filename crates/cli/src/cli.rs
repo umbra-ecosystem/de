@@ -47,6 +47,16 @@ pub enum Commands {
         /// The name of the workspace to stop projects in. Defaults to the active workspace.
         #[arg(short, long)]
         workspace: Option<Slug>,
+
+        /// Skip the confirmation about uncommitted or unpushed work.
+        #[arg(short, long)]
+        yes: bool,
+    },
+
+    /// Inspect the git state of the projects in a workspace.
+    Git {
+        #[command(subcommand)]
+        command: GitCommands,
     },
 
     /// Run `docker compose` for a project or every project in a workspace.
@@ -210,6 +220,16 @@ pub enum TaskCommands {
         /// Remove the task from the workspace configuration instead of the project.
         #[clap(short, long)]
         workspace: Option<Option<Slug>>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GitCommands {
+    /// Show branch, changes, ahead/behind and upstream of every project (read-only).
+    Status {
+        /// The name of the workspace to inspect. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
     },
 }
 
