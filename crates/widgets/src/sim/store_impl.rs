@@ -506,6 +506,9 @@ impl Sim {
             }
             Command::PostAndMove { key, draft } => {
                 let t = self.tk(key).ok_or_else(gone)?;
+                if t.local() == Some(Local::Active) {
+                    return Err(super::detail::REMERGE_FIRST.into());
+                }
                 let d = t
                     .drafts()
                     .iter()
@@ -533,7 +536,10 @@ impl Sim {
                 Ok(p)
             }
             Command::Transition(key) => {
-                self.tk(key).ok_or_else(gone)?;
+                let t = self.tk(key).ok_or_else(gone)?;
+                if t.local() == Some(Local::Active) {
+                    return Err(super::detail::REMERGE_FIRST.into());
+                }
                 let mut p = self.pv(
                     c,
                     &format!("Move to {}", JiraStatus::AlphaTesting.label()),

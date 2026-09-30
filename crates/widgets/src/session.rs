@@ -1050,6 +1050,38 @@ mod tests {
     const JIRA_ALPHA_LABEL: &str = "Alpha Testing";
 
     #[test]
+    fn announcing_waits_while_the_ticket_is_being_re_integrated() {
+        let mut s = Session::demo();
+        // PROJ-131 shipped once and came back; activating it starts a re-merge.
+        s.handle(Intent::Do(Command::Activate {
+            key: k("PROJ-131"),
+            baseline: None,
+        }));
+        s.handle(Intent::CancelSheet);
+        go_ticket(&mut s, "PROJ-131", TicketTab::Ship);
+        let ScreenVm::Ticket { body, .. } = s.view().screen else {
+            panic!("expected a ticket screen")
+        };
+        let TicketBody::Ship(ship) = *body else {
+            panic!("expected the Ship tab")
+        };
+        // PROJ-131 is active and was announced for an earlier merge: nothing may be sent until the re-merge lands.
+        assert_eq!(ship.integrate_state, StepState::Now);
+        let AnnounceBody::Posted {
+            transition: Some(go),
+            ..
+        } = ship.announce
+        else {
+            panic!("the earlier announcement is shown")
+        };
+        assert!(!go.enabled && go.hint.is_some());
+        let Classified::Remote(r) = Command::Transition(k("PROJ-131")).classify() else {
+            panic!("a transition is remote")
+        };
+        assert!(s.store().preview(&r).is_err());
+    }
+
+    #[test]
     fn a_failed_deploy_offers_a_rerun_through_the_confirm_sheet() {
         let mut s = Session::demo();
         let key = &k("PROJ-142");

@@ -158,6 +158,9 @@ pub fn deploy_chip(d: &Deploy) -> DeployChip {
     }
 }
 
+/// Why the announce step waits while the ticket is being (re-)integrated.
+pub(crate) const REMERGE_FIRST: &str = "Push the re-merge to uat and wait for it to deploy first.";
+
 impl Sim {
     fn progress_index(&self, t: &Ticket) -> f32 {
         let d = Self::draft(t);
@@ -1136,6 +1139,9 @@ impl Sim {
                 )
             });
 
+        // While the ticket is active the integration is still in progress (a first merge or a re-merge), so
+        // whatever an earlier landing announced must not be acted on until the new push has deployed.
+        let hold = (st == Some(Local::Active)).then(|| REMERGE_FIRST.to_string());
         let d = Self::draft(t);
         let posted = d.is_some_and(|d| d.posted);
         let moved = t.jira == JiraStatus::AlphaTesting || t.jira.is_signed_off();
@@ -1149,6 +1155,7 @@ impl Sim {
                         Intent::Do(Command::Transition(key.clone())),
                     )
                     .primary()
+                    .disabled(hold.clone())
                 }),
             },
             Some(d) => AnnounceBody::Draft {
@@ -1161,19 +1168,23 @@ impl Sim {
                         draft: d.id.clone(),
                     }),
                 )
-                .primary(),
+                .primary()
+                .disabled(hold.clone()),
             },
             None if dep => AnnounceBody::Compose(
                 Btn::new(
                     "Draft the comment",
                     Intent::Do(Command::ComposeDraft(key.clone())),
                 )
-                .primary(),
+                .primary()
+                .disabled(hold.clone()),
             ),
             None => AnnounceBody::Unavailable,
         };
         let announce_state = if posted && moved {
             StepState::Done
+        } else if hold.is_some() {
+            StepState::Todo
         } else if d.is_some() || dep {
             StepState::Now
         } else {
