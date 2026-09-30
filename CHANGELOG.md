@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- Restructured into a Cargo workspace: `crates/core` (`de-core`) and `crates/cli` (`de`).
+- `de logs`, `de ps`, `de down`, `de restart`, `de pull` and `de build` are replaced by `de compose [-p project | -w [workspace]] -- <docker compose args>`, e.g. `de compose -- logs -f api`.
+- `de stop` no longer checks for uncommitted/unpushed changes and no longer takes `--yes`; `de start` ends with a plain `docker compose ps` per project instead of the status summary.
+- Compose is now invoked as `docker compose` everywhere (previously `docker-compose` for start/stop).
+- Tasks: removed service tasks (`{ service, command }`) and `de task add --service`.
+- Release targets are macOS only.
+
+### Removed
+
+- Shims: `de shim *` and `de task check`.
+- `de setup` and `de workspace snapshot`, and the `[setup]` section of `de.toml`.
+- `de doctor` and `de status`.
+- `de git switch` and `de git base-reset` (to be rebuilt around tickets).
+
 ## [0.6.1] - 2025-12-23
 
 ### Fixed

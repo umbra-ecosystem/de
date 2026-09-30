@@ -1,0 +1,25 @@
+[package]
+name = "de-core"
+description = "Core library of de: workspaces, projects, tasks and Docker Compose orchestration."
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+config.workspace = true
+directories.workspace = true
+dotenvy.workspace = true
+eyre.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
