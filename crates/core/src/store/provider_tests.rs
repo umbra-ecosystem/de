@@ -437,3 +437,18 @@ fn stale_ticket_cache_rows_are_removed_only_when_asked() {
         .raw_json;
     assert!(raw.contains("Title of PROJ-1"));
 }
+
+#[test]
+fn cached_tickets_list_in_numeric_key_order() {
+    let store = cache();
+    for k in ["PROJ-10", "PROJ-9", "PROJ-100", "ABC-2"] {
+        let t = crate::providers::fake::build::ticket(k, "In Review");
+        jira_cache::upsert_remote(&store, &t, 1).unwrap();
+    }
+    let keys: Vec<String> = jira_cache::list(&store)
+        .unwrap()
+        .into_iter()
+        .map(|t| t.key.to_string())
+        .collect();
+    assert_eq!(keys, ["ABC-2", "PROJ-9", "PROJ-10", "PROJ-100"]);
+}

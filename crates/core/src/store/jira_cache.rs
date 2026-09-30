@@ -106,15 +106,17 @@ pub fn get(cache: &Store, key: &TicketKey) -> eyre::Result<Option<JiraTicket>> {
         .wrap_err_with(|| format!("Failed to read cached {key}"))
 }
 
-/// All cached tickets ordered by key.
+/// All cached tickets ordered by key (project, then number numerically; SQL would sort the
+/// text, putting `PROJ-10` before `PROJ-9`).
 pub fn list(cache: &Store) -> eyre::Result<Vec<JiraTicket>> {
     let mut stmt = cache
         .conn()
-        .prepare(&format!("SELECT {COLUMNS} FROM jira_tickets ORDER BY key"))?;
-    let rows = stmt
+        .prepare(&format!("SELECT {COLUMNS} FROM jira_tickets"))?;
+    let mut rows = stmt
         .query_map([], from_row)?
         .collect::<Result<Vec<_>, _>>()
         .wrap_err("Failed to list cached tickets")?;
+    rows.sort_by(|a, b| a.key.cmp(&b.key));
     Ok(rows)
 }
 
