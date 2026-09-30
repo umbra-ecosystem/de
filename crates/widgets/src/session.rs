@@ -469,6 +469,10 @@ impl Session {
             Command::StartReview(key) => {
                 self.go(Route::ticket(key.clone(), TicketTab::Review));
             }
+            // An active ticket is there to be tested: open its Test tab.
+            Command::Activate { key, .. } => {
+                self.go(Route::ticket(key.clone(), TicketTab::Test));
+            }
             Command::ParkAndContinue {
                 key,
                 then: Then::StartReview,
@@ -1101,6 +1105,23 @@ mod tests {
     }
 
     const JIRA_ALPHA_LABEL: &str = "Alpha Testing";
+
+    #[test]
+    fn activating_a_ticket_opens_its_test_tab() {
+        let mut s = Session::demo();
+        let key = k("PROJ-142");
+        for c in [
+            Command::StartReview(key.clone()),
+            Command::MarkReviewed(key.clone()),
+            Command::Activate {
+                key: key.clone(),
+                baseline: None,
+            },
+        ] {
+            s.handle(Intent::Do(c));
+        }
+        assert_eq!(s.route, Route::ticket("PROJ-142", TicketTab::Test));
+    }
 
     #[test]
     fn announcing_waits_while_the_ticket_is_being_re_integrated() {
