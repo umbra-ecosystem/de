@@ -148,7 +148,7 @@ pub fn band(
         })
         .child(
             div()
-                .px_6()
+                .px_4()
                 .pt_4()
                 .pb_2()
                 .text_xs()
@@ -160,7 +160,7 @@ pub fn band(
 
 /// Page margin around text content inside a [`band`].
 pub fn pad(content: impl IntoElement) -> Div {
-    div().px_6().pb_4().child(content)
+    div().px_4().pb_4().child(content)
 }
 
 /// A titled block of a screen.
@@ -281,7 +281,7 @@ pub fn tab_bar(
     TabBar::new(id)
         .underline()
         // The bar runs edge to edge; this keeps the first tab in line with the content's margin.
-        .prefix(div().w_6())
+        .prefix(div().w_4())
         .selected_index(selected)
         .children(items.into_iter().map(move |(label, dot_on)| {
             let t = Tab::new().label(label);

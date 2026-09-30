@@ -20,7 +20,7 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
                 .flex()
                 .flex_col()
                 .gap_3()
-                .px_6()
+                .px_4()
                 .pt_4()
                 .pb_2()
                 // Two lines: what it is and what state it is in, then its title (wrapping) beside the actions.
@@ -95,7 +95,7 @@ pub fn ticket(
             .flex_1()
             .min_h_0()
             .when(!h.banners.is_empty(), |d| {
-                d.child(div().px_6().py_2().child(notices))
+                d.child(div().px_4().py_2().child(notices))
             })
             .child(
                 div()
@@ -114,7 +114,7 @@ pub fn ticket(
                     .flex()
                     .flex_col()
                     .when(!h.banners.is_empty(), |d| {
-                        d.child(div().px_6().py_3().child(notices))
+                        d.child(div().px_4().py_3().child(notices))
                     })
                     .child(match other {
                         TicketBody::Overview(o) => overview::overview(ui, cx, inputs, o),

@@ -340,7 +340,7 @@ pub fn tickets(ui: &Ui, inputs: &Inputs, vm: &TicketListVm) -> AnyElement {
                                 .flex()
                                 .items_end()
                                 .h(px(ROW_H))
-                                .px_6()
+                                .px_4()
                                 .pb_1()
                                 .child(h.clone())
                                 .into_any_element(),

@@ -20,7 +20,7 @@ fn env_table(ui: &Ui, rows: &[EnvRow]) -> Div {
                 .flex()
                 .items_center()
                 .gap_3()
-                .px_6()
+                .px_4()
                 .py_1p5()
                 .border_b_1()
                 .border_color(pal.border.opacity(0.4))

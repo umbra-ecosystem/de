@@ -423,7 +423,7 @@ fn toolbar(ui: &Ui, r: &ReviewVm) -> Div {
         .gap_3()
         .flex_none()
         .h_10()
-        .px_6()
+        .px_4()
         .border_b_1()
         .border_color(pal.border)
         .children(if r.prs.len() > 1 {
@@ -515,7 +515,7 @@ fn action_bar(ui: &Ui, r: &ReviewVm) -> Div {
         .items_center()
         .gap_2()
         .flex_none()
-        .px_6()
+        .px_4()
         .py_2()
         .border_t_1()
         .border_color(pal.border)
@@ -555,7 +555,7 @@ pub fn review(ui: &Ui, _cx: &App, inputs: &Inputs, r: &ReviewVm) -> Div {
         .flex_col()
         .flex_none()
         .gap_2()
-        .px_6()
+        .px_4()
         .py_2()
         // Only a conflict interrupts the page; a mere overlap is a hint in the toolbar.
         .children(
@@ -568,7 +568,7 @@ pub fn review(ui: &Ui, _cx: &App, inputs: &Inputs, r: &ReviewVm) -> Div {
     if r.empty {
         return div().flex().flex_col().size_full().child(notices).child(
             div()
-                .px_6()
+                .px_4()
                 .py_4()
                 .child(empty_state(pal, "No pull requests for this ticket.")),
         );

@@ -19,7 +19,7 @@ fn strip(pal: &Pal) -> Div {
         .w_full()
         .flex_none()
         .h_10()
-        .px_6()
+        .px_4()
         .border_b_1()
         .border_color(pal.border)
 }
@@ -30,7 +30,7 @@ fn row(pal: &Pal) -> Div {
         .flex()
         .items_center()
         .gap_3()
-        .px_6()
+        .px_4()
         .py_2()
         .border_b_1()
         .border_color(pal.border.opacity(0.4))
@@ -143,7 +143,7 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                 )
         }))
         .when_some(v.note.clone(), |d, n| {
-            d.child(div().px_6().py_3().child(faint(pal, n)))
+            d.child(div().px_4().py_3().child(faint(pal, n)))
         })
 }
 
@@ -220,7 +220,7 @@ pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
                     div()
                         .flex()
                         .gap_2()
-                        .px_6()
+                        .px_4()
                         .py_3()
                         .child(button(
                             ui,
@@ -298,6 +298,6 @@ pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
                 .border_t_1()
                 .border_color(pal.border.opacity(0.4))
                 .children(v.data.iter().map(|(k, val)| kv_row(k, val.clone())))
-                .child(div().flex().px_6().py_3().child(button(ui, &v.reset))),
+                .child(div().flex().px_4().py_3().child(button(ui, &v.reset))),
         ))
 }
