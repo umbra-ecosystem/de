@@ -445,8 +445,27 @@ fn full_lifecycle_walk() {
         LocalStatus::Done,
         LocalStatus::Claimed, // came back to Review
     ] {
-        tickets::set_status(&store, &k, status, 1).unwrap();
+        if status == LocalStatus::Integrated {
+            // Only the integration flow may set it.
+            assert!(tickets::set_status(&store, &k, status, 1).is_err());
+            tickets::mark_integrated(&store, &k, 1).unwrap();
+        } else {
+            tickets::set_status(&store, &k, status, 1).unwrap();
+        }
     }
+}
+
+#[test]
+fn integrated_cannot_be_set_through_the_public_status_api() {
+    let store = state_with(&["A-1"]);
+    let k = key("A-1");
+    tickets::set_status(&store, &k, LocalStatus::Active, 1).unwrap();
+    let err = tickets::set_status(&store, &k, LocalStatus::Integrated, 2).unwrap_err();
+    assert!(format!("{err:#}").contains("pushed to uat"), "{err:#}");
+    assert_eq!(tickets::get(&store, &k).unwrap().unwrap().status, LocalStatus::Active);
+    // The crate-private path still validates the transition.
+    tickets::set_status(&store, &k, LocalStatus::Parked, 3).unwrap();
+    assert!(tickets::mark_integrated(&store, &k, 4).is_err());
 }
 
 #[test]

@@ -807,6 +807,30 @@ pub fn deactivate(
     target: LocalStatus,
     now: i64,
 ) -> eyre::Result<DeactivationReport> {
+    if target == LocalStatus::Integrated {
+        bail!("{ticket} becomes 'integrated' only through the integration flow, not by hand");
+    }
+    deactivate_inner(store, runner, ticket, target, now)
+}
+
+/// [`deactivate`] to `Integrated`. Crate-private: only `integration::finalize_integration`
+/// may call it, once every touched repo's merge is pushed and recorded.
+pub(crate) fn deactivate_for_integration(
+    store: &Store,
+    runner: &dyn CommandRunner,
+    ticket: &TicketKey,
+    now: i64,
+) -> eyre::Result<DeactivationReport> {
+    deactivate_inner(store, runner, ticket, LocalStatus::Integrated, now)
+}
+
+fn deactivate_inner(
+    store: &Store,
+    runner: &dyn CommandRunner,
+    ticket: &TicketKey,
+    target: LocalStatus,
+    now: i64,
+) -> eyre::Result<DeactivationReport> {
     let tracking = tickets::get(store, ticket)?.ok_or_else(|| eyre!("{ticket} is not tracked"))?;
     let active = tracking.status == LocalStatus::Active;
     let pending =
@@ -846,7 +870,11 @@ pub fn deactivate(
         time::stop(store, now)?;
     }
     if active {
-        tickets::set_status(store, ticket, target, now)?;
+        if target == LocalStatus::Integrated {
+            tickets::mark_integrated(store, ticket, now)?;
+        } else {
+            tickets::set_status(store, ticket, target, now)?;
+        }
         report.status = Some(target);
     }
     record(

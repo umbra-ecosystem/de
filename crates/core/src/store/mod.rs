@@ -9,6 +9,7 @@
 //!   time and is rebuilt by the next sync.
 
 pub mod audit;
+pub mod drafts;
 pub mod jira_cache;
 pub mod jira_comments;
 pub mod links;
@@ -22,6 +23,7 @@ mod sql;
 pub mod sync_state;
 pub mod tickets;
 pub mod time;
+pub mod uat_details;
 pub mod uat_merges;
 
 #[cfg(test)]
