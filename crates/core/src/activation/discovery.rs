@@ -79,16 +79,8 @@ pub struct Discovery {
     pub unreadable: Vec<(String, String)>,
 }
 
-/// Matches the ticket key against the branches of every repo and records the result as `Auto`
-/// links. `Manual` and `Excluded` links are never touched (see [`links::apply_discovery`]).
-/// A repo with several matching branches is linked without a branch: the choice is the
-/// user's, made with a manual link.
-pub fn discover_links(
-    store: &Store,
-    ticket: &TicketKey,
-    repos: &[WorkspaceRepo],
-    now: i64,
-) -> eyre::Result<Discovery> {
+/// Matches the ticket key against the branches of every repo. Read-only.
+pub fn find_matches(ticket: &TicketKey, repos: &[WorkspaceRepo]) -> Discovery {
     let mut discovery = Discovery::default();
 
     for repo in repos {
@@ -106,6 +98,21 @@ pub fn discover_links(
                 .push((repo.name.clone(), format!("{e:#}"))),
         }
     }
+
+    discovery
+}
+
+/// Matches the ticket key against the branches of every repo and records the result as `Auto`
+/// links. `Manual` and `Excluded` links are never touched (see [`links::apply_discovery`]).
+/// A repo with several matching branches is linked without a branch: the choice is the
+/// user's, made with a manual link.
+pub fn discover_links(
+    store: &Store,
+    ticket: &TicketKey,
+    repos: &[WorkspaceRepo],
+    now: i64,
+) -> eyre::Result<Discovery> {
+    let discovery = find_matches(ticket, repos);
 
     let found: Vec<DiscoveredLink> = discovery
         .matches

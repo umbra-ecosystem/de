@@ -16,7 +16,9 @@ mod plan;
 #[cfg(test)]
 mod tests;
 
-pub use discovery::{Discovery, RepoMatches, WorkspaceRepo, discover_links, gather_plan_repos};
+pub use discovery::{
+    Discovery, RepoMatches, WorkspaceRepo, discover_links, find_matches, gather_plan_repos,
+};
 pub use engine::{
     ActivateOptions, ActivationReport, DeactivationReport, RepoActivation, RepoRestore,
     RestoreFailure, activate, deactivate, park, stash_label,

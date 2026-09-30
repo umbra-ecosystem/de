@@ -10,7 +10,9 @@ use eyre::{Context, eyre};
 use tracing_subscriber::EnvFilter;
 
 use crate::{
-    cli::{Cli, Commands, GitCommands, SelfCommands, TaskCommands, WorkspaceCommands},
+    cli::{
+        Cli, Commands, GitCommands, SelfCommands, TaskCommands, TicketCommands, WorkspaceCommands,
+    },
     utils::theme::Theme,
     workspace::Workspace,
 };
@@ -37,6 +39,30 @@ fn main() -> eyre::Result<()> {
         Commands::Stop { workspace, yes } => commands::stop(workspace, yes),
         Commands::Git { command } => match command {
             GitCommands::Status { workspace } => commands::git::status(workspace),
+        },
+        Commands::Ticket { command } => match command {
+            TicketCommands::Claim { key, title, hotfix } => {
+                commands::ticket::claim(key, title, hotfix)
+            }
+            TicketCommands::List => commands::ticket::list(),
+            TicketCommands::Show { key, workspace } => commands::ticket::show(key, workspace),
+            TicketCommands::Link {
+                key,
+                repo,
+                branch,
+                exclude,
+                workspace,
+            } => commands::ticket::link(key, repo, branch, exclude, workspace),
+            TicketCommands::Activate {
+                key,
+                baseline,
+                fetch,
+                workspace,
+            } => commands::ticket::activate_cmd(key, baseline, fetch, workspace),
+            TicketCommands::Park => commands::ticket::deactivate_cmd(None),
+            TicketCommands::Deactivate { status } => commands::ticket::deactivate_cmd(status),
+            TicketCommands::Note { key, text } => commands::ticket::note(key, text),
+            TicketCommands::Check { command } => commands::ticket::check(command),
         },
         Commands::Compose {
             project,
