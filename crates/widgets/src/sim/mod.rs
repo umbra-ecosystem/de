@@ -22,6 +22,8 @@ use crate::vm::{Branch, MappingKey, RepoName, TicketKey, ToastKind};
 
 pub struct Sim {
     pub(crate) ms: i64,
+    /// The minute of the day (0..1440) that `ms == 0` is, so a clock reads as real time where it should.
+    pub(crate) start_min: i64,
     pub(crate) seq: u64,
     pub(crate) run: u32,
     pub(crate) sync: SyncState,
@@ -59,6 +61,7 @@ impl Sim {
         .collect();
         Self {
             ms: 0,
+            start_min: START_MIN,
             seq: 100,
             run: 480,
             sync: SyncState {
@@ -173,6 +176,11 @@ impl Sim {
         }
     }
 
+    /// What minute of the day it is now (local time), for the times the audit log and waits show.
+    pub fn set_start_minute_of_day(&mut self, minute: i64) {
+        self.start_min = minute.rem_euclid(24 * 60);
+    }
+
     pub fn set_jira_ready(&mut self, ready: bool) {
         self.jira_ready = ready;
     }
@@ -201,7 +209,7 @@ impl Sim {
 
     pub(crate) fn clock(&self, at: Option<i64>) -> String {
         let ms = at.unwrap_or(self.ms);
-        let m = START_MIN + ms.div_euclid(MS_PER_MIN);
+        let m = self.start_min + ms.div_euclid(MS_PER_MIN);
         format!("{:02}:{:02}", (m / 60).rem_euclid(24), m.rem_euclid(60))
     }
 

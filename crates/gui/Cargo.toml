@@ -11,6 +11,7 @@ de-core.workspace = true
 de-widgets = { path = "../widgets" }
 
 eyre.workspace = true
+libc.workspace = true
 
 [dev-dependencies]
 toml.workspace = true

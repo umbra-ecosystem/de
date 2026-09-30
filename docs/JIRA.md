@@ -97,7 +97,7 @@ The first sync, or one after a long time away, reads every ticket (about two sec
 
 ## Sync logs
 
-Every sync writes a raw log of what it asked Jira for and what came back: the `acli` commands, their exit codes and timings, and the output as `acli` printed it. One file per run, named by its start time in UTC (`sync-20261001-094012.log`), in `<data dir>/logs` (on macOS `~/Library/Application Support/Umbra.de/logs`).
+Every sync writes a raw log of what it asked Jira for and what came back: the `acli` commands, their exit codes and timings, and the output as `acli` printed it. One file per run, named by its start time in UTC (`sync-20261001-094012.log`; the app lists runs in your local time), in `<data dir>/logs` (on macOS `~/Library/Application Support/Umbra.de/logs`).
 
 - In the app, open **System → Sync logs** to pick a run and read it. `de sync` prints the path of its log when it finishes.
 - The newest 20 runs are kept; older ones are deleted when a new run starts. Change that in `config.toml`:

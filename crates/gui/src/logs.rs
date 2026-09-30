@@ -32,7 +32,8 @@ pub fn text_in(dir: &Path, id: &str) -> String {
 fn row(file: &LogFile) -> LogRunVm {
     LogRunVm {
         id: file.name.clone(),
-        when: file.started(),
+        // The file name is UTC; the list shows the reader's own clock.
+        when: file.started_unix().map_or_else(|| file.started(), crate::localtime::format_seconds),
         size: size(file.bytes),
     }
 }
@@ -59,8 +60,8 @@ mod tests {
         }
         let (runs, note) = runs_in(dir.path(), 10);
         assert_eq!(runs.len(), 2);
-        assert_eq!(runs[0].when, "2023-11-14 22:15:00");
-        assert_eq!(runs[1].when, "2023-11-14 22:13:20");
+        assert_eq!(runs[0].when, crate::localtime::format_seconds(1_700_000_100));
+        assert_eq!(runs[1].when, crate::localtime::format_seconds(1_700_000_000));
         assert!(runs[0].size.ends_with(" B"), "{}", runs[0].size);
         assert!(note.contains("latest 10 runs"), "{note}");
         assert!(text_in(dir.path(), &runs[0].id).contains("hello"));

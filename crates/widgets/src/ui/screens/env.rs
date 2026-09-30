@@ -239,7 +239,7 @@ pub fn logs(ui: &Ui, cx: &App, v: &LogsVm) -> Div {
                 .child(faint(
                     pal,
                     match &v.selected {
-                        Some(_) => format!("{} lines, times are UTC", v.lines.len()),
+                        Some(_) => format!("{} lines", v.lines.len()),
                         None => "Pick a run".to_string(),
                     },
                 ))

@@ -164,6 +164,24 @@ fn write_line(inner: &Inner, line: &str) {
     }
 }
 
+/// Unix seconds of `YYYYMMDD-HHMMSS` (UTC), or `None` for anything else.
+fn parse_stamp(d: &str, t: &str) -> Option<i64> {
+    if d.len() != 8 || t.len() != 6 || !d.chars().chain(t.chars()).all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let (y, m, day): (i64, i64, i64) = (d[..4].parse().ok()?, d[4..6].parse().ok()?, d[6..].parse().ok()?);
+    let (hh, mm, ss): (i64, i64, i64) = (t[..2].parse().ok()?, t[2..4].parse().ok()?, t[4..].parse().ok()?);
+    // Days from civil (Howard Hinnant).
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = if m > 2 { m - 3 } else { m + 9 };
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some(days * 86_400 + hh * 3600 + mm * 60 + ss)
+}
+
 /// One log file on disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogFile {
@@ -173,6 +191,13 @@ pub struct LogFile {
 }
 
 impl LogFile {
+    /// When the run started, in unix seconds, read back from the name.
+    pub fn started_unix(&self) -> Option<i64> {
+        let stem = self.name.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?;
+        let mut parts = stem.split('-');
+        parse_stamp(parts.next()?, parts.next()?)
+    }
+
     /// `2026-10-01 09:40:12` (UTC), read back from the name.
     pub fn started(&self) -> String {
         let stem = self
@@ -312,6 +337,20 @@ mod tests {
         drop(a);
         drop(b);
         log("after"); // the guards cleared the current run
+    }
+
+    #[test]
+    fn a_name_reads_back_as_the_unix_time_it_was_made_from() {
+        for secs in [0, 1_700_000_000, 1_790_000_123, 951_782_400] {
+            let file = LogFile {
+                name: format!("{PREFIX}{}{SUFFIX}", utc_stamp(secs)),
+                bytes: 0,
+            };
+            assert_eq!(file.started_unix(), Some(secs));
+        }
+        let twin = LogFile { name: "sync-20231114-221320-2.log".into(), bytes: 0 };
+        assert_eq!(twin.started_unix(), Some(1_700_000_000));
+        assert_eq!(LogFile { name: "sync-x.log".into(), bytes: 0 }.started_unix(), None);
     }
 
     #[test]

@@ -14,7 +14,7 @@ use de_widgets::sim::model::MS_PER_MIN;
 use de_widgets::vm::*;
 use de_widgets::{Outcome, ReviewSel, Store};
 
-use crate::{logs, mapping};
+use crate::{localtime, logs, mapping};
 use crate::sync::{SyncDone, last_sync_minutes_ago, load_cached, sync_real};
 
 pub struct CoreStore {
@@ -45,6 +45,7 @@ impl CoreStore {
         let cached = load_cached().unwrap_or_default();
         let mut sim = Sim::with_tickets(cached);
         sim.set_last_sync_minutes_ago(last_sync_minutes_ago(now()));
+        sim.set_start_minute_of_day(localtime::minute_of_day(now()));
         let mut store = Self {
             sim,
             running: None,

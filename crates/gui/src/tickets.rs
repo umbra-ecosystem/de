@@ -294,21 +294,9 @@ pub fn leak(text: &str) -> &'static str {
     leaked
 }
 
-/// `2026-10-01 09:40` (UTC) from unix seconds.
+/// `2026-10-01 09:40` in local time, from unix seconds.
 pub fn format_time(secs: i64) -> String {
-    let days = secs.div_euclid(86_400);
-    let rem = secs.rem_euclid(86_400);
-    // Civil-from-days (Howard Hinnant).
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + i64::from(m <= 2);
-    format!("{y:04}-{m:02}-{d:02} {:02}:{:02}", rem / 3600, rem % 3600 / 60)
+    crate::localtime::format(secs)
 }
 
 #[cfg(test)]
@@ -365,8 +353,8 @@ mod tests {
         assert_eq!(t.kind, "Bug");
         assert_eq!(t.reporter, "Riley Reporter");
         assert_eq!((t.sprint, t.epic, t.fix_version, t.estimate), ("Sprint 41", "Reporting", "2.14.0, 2.15.0", "3d"));
-        assert_eq!(t.created, "2023-11-14 22:13");
-        assert_eq!(t.updated, "2023-11-14 23:13");
+        assert_eq!(t.created, format_time(1_700_000_000));
+        assert_eq!(t.updated, format_time(1_700_003_600));
         assert_eq!(t.labels, ["web"]);
         assert_eq!(t.components, ["Frontend"]);
         assert_eq!(
@@ -463,8 +451,9 @@ mod tests {
 
     #[test]
     fn formats_unix_time() {
-        assert_eq!(format_time(0), "1970-01-01 00:00");
-        assert_eq!(format_time(1_700_000_000), "2023-11-14 22:13");
+        // In local time, so the expected text is built the same way; the arithmetic is tested in `localtime`.
+        assert_eq!(format_time(0), crate::localtime::format(0));
+        assert_eq!(format_time(1_700_000_000), crate::localtime::format(1_700_000_000));
     }
 
     #[test]
