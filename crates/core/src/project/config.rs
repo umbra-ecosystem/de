@@ -26,9 +26,39 @@ pub struct ProjectManifest {
     /// Tasks to run when a ticket branch is activated (`[activate]`).
     #[serde(default, skip_serializing_if = "ActivateConfig::is_empty")]
     pub activate: ActivateConfig,
+    /// Where this repo is hosted (`[hosting]`); repos without it are never synced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hosting: Option<HostingConfig>,
+    /// Pipeline settings overriding the global ones (`[pipelines]`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipelines: Option<ProjectPipelinesConfig>,
 }
 
 impl ProjectManifest {
+    /// The `workspace/slug` this project is hosted at, or `None` when it has no `[hosting]`.
+    ///
+    /// An explicit `repo` wins. Otherwise it is `<global bitbucket workspace>/<directory
+    /// name>`; without a global workspace there is nothing to derive it from.
+    pub fn hosting_repo(
+        &self,
+        dir_name: &str,
+        bitbucket_workspace: Option<&str>,
+    ) -> Option<String> {
+        let hosting = self.hosting.as_ref()?;
+        match hosting.repo.as_deref() {
+            Some(repo) => Some(repo.into()),
+            None => bitbucket_workspace.map(|ws| format!("{ws}/{dir_name}")),
+        }
+    }
+
+    /// The deployment environment for this project: its own `[pipelines]` value, else `global`.
+    pub fn deploy_environment<'a>(&'a self, global: Option<&'a str>) -> Option<&'a str> {
+        self.pipelines
+            .as_ref()
+            .and_then(|p| p.deploy_environment.as_deref())
+            .or(global)
+    }
+
     pub fn project(&self) -> &ProjectMetadata {
         &self.project
     }
@@ -173,6 +203,34 @@ impl BranchesConfig {
     }
 }
 
+/// The kinds of code host a project can declare.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostingProvider {
+    #[default]
+    Bitbucket,
+}
+
+/// `[hosting]`: the code host of this project.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostingConfig {
+    /// The provider; `bitbucket` when unset.
+    #[serde(default)]
+    pub provider: HostingProvider,
+    /// `workspace/slug`. Derived from the global Bitbucket workspace and the project
+    /// directory name when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+}
+
+/// A project's `[pipelines]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectPipelinesConfig {
+    /// Overrides the global `deploy_environment` for this project.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deploy_environment: Option<String>,
+}
+
 /// `[overlay]`. Only repos that consume a package built from another workspace repo have one.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OverlayConfig {
@@ -303,6 +361,45 @@ mod tests {
         let round_trip = parse(&toml::to_string_pretty(&with).unwrap());
         assert_eq!(round_trip.branches, with.branches);
         assert_eq!(round_trip.overlay, with.overlay);
+    }
+
+    #[test]
+    fn hosting_and_pipelines_parse_with_defaults() {
+        let m = parse(
+            "[hosting]\nprovider = \"bitbucket\"\nrepo = \"acme/web\"\n[pipelines]\ndeploy_environment = \"alpha\"\n",
+        );
+        assert_eq!(
+            m.hosting_repo("web-dir", Some("other")).as_deref(),
+            Some("acme/web")
+        );
+        assert_eq!(m.deploy_environment(Some("global")), Some("alpha"));
+
+        // Bare `[hosting]` derives the repo from the global workspace and directory name.
+        let m = parse("[hosting]\n");
+        assert_eq!(
+            m.hosting.as_ref().unwrap().provider,
+            HostingProvider::Bitbucket
+        );
+        assert_eq!(
+            m.hosting_repo("web", Some("acme")).as_deref(),
+            Some("acme/web")
+        );
+        assert_eq!(m.hosting_repo("web", None), None);
+        assert_eq!(m.deploy_environment(Some("global")), Some("global"));
+        assert_eq!(m.deploy_environment(None), None);
+
+        // No `[hosting]`: never hosted, whatever the global config says.
+        assert_eq!(parse("").hosting_repo("web", Some("acme")), None);
+        assert!(toml::from_str::<ProjectManifest>("[hosting]\nprovider = \"nope\"\n").is_err());
+    }
+
+    #[test]
+    fn saving_does_not_add_hosting_when_absent() {
+        let saved = toml::to_string_pretty(&parse("[project]\nname = \"api\"\n")).unwrap();
+        assert!(
+            !saved.contains("hosting") && !saved.contains("pipelines"),
+            "{saved}"
+        );
     }
 
     #[test]

@@ -10,17 +10,24 @@
 
 pub mod audit;
 pub mod jira_cache;
+pub mod jira_comments;
 pub mod links;
 mod migrations;
 pub mod notes;
 pub mod overlays;
+pub mod pipelines;
+pub mod prs;
 pub mod restore;
 mod sql;
+pub mod sync_state;
 pub mod tickets;
 pub mod time;
+pub mod uat_merges;
 
 #[cfg(test)]
 mod domain_tests;
+#[cfg(test)]
+mod provider_tests;
 
 use std::path::{Path, PathBuf};
 

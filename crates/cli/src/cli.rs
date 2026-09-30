@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::types::Slug;
 use de_core::domain::{BaselineChoice, LocalStatus, TicketKey};
+use de_core::sync::SyncSource;
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -64,6 +65,26 @@ pub enum Commands {
     Ticket {
         #[command(subcommand)]
         command: TicketCommands,
+    },
+
+    /// Refresh the local cache of tickets, PRs and pipelines from Jira and Bitbucket.
+    ///
+    /// Only reads from the remote systems. Sources that failed (offline, not logged in) are
+    /// reported and their cached data is kept.
+    Sync {
+        /// Sync only this source.
+        #[arg(long, value_enum)]
+        only: Option<SyncOnly>,
+
+        /// Sync even sources that were synced very recently.
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Inspect the external tools (`acli`, `bkt`) that provide Jira and Bitbucket data.
+    Providers {
+        #[command(subcommand)]
+        command: ProvidersCommands,
     },
 
     /// Run `docker compose` for a project or every project in a workspace.
@@ -333,6 +354,28 @@ pub enum TicketCommands {
         #[command(subcommand)]
         command: CheckCommands,
     },
+}
+
+/// The sources `de sync --only` accepts.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum SyncOnly {
+    Jira,
+    Bitbucket,
+}
+
+impl From<SyncOnly> for SyncSource {
+    fn from(only: SyncOnly) -> Self {
+        match only {
+            SyncOnly::Jira => SyncSource::Jira,
+            SyncOnly::Bitbucket => SyncSource::Bitbucket,
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProvidersCommands {
+    /// Show whether each provider is installed, logged in and recent enough.
+    Check,
 }
 
 #[derive(Debug, Subcommand)]

@@ -5,6 +5,7 @@ use rusqlite::{OptionalExtension, Row, params};
 
 use super::{Store, tickets};
 use crate::domain::TicketKey;
+use crate::providers::RemoteTicket;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JiraTicket {
@@ -62,6 +63,35 @@ pub fn upsert(cache: &Store, t: &JiraTicket) -> eyre::Result<()> {
         )
         .wrap_err_with(|| format!("Failed to cache {}", t.key))?;
     Ok(())
+}
+
+/// Caches a ticket as the provider reported it (the payload is stored as JSON).
+pub fn upsert_remote(cache: &Store, t: &RemoteTicket, now: i64) -> eyre::Result<()> {
+    upsert(
+        cache,
+        &JiraTicket {
+            key: t.key.clone(),
+            title: t.title.clone(),
+            jira_status: t.status.clone(),
+            priority: t.priority.clone(),
+            assignee: t.assignee.clone(),
+            url: t.url.clone(),
+            raw_json: serde_json::to_string(t).wrap_err("Failed to serialise the ticket")?,
+            fetched_at: now,
+        },
+    )
+}
+
+/// Removes every cached ticket whose key is not in `keep`; returns how many went.
+pub fn delete_except(cache: &Store, keep: &[TicketKey]) -> eyre::Result<usize> {
+    let mut removed = 0;
+    for t in list(cache)?.into_iter().filter(|t| !keep.contains(&t.key)) {
+        removed += cache
+            .conn()
+            .execute("DELETE FROM jira_tickets WHERE key = ?1", params![t.key])
+            .wrap_err_with(|| format!("Failed to remove cached {}", t.key))?;
+    }
+    Ok(removed)
 }
 
 pub fn get(cache: &Store, key: &TicketKey) -> eyre::Result<Option<JiraTicket>> {
