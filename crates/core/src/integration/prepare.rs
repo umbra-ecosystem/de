@@ -174,7 +174,7 @@ fn tmp_ref(ticket: &TicketKey) -> String {
 }
 
 fn temp_branch(ticket: &TicketKey) -> String {
-    format!("de/integrate/{ticket}")
+    format!("{}{ticket}", crate::git::INTEGRATION_BRANCH_PREFIX)
 }
 
 fn audit_local(
