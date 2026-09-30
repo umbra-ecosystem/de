@@ -21,6 +21,7 @@ const KEY_W: f32 = 90.0;
 const URGENT_W: f32 = 24.0;
 const REPOS_W: f32 = 140.0;
 const JIRA_W: f32 = 120.0;
+const UPDATED_W: f32 = 90.0;
 const LOCAL_W: f32 = 110.0;
 const FLAGS_W: f32 = 170.0;
 
@@ -110,6 +111,7 @@ fn header(ui: &Ui, vm: &TicketListVm, show_local: bool) -> Div {
         )))
         .child(cell(REPOS_W).child(head_cell(ui, vm, "Repos", None)))
         .child(cell(JIRA_W).child(head_cell(ui, vm, "Jira", Some(TicketSort::Jira))))
+        .child(cell(UPDATED_W).child(head_cell(ui, vm, "Updated", None)))
         .when(show_local, |d| {
             d.child(cell(LOCAL_W).child(head_cell(ui, vm, "Local", None)))
         })
@@ -160,7 +162,14 @@ pub fn ticket_row(ui: &Ui, r: &TicketRowVm, show_local: bool) -> Stateful<Div> {
                         )
                         .when(r.hotfix, |d| d.child(hotfix_pill(pal))),
                 )
-                .child(div().truncate().child(faint(pal, r.sub.clone()))),
+                // The same quiet-but-readable colour as the second line of a row on Home.
+                .child(
+                    div()
+                        .truncate()
+                        .text_xs()
+                        .text_color(pal.muted)
+                        .child(r.sub.clone()),
+                ),
         )
         .child(
             cell(REPOS_W).child(
@@ -183,6 +192,18 @@ pub fn ticket_row(ui: &Ui, r: &TicketRowVm, show_local: bool) -> Stateful<Div> {
             ),
         )
         .child(cell(JIRA_W).child(status(ui, Some(&r.jira), "")))
+        .child(
+            cell(UPDATED_W).child(match r.updated.clone() {
+                Some((short, full)) => div()
+                    .id(SharedString::from(format!("updated-{}", r.key)))
+                    .text_xs()
+                    .text_color(pal.muted)
+                    .child(short)
+                    .tooltip(move |window, cx| Tooltip::new(full.clone()).build(window, cx))
+                    .into_any_element(),
+                None => div().into_any_element(),
+            }),
+        )
         .when(show_local, |d| {
             d.child(cell(LOCAL_W).child(status(ui, r.local.as_ref(), "unclaimed")))
         })

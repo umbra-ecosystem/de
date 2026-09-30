@@ -24,6 +24,8 @@ pub struct Sim {
     pub(crate) ms: i64,
     /// The minute of the day (0..1440) that `ms == 0` is, so a clock reads as real time where it should.
     pub(crate) start_min: i64,
+    /// The unix time that `ms == 0` is, for a store that runs on real time; ages ("2d ago") need it.
+    pub(crate) wall_start: Option<i64>,
     pub(crate) seq: u64,
     pub(crate) run: u32,
     pub(crate) sync: SyncState,
@@ -69,6 +71,7 @@ impl Sim {
         Self {
             ms: 0,
             start_min: START_MIN,
+            wall_start: None,
             seq: 100,
             run: 480,
             sync: SyncState {
@@ -184,6 +187,18 @@ impl Sim {
             m if m < 24 * 60 => format!("Synced {}h ago", m / 60),
             m => format!("Synced {}d ago", m / (24 * 60)),
         }
+    }
+
+    /// The simulation's zero is this unix time (and its minutes are real ones), so ages can be told.
+    pub fn set_wall_clock_start(&mut self, unix: i64) {
+        self.wall_start = Some(unix);
+    }
+
+    /// How long ago a unix time was, in the words of the lists (`5m ago`, `3h ago`, `2d ago`, `3w ago`, `4mo ago`,
+    /// `1y ago`); `None` when there is no wall clock.
+    pub(crate) fn ago_text(&self, at: i64) -> Option<String> {
+        let now = self.wall_start? + self.ms.div_euclid(MS_PER_MIN) * 60;
+        Some(ago(now - at))
     }
 
     /// What minute of the day it is now (local time), for the times the audit log and waits show.
@@ -319,9 +334,96 @@ impl Sim {
     }
 }
 
+/// `secs` seconds ago in the lists' words. Anything under a minute, or from the future (clock skew), is "just now".
+pub fn ago(secs: i64) -> String {
+    const MIN: i64 = 60;
+    const HOUR: i64 = 60 * MIN;
+    const DAY: i64 = 24 * HOUR;
+    match secs {
+        s if s < MIN => "just now".to_string(),
+        s if s < HOUR => format!("{}m ago", s / MIN),
+        s if s < DAY => format!("{}h ago", s / HOUR),
+        s if s < 14 * DAY => format!("{}d ago", s / DAY),
+        s if s < 60 * DAY => format!("{}w ago", s / (7 * DAY)),
+        s if s < 365 * DAY => format!("{}mo ago", s / (30 * DAY)),
+        s => format!("{}y ago", s / (365 * DAY)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ages_read_in_the_largest_fitting_unit() {
+        let cases = [
+            (-5, "just now"),
+            (0, "just now"),
+            (59, "just now"),
+            (60, "1m ago"),
+            (59 * 60, "59m ago"),
+            (3600, "1h ago"),
+            (23 * 3600 + 3599, "23h ago"),
+            (86_400, "1d ago"),
+            (13 * 86_400, "13d ago"),
+            (14 * 86_400, "2w ago"),
+            (59 * 86_400, "8w ago"),
+            (60 * 86_400, "2mo ago"),
+            (364 * 86_400, "12mo ago"),
+            (365 * 86_400, "1y ago"),
+        ];
+        for (secs, want) in cases {
+            assert_eq!(ago(secs), want, "{secs}s");
+        }
+    }
+
+    #[test]
+    fn a_claim_row_carries_when_its_ticket_last_changed() {
+        let mut sim = Sim::new();
+        let claim = |sim: &Sim| {
+            crate::Store::next(sim, true)
+                .cards
+                .into_iter()
+                .find(|c| c.title == "Claim PROJ-139")
+                .expect("the hotfix claim")
+        };
+        // The showcase has no wall clock: nothing to tell an age from.
+        assert_eq!(claim(&sim).updated, None);
+
+        sim.set_wall_clock_start(1_000_000);
+        let i = sim.idx(&"PROJ-139".into()).unwrap();
+        sim.tickets[i].updated_at = Some(1_000_000 - 2 * 86_400 - 60);
+        sim.tickets[i].updated = "2026-09-29 10:00";
+        let (short, full) = claim(&sim).updated.expect("an age");
+        assert_eq!(short, "2d ago");
+        assert_eq!(full, "Updated 2026-09-29 10:00");
+
+        // The ticket tables carry the same age.
+        let row = |sim: &Sim| {
+            crate::Store::tickets(sim, crate::vm::Group::All)
+                .sections
+                .into_iter()
+                .flat_map(|s| s.rows)
+                .find(|r| r.key == "PROJ-139")
+                .expect("the ticket in the list")
+        };
+        assert_eq!(row(&sim).updated.map(|u| u.0).as_deref(), Some("2d ago"));
+
+        // A ticket whose update time is unknown shows none, rather than a made-up one.
+        sim.tickets[i].updated_at = None;
+        assert_eq!(claim(&sim).updated, None);
+        assert_eq!(row(&sim).updated, None);
+    }
+
+    #[test]
+    fn an_age_needs_a_wall_clock_and_moves_with_the_simulation_clock() {
+        let mut sim = Sim::new();
+        assert_eq!(sim.ago_text(1_000), None, "the showcase has no real time");
+        sim.set_wall_clock_start(10_000);
+        assert_eq!(sim.ago_text(10_000 - 7200).as_deref(), Some("2h ago"));
+        sim.advance(3 * MS_PER_MIN);
+        assert_eq!(sim.ago_text(10_000).as_deref(), Some("3m ago"));
+    }
 
     #[test]
     fn the_sync_age_reads_now_under_a_minute_then_minutes_hours_days() {

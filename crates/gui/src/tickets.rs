@@ -91,6 +91,7 @@ fn apply_detail(
     }
     if let Some(at) = d.updated_at {
         t.updated = leak(&format_time(at));
+        t.updated_at = Some(at);
     }
     t.labels = d.labels.iter().map(|l| leak(l)).collect();
     t.components = d.components.iter().map(|c| leak(c)).collect();
@@ -353,6 +354,7 @@ mod tests {
         assert_eq!(t.kind, "Bug");
         assert_eq!(t.reporter, "Riley Reporter");
         assert_eq!((t.sprint, t.epic, t.fix_version, t.estimate), ("Sprint 41", "Reporting", "2.14.0, 2.15.0", "3d"));
+        assert_eq!(t.updated_at, Some(1_700_003_600), "kept as a time, for the age");
         assert_eq!(t.created, format_time(1_700_000_000));
         assert_eq!(t.updated, format_time(1_700_003_600));
         assert_eq!(t.labels, ["web"]);
@@ -373,6 +375,7 @@ mod tests {
         let bare = &all[1];
         assert_eq!((bare.kind, bare.sprint, bare.fix_version, bare.estimate, bare.created), ("", "", "", "", ""));
         assert!(bare.desc.is_empty() && bare.links.is_empty());
+        assert_eq!(bare.updated_at, None);
     }
 
     #[test]

@@ -685,6 +685,8 @@ pub struct Ticket {
     pub estimate: &'static str,
     pub created: &'static str,
     pub updated: &'static str,
+    /// When Jira last changed the ticket (unix seconds), when known: what the "2d ago" is worked out from.
+    pub updated_at: Option<i64>,
     pub labels: Vec<&'static str>,
     pub components: Vec<&'static str>,
     pub desc: Vec<Block>,
@@ -729,6 +731,7 @@ impl Ticket {
             estimate: "1 pt",
             created: "today",
             updated: "just now",
+            updated_at: None,
             labels: Vec::new(),
             components: Vec::new(),
             desc: Vec::new(),

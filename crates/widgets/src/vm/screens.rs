@@ -132,6 +132,8 @@ pub struct SuggestionCard {
     pub reason: String,
     /// What the second line says instead of `reason` (a claim row: the ticket's type and assignee).
     pub meta: Option<String>,
+    /// When Jira last changed the ticket: `("2d ago", "Updated 2026-09-15 05:17")`, for a claim row.
+    pub updated: Option<(String, String)>,
     /// Short facts shown in place of the reason when there are any.
     pub chips: Vec<Badge>,
     pub level: Level,
@@ -166,6 +168,8 @@ pub struct TicketRowVm {
     pub hotfix: bool,
     pub sub: String,
     pub jira: Badge,
+    /// When Jira last changed the ticket: `("2d ago", "Updated 2026-09-15 05:17")`; `None` when unknown.
+    pub updated: Option<(String, String)>,
     pub local: Option<Badge>,
     pub repos: Vec<RepoName>,
     pub flags: Vec<Badge>,

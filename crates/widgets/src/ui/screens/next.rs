@@ -264,6 +264,23 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
                         .child(s.meta.clone().unwrap_or_else(|| s.reason.clone())),
                 ),
         )
+        // When the ticket last changed, in a fixed column so the chips after it line up.
+        .when(s.headline.is_some(), |d| {
+            let (short, full) = s.updated.clone().unwrap_or_default();
+            d.child(
+                div()
+                    .id(SharedString::from(format!("updated-{}", s.id)))
+                    .flex_none()
+                    .w(px(72.0))
+                    .text_xs()
+                    .text_color(pal.muted)
+                    .text_right()
+                    .child(short)
+                    .when(!full.is_empty(), |d| {
+                        d.tooltip(move |window, cx| Tooltip::new(full.clone()).build(window, cx))
+                    }),
+            )
+        })
         // What is off about the ticket, at the right end, where a column of them can be scanned.
         .when(!s.chips.is_empty(), |d| {
             d.child(

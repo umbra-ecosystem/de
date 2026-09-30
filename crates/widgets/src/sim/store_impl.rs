@@ -67,6 +67,12 @@ impl Sim {
             .flatten()
     }
 
+    /// When Jira last changed the ticket, as the lists show it: a short age and the exact time for a tooltip.
+    fn updated_of(&self, t: &Ticket) -> Option<(String, String)> {
+        let short = self.ago_text(t.updated_at?)?;
+        Some((short, format!("Updated {}", t.updated)))
+    }
+
     /// The choices for how often to sync by itself: off, or every 5, 10, 30 or 60 minutes.
     pub fn sync_options(current: u32) -> Vec<(String, bool, Btn)> {
         [0u32, 5, 10, 30, 60]
@@ -115,6 +121,7 @@ impl Sim {
                     .collect::<Vec<_>>()
                     .join(" \u{b7} ")
             }),
+            updated: self.claim_ticket(s).and_then(|t| self.updated_of(t)),
             chips: s.chips.clone(),
             level: s.level,
             state: s.state,
@@ -271,8 +278,14 @@ impl Sim {
             priority: Badge::new(t.priority.label(), priority_tone(t.priority)),
             title: t.title.clone(),
             hotfix: self.is_hotfix(t),
-            sub: format!("{} · {}", t.kind, t.assignee),
+            sub: [t.kind, t.assignee]
+                .iter()
+                .filter(|x| !x.is_empty())
+                .copied()
+                .collect::<Vec<_>>()
+                .join(" \u{b7} "),
             jira: jira_badge(t.jira),
+            updated: self.updated_of(t),
             local: local_badge(t.local()),
             repos: {
                 let mut r: Vec<RepoName> = t.prs.iter().map(|p| p.repo.clone()).collect();
