@@ -197,8 +197,8 @@ Foundation first. Each milestone is usable and tested headlessly before the next
 - **M4: Done** (adapters unverified for writes and for Bitbucket reads). Providers and sync. Provider traits; Jira via `acli` (Review column, priority, @mentions, statuses), Bitbucket via `bkt` (PRs, pipelines by commit). Verify JSON, mention data and inline comments first; pin CLI versions. Cache, refresh, offline.
 - **M5: Done.** Write gateway and integration. The `uat` merge-and-push flow (conflict reporting, recorded merge commits), deploy-comment drafts, Alpha Testing transition, pipeline re-run, all confirmed and audited.
 - **M6: Done.** Next-action engine. Suggestion/Action model, the rules above, priority, dismiss/snooze persistence. Exposed headlessly as `de next` so rules can be tuned on real data before any UI.
-- **M7: Menubar app.** GPUI shell: ticket views (review queue, active, parked), ticket detail, notifications, start/stop workspace. Needs a `.app` bundle; `cargo-dist` does not build one.
-- **M8: In-app review.** Our own diff view (Zed's diff code is GPL-3, `de` is MIT), inline PR comments, later approve.
+- **M7: Menubar app** (outline in `docs/design/gui.md`; nothing built). GPUI shell: ticket views (review queue, active, parked), ticket detail, notifications, start/stop workspace. Needs a `.app` bundle; `cargo-dist` does not build one.
+- **M8: In-app review** (outline in `docs/design/gui.md`). Our own diff view (Zed's diff code is GPL-3, `de` is MIT), inline PR comments, later approve.
 - **M9: Done** (as engine rules). After alpha. UAT sign-off tracking, Returned handling, re-merge detection, PR approval suggestion.
 - **Later:** GitHub adapter, time reports, reverting a ticket out of `uat`.
 
