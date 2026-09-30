@@ -118,12 +118,12 @@ The `composer.json` change for local testing (the path repository and the `*` co
 
 ## Integrations and CLI coverage
 
-Checked against published docs; nothing was runnable locally (`acli`, `bkt`, `gh` are not installed on this machine yet).
+The first version of this table came from published docs. `acli` (1.3.39) is now installed and logged in on the author's machine and was **checked against its real output** (facts below marked *verified*); `bkt` (0.32.1) is installed but **not logged in**, so only its version and logged-out behaviour are verified. `gh` is not installed.
 
 | System | Tool | Covers | Gaps / to verify |
 |---|---|---|---|
-| Jira | `acli jira workitem` (Atlassian's) | view, search, edit, assign, transition, comment create/list/update, link | JSON output and pagination unconfirmed. **Can it list comments with @mention data?** (needed for "Returned, tagged".) Board/column and priority queries unverified. |
-| Bitbucket | `bkt` (community, [avivsinai/bitbucket-cli](https://github.com/avivsinai/bitbucket-cli), Go, MIT) | PR list/view/create/merge/approve/request-changes, comment resolve/reopen/delete, pipelines list/view/run/rerun/logs, `--json`/`--yaml`, OS-keychain credentials, Cloud and Data Center | **Inline comment creation and PR diff unverified.** Pipeline lookup by commit unverified. Community project. |
+| Jira | `acli jira workitem` (Atlassian's) | view, search, edit, assign, transition, comment create/list/update, link. *Verified:* `search --json` returns a JSON array of Jira-REST-like issues; `view --json` one issue. | *Verified:* **search rejects `--fields updated`** (`updated` is only allowed in `view`), and `--fields key` alone returns nulls. **@mentions: verified possible, but only via `view KEY --json --fields comment`**, which returns full comments (account id, ADF body with `mention` nodes, `created`); `comment list` returns flat strings with **no account id, timestamps or mentions** and must not be used for that. Unverified: `--paginate` output, logged-out wording, all writes, board/column and priority queries. |
+| Bitbucket | `bkt` (community, [avivsinai/bitbucket-cli](https://github.com/avivsinai/bitbucket-cli), Go, MIT; **0.32.1 installed**) | PR list/view/create/merge/approve/request-changes, comment resolve/reopen/delete, pipelines list/view/run/rerun/logs, `--json`/`--yaml`, OS-keychain credentials, Cloud and Data Center | Read from source (not run): `bkt` can create inline comments (`pr comment --to-line/--from-line`) but prints no result, so the adapter posts through `bkt api`; it **cannot look up a pipeline by commit** (its pipeline JSON drops the commit and deployment environment), so the adapter lists runs through `bkt api` and filters, scanning at most 500. *Verified:* logged out, `auth status --json` is `{"hosts": null, "contexts": null}` and every other command fails with `no active context; run bkt context use <name>`. **The user must run `bkt auth login` and `bkt context use` once** before anything else here can be checked. Cloud only; Data Center returns `Unsupported`. |
 | GitHub (later) | `gh` | PRs, reviews, checks, runs, rerun; `gh api` for the rest | Line-level review comments need `gh api`. |
 
 Consequences:
@@ -194,9 +194,9 @@ Foundation first. Each milestone is usable and tested headlessly before the next
 - **M1: Done** (except importing the current workspace config, deferred). Domain and store. Ticket/repo/branch model, SQLite with migrations, local state (claims, ordering, notes, checklist, time), audit log. Import current workspace config.
 - **M2: Done.** Git layer. Structured status, key matching with manual override, safe in-place switch with stash/restore, diff-from-objects, temporary worktrees, restore the uncommitted/unpushed guard on `stop`.
 - **M3: Done**, independently reviewed and fixed. Active ticket and local test. Activate/park/restore, overlay engine (composer pointing at the ticket branch, rebuild tasks) with guaranteed revert and push guard.
-- **M4: Providers and sync.** Provider traits; Jira via `acli` (Review column, priority, @mentions, statuses), Bitbucket via `bkt` (PRs, pipelines by commit). Verify JSON, mention data and inline comments first; pin CLI versions. Cache, refresh, offline.
-- **M5: Write gateway and integration.** The `uat` merge-and-push flow (conflict reporting, recorded merge commits), deploy-comment drafts, Alpha Testing transition, pipeline re-run, all confirmed and audited.
-- **M6: Next-action engine.** Suggestion/Action model, the rules above, priority, dismiss/snooze persistence. Exposed headlessly as `de next` so rules can be tuned on real data before any UI.
+- **M4: Done** (adapters unverified for writes and for Bitbucket reads). Providers and sync. Provider traits; Jira via `acli` (Review column, priority, @mentions, statuses), Bitbucket via `bkt` (PRs, pipelines by commit). Verify JSON, mention data and inline comments first; pin CLI versions. Cache, refresh, offline.
+- **M5: Done.** Write gateway and integration. The `uat` merge-and-push flow (conflict reporting, recorded merge commits), deploy-comment drafts, Alpha Testing transition, pipeline re-run, all confirmed and audited.
+- **M6: In progress.** Next-action engine. Suggestion/Action model, the rules above, priority, dismiss/snooze persistence. Exposed headlessly as `de next` so rules can be tuned on real data before any UI.
 - **M7: Menubar app.** GPUI shell: ticket views (review queue, active, parked), ticket detail, notifications, start/stop workspace. Needs a `.app` bundle; `cargo-dist` does not build one.
 - **M8: In-app review.** Our own diff view (Zed's diff code is GPL-3, `de` is MIT), inline PR comments, later approve.
 - **M9: After alpha.** UAT sign-off tracking, Returned handling, re-merge detection, PR approval suggestion.
@@ -228,7 +228,7 @@ Flow details:
 
 Technical:
 
-12. **CLI viability.** `acli` (JSON, pagination, mention data, speed) and `bkt` (Cloud vs Data Center, inline comment creation, pipeline lookup by commit, JSON stability). Verify by running them against real accounts.
+12. **CLI viability.** *Resolved for acli reads:* JSON shapes and @mention data (via `view --fields comment`) are real and usable. *Still open:* acli `--paginate` output and its writes (comment create, transition; the CLI cannot list transitions), and everything about `bkt` beyond its logged-out behaviour: Cloud vs Data Center, the shapes of `pr view`/`pipeline` output through `bkt api`, the deployment-environment field on pipeline steps, inline comment creation. Verify by logging in and running `de providers probe --repo workspace/slug`, then `cargo test -p de-core -- --ignored live_`.
 13. **Menubar process model.** One app process owning the store and sync loop with the CLI reading the same SQLite (WAL), or a separate daemon. Launch-at-login and `.app` packaging.
 14. **`gpui-kit`.** Confirm it builds on the pinned toolchain (1.92.0) and what its editor offers for diff display, before M7/M8.
 15. **Suggestion tuning.** Needs a feedback loop (dismiss reasons) once the engine runs on real data.
