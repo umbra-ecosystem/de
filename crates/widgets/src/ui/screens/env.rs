@@ -1,6 +1,8 @@
 //! Screens that are not about one ticket: what is on uat, the workspace, the audit log, settings.
 //! Edge to edge: strips, columns and row hairlines reach the panel edges; text keeps the page margin.
 
+use std::rc::Rc;
+
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
@@ -36,96 +38,86 @@ fn row(pal: &Pal) -> Div {
         .border_color(pal.border.opacity(0.4))
 }
 
-pub fn on_uat(ui: &Ui, v: &OnUatVm) -> Div {
+/// Tickets on uat as a uniform list, like the ticket lists; each row names the repos it touches. Overlaps are
+/// exceptions: they get a line under the list only when there are some.
+pub fn on_uat(ui: &Ui, v: &OnUatVm) -> AnyElement {
     let pal = &ui.pal;
-    let columns = div()
-        .flex()
-        .w_full()
-        .children(v.columns.iter().enumerate().map(|(n, c)| {
-            div()
-                .flex()
-                .flex_col()
-                .flex_1()
-                .min_w_0()
-                .when(n + 1 < v.columns.len(), |d| {
-                    d.border_r_1().border_color(pal.border)
-                })
-                .child(
+    let body = if v.rows.is_empty() {
+        empty_state(pal, "Nothing of yours is on uat.").into_any_element()
+    } else {
+        let rows = Rc::new(v.rows.clone());
+        let ui = ui.clone();
+        uniform_list("uat-list", rows.len(), move |range, _, _| {
+            range
+                .map(|i| {
+                    let r = &rows[i];
+                    let pal = &ui.pal;
                     div()
+                        .id(SharedString::from(format!("uat-{}", r.key)))
                         .flex()
                         .items_center()
-                        .justify_between()
-                        .h_9()
-                        .px_4()
+                        .gap_3()
+                        .w_full()
+                        .h(px(52.0))
+                        .px_6()
                         .border_b_1()
-                        .border_color(pal.border)
+                        .border_color(pal.border.opacity(0.5))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(pal.hover))
+                        .on_click(ui.on_click(Intent::go_ticket(r.key.clone(), TicketTab::Ship)))
+                        .child(div().flex_none().w(px(90.0)).child(key_text(&ui, &r.key)))
                         .child(
                             div()
-                                .font_family(ui.mono.clone())
-                                .text_xs()
-                                .child(c.repo.to_string()),
+                                .flex()
+                                .flex_col()
+                                .flex_1()
+                                .min_w_0()
+                                .child(div().truncate().child(r.title.clone()))
+                                .child(
+                                    div()
+                                        .truncate()
+                                        .text_xs()
+                                        .font_family(ui.mono.clone())
+                                        .text_color(pal.faint)
+                                        .child(
+                                            r.repos
+                                                .iter()
+                                                .map(|x| x.to_string())
+                                                .collect::<Vec<_>>()
+                                                .join(", "),
+                                        ),
+                                ),
                         )
-                        .child(faint(pal, c.host.clone())),
-                )
-                .child(if c.items.is_empty() {
-                    div()
-                        .px_4()
-                        .py_3()
-                        .child(faint(pal, "Nothing merged by you."))
-                } else {
-                    div().flex().flex_col().children(c.items.iter().map(|i| {
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_0p5()
-                            .px_4()
-                            .py_2()
-                            .border_b_1()
-                            .border_color(pal.border.opacity(0.4))
-                            .child(
-                                div()
-                                    .flex()
-                                    .justify_between()
-                                    .child(key_link(
-                                        ui,
-                                        &i.key,
-                                        Intent::go_ticket(i.key.clone(), TicketTab::Ship),
-                                    ))
-                                    .child(
-                                        div()
-                                            .font_family(ui.mono.clone())
-                                            .text_xs()
-                                            .text_color(pal.faint)
-                                            .child(i.commit.clone()),
-                                    ),
-                            )
-                            .child(div().text_sm().child(i.title.clone()))
-                            .child(faint(
-                                pal,
-                                match &i.chip {
-                                    Some(c) if c.tone != Tone::Ok => {
-                                        format!("{} · {}", c.text, i.jira.text)
-                                    }
-                                    _ => format!("deployed · {}", i.jira.text),
-                                },
-                            ))
-                    }))
+                        .when_some(r.problem.clone(), |d, c| d.child(deploy_chip(pal, &c)))
+                        .child(pill(pal, &r.jira))
+                        .into_any_element()
                 })
-        }));
-    div().flex().flex_col().child(columns).child(band(
-        pal,
-        false,
-        "Potential overlap",
-        pad(if v.overlaps.is_empty() {
-            faint(pal, "No overlapping files between tickets on uat.")
-        } else {
-            div().flex().flex_col().gap_2().children(
-                v.overlaps.iter().map(|o| {
-                    warn_box(pal, Tone::Warn, [div().child(o.clone()).into_any_element()])
-                }),
-            )
-        }),
-    ))
+                .collect::<Vec<_>>()
+        })
+        .w_full()
+        .flex_1()
+        .into_any_element()
+    };
+    div()
+        .flex()
+        .flex_col()
+        .size_full()
+        .child(body)
+        .when(!v.overlaps.is_empty(), |d| {
+            d.child(band(
+                pal,
+                false,
+                "Potential overlap",
+                pad(div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .children(v.overlaps.iter().map(|o| {
+                        warn_box(pal, Tone::Warn, [div().child(o.clone()).into_any_element()])
+                    }))),
+            ))
+        })
+        .into_any_element()
 }
 
 pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {

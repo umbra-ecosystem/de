@@ -350,7 +350,7 @@ impl AppView {
                 checklist_add,
             )
             .into_any_element(),
-            ScreenVm::OnUat(v) => env::on_uat(ui, v).into_any_element(),
+            ScreenVm::OnUat(v) => env::on_uat(ui, v),
             ScreenVm::Workspace(v) => env::workspace(ui, v).into_any_element(),
             ScreenVm::Audit(rows) => env::audit(ui, rows).into_any_element(),
             ScreenVm::Settings(v) => env::settings(ui, v).into_any_element(),
@@ -381,7 +381,7 @@ impl AppView {
         // Lists own their scrolling (a uniform list needs a bounded height); every other screen scrolls as a page.
         let is_list = matches!(
             self.vm.screen,
-            ScreenVm::Next(_) | ScreenVm::Tickets(_) | ScreenVm::Ticket { .. }
+            ScreenVm::Next(_) | ScreenVm::Tickets(_) | ScreenVm::OnUat(_) | ScreenVm::Ticket { .. }
         );
         // Every screen is edge to edge: it draws its own strips, rows and hairlines, and pads only its text.
         let body = if is_list {

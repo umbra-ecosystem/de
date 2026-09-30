@@ -1031,62 +1031,58 @@ impl Store for Sim {
     }
 
     fn on_uat(&self) -> OnUatVm {
-        let show_docs = self
-            .tickets
-            .iter()
-            .any(|t| t.has_landed(&RepoName::from("docs")));
-        let cols: Vec<&RepoCfg> = self
-            .repos
-            .iter()
-            .filter(|r| r.name != "docs" || show_docs)
-            .collect();
         let mut overlaps = Vec::new();
-        let columns = cols
-            .iter()
-            .map(|r| {
-                let list: Vec<&Ticket> = self
-                    .tickets
-                    .iter()
-                    .filter(|t| t.has_landed(&r.name))
-                    .collect();
-                for i in 0..list.len() {
-                    for j in (i + 1)..list.len() {
-                        let paths = |t: &Ticket| -> Vec<String> {
-                            t.prs
-                                .iter()
-                                .filter(|p| p.repo == r.name)
-                                .flat_map(|p| p.files.iter().map(|f| f.path.clone()))
-                                .collect()
-                        };
-                        let b = paths(list[j]);
-                        for f in paths(list[i]).into_iter().filter(|f| b.contains(f)) {
-                            overlaps.push(format!(
-                                "{}: {} and {} both change {f}.",
-                                r.name, list[i].key, list[j].key
-                            ));
-                        }
+        let mut rows: Vec<UatRow> = Vec::new();
+        for r in &self.repos {
+            let list: Vec<&Ticket> = self
+                .tickets
+                .iter()
+                .filter(|t| t.has_landed(&r.name))
+                .collect();
+            for i in 0..list.len() {
+                for j in (i + 1)..list.len() {
+                    let paths = |t: &Ticket| -> Vec<String> {
+                        t.prs
+                            .iter()
+                            .filter(|p| p.repo == r.name)
+                            .flat_map(|p| p.files.iter().map(|f| f.path.clone()))
+                            .collect()
+                    };
+                    let b = paths(list[j]);
+                    for f in paths(list[i]).into_iter().filter(|f| b.contains(f)) {
+                        overlaps.push(format!(
+                            "{}: {} and {} both change {f}.",
+                            r.name, list[i].key, list[j].key
+                        ));
                     }
                 }
-                UatColumn {
-                    repo: r.name.clone(),
-                    host: r.host.to_string(),
-                    items: list
-                        .iter()
-                        .filter_map(|t| {
-                            let l = t.landing(&r.name)?;
-                            Some(UatItem {
-                                key: t.key.clone(),
-                                title: t.title.clone(),
-                                commit: l.commit.clone(),
-                                chip: Some(deploy_chip(&l.deploy)),
-                                jira: jira_badge(t.jira),
-                            })
-                        })
-                        .collect(),
-                }
-            })
-            .collect();
-        OnUatVm { columns, overlaps }
+            }
+        }
+        for t in self
+            .tickets
+            .iter()
+            .filter(|t| self.repos.iter().any(|r| t.has_landed(&r.name)))
+        {
+            let landed: Vec<_> = self
+                .repos
+                .iter()
+                .filter_map(|r| Some((r.name.clone(), t.landing(&r.name)?)))
+                .collect();
+            let mut repos: Vec<RepoName> = landed.iter().map(|(n, _)| n.clone()).collect();
+            repos.sort();
+            rows.push(UatRow {
+                key: t.key.clone(),
+                title: t.title.clone(),
+                repos,
+                jira: jira_badge(t.jira),
+                problem: landed
+                    .iter()
+                    .map(|(_, l)| deploy_chip(&l.deploy))
+                    .find(|c| c.tone != Tone::Ok),
+            });
+        }
+        rows.sort_by(|a, b| a.key.cmp(&b.key));
+        OnUatVm { rows, overlaps }
     }
 
     fn workspace(&self) -> WorkspaceVm {

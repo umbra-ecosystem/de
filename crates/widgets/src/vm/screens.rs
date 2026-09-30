@@ -468,25 +468,20 @@ pub struct ShipVm {
 
 /* ------------------------------ environment ------------------------------ */
 
+/// One ticket on uat: what it is and which repos it landed in (sorted).
 #[derive(Clone, Debug, PartialEq)]
-pub struct UatItem {
+pub struct UatRow {
     pub key: TicketKey,
     pub title: String,
-    pub commit: String,
-    pub chip: Option<DeployChip>,
+    pub repos: Vec<RepoName>,
     pub jira: Badge,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct UatColumn {
-    pub repo: RepoName,
-    pub host: String,
-    pub items: Vec<UatItem>,
+    /// The first deploy that is not healthy, if any; silence means every landing deployed.
+    pub problem: Option<DeployChip>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct OnUatVm {
-    pub columns: Vec<UatColumn>,
+    pub rows: Vec<UatRow>,
     pub overlaps: Vec<String>,
 }
 
