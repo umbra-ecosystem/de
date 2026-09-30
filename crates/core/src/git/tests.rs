@@ -1117,7 +1117,8 @@ fn status_all_survives_a_bad_repo() {
         ["good", "not-git", "missing", "also-good"]
     );
     assert!(results[0].1.is_ok());
-    assert!(results[1].1.is_err());
+    let not_git = format!("{:#}", results[1].1.as_ref().unwrap_err());
+    assert!(not_git.contains("is not a git repository"), "{not_git}");
     assert!(results[2].1.is_err());
     assert_eq!(results[3].1.as_ref().unwrap().untracked, 1);
 }

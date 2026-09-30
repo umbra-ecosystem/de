@@ -10,7 +10,7 @@ use eyre::{Context, eyre};
 use tracing_subscriber::EnvFilter;
 
 use crate::{
-    cli::{Cli, Commands, SelfCommands, TaskCommands, WorkspaceCommands},
+    cli::{Cli, Commands, GitCommands, SelfCommands, TaskCommands, WorkspaceCommands},
     utils::theme::Theme,
     workspace::Workspace,
 };
@@ -34,7 +34,10 @@ fn main() -> eyre::Result<()> {
             workspace,
         } => commands::init(path, name, workspace),
         Commands::Start { workspace, yes } => commands::start(workspace, yes),
-        Commands::Stop { workspace } => commands::stop(workspace),
+        Commands::Stop { workspace, yes } => commands::stop(workspace, yes),
+        Commands::Git { command } => match command {
+            GitCommands::Status { workspace } => commands::git::status(workspace),
+        },
         Commands::Compose {
             project,
             workspace,

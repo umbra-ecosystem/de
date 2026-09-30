@@ -156,8 +156,16 @@ pub struct CommitInfo {
 impl GitRepo {
     /// Open the repository whose working tree is exactly `path`.
     pub fn open(path: &Path) -> eyre::Result<Self> {
-        let repo = Repository::open(path)
-            .wrap_err_with(|| format!("Failed to open git repository at {}", path.display()))?;
+        let repo = Repository::open(path).map_err(|e| {
+            if e.code() == ErrorCode::NotFound {
+                eyre!("{} is not a git repository", path.display())
+            } else {
+                eyre::Report::new(e).wrap_err(format!(
+                    "Failed to open git repository at {}",
+                    path.display()
+                ))
+            }
+        })?;
         if repo.is_bare() {
             return Err(eyre!("{} is a bare repository", path.display()));
         }
