@@ -33,6 +33,29 @@ fn icon_tip(
         .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
 }
 
+/// The icon for a suggestion's primary action.
+fn quick_icon(intent: &Intent) -> IconName {
+    match intent {
+        Intent::Do(c) => match c {
+            Command::Claim(_) | Command::Reclaim(_) => IconName::Plus,
+            Command::StartReview(_) | Command::Activate { .. } | Command::Prepare(_) => {
+                IconName::Play
+            }
+            Command::Sync => IconName::RefreshCw,
+            Command::Rerun { .. } => IconName::Redo2,
+            Command::Park(_) => IconName::Pause,
+            Command::BreakLock(_) => IconName::Delete,
+            Command::MarkReviewed(_)
+            | Command::Approve { .. }
+            | Command::ApproveAll(_)
+            | Command::Transition(_) => IconName::CircleCheck,
+            Command::ComposeDraft(_) => IconName::FileText,
+            _ => IconName::ArrowRight,
+        },
+        _ => IconName::ArrowRight,
+    }
+}
+
 fn icon_button(id: impl Into<ElementId>, icon: IconName, tip: &'static str) -> Button {
     Button::new(id).ghost().small().icon(icon).tooltip(tip)
 }
@@ -137,6 +160,15 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
             .on_click(ui.on_click(s.undo.intent.clone())),
         );
     } else {
+        // The contextual quick action: what clicking the row does, spelled out, on hover.
+        actions = actions.child(
+            Button::new(SharedString::from(format!("go-{}", s.id)))
+                .primary()
+                .small()
+                .icon(quick_icon(&s.primary.intent))
+                .label(s.primary.label.clone())
+                .on_click(ui.on_click(s.primary.intent.clone())),
+        );
         if let Some(alt) = s.alt.clone() {
             actions = actions.child(
                 Button::new(SharedString::from(format!("alt-{}", s.id)))
