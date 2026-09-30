@@ -81,6 +81,29 @@ pub enum Commands {
         force: bool,
     },
 
+    /// Show what to do next: ranked suggestions from the state of your tickets.
+    ///
+    /// Suggestions are computed from the local cache (run `de sync` first, or do the
+    /// suggested sync). Nothing is changed by listing them. `de next do <id>` carries one
+    /// out: local steps after a confirmation, and every external write only after an exact
+    /// preview and an explicit yes (there is no flag that skips it).
+    Next {
+        #[command(subcommand)]
+        command: Option<NextCommands>,
+
+        /// The workspace whose repos to look at. Defaults to the active workspace.
+        #[arg(short, long, global = true)]
+        workspace: Option<Slug>,
+
+        /// List every suggestion, including dismissed and snoozed ones (marked), not only the top few.
+        #[arg(long)]
+        all: bool,
+
+        /// Print the machine-readable form (versioned JSON) instead of text.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Inspect the external tools (`acli`, `bkt`) that provide Jira and Bitbucket data.
     Providers {
         #[command(subcommand)]
@@ -412,6 +435,35 @@ pub enum TicketCommands {
     Check {
         #[command(subcommand)]
         command: CheckCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum NextCommands {
+    /// Hide a suggestion until its facts change materially.
+    Dismiss {
+        /// The suggestion id, as printed by `de next`.
+        id: String,
+
+        /// Why (kept, to tune the rules later).
+        #[arg(long)]
+        reason: Option<String>,
+    },
+
+    /// Hide a suggestion for a while.
+    Snooze {
+        /// The suggestion id, as printed by `de next`.
+        id: String,
+
+        /// How long: a number and a unit, e.g. 30m, 2h, 1d, 1w.
+        #[arg(long = "for", value_name = "DURATION")]
+        duration: String,
+    },
+
+    /// Carry out a suggestion.
+    Do {
+        /// The suggestion id, as printed by `de next`.
+        id: String,
     },
 }
 

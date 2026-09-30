@@ -6,6 +6,7 @@ mod fallthrough;
 pub mod git;
 mod init;
 mod list;
+pub mod next;
 pub(crate) mod run;
 mod scan;
 pub mod self_;

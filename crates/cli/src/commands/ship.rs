@@ -61,7 +61,7 @@ fn require_tracked(state: &Store, key: &TicketKey) -> eyre::Result<tickets::Tick
 
 /// Asks for a yes, defaulting to no. Refuses without a terminal: a confirmation that cannot
 /// be asked is a no.
-fn confirm(prompt: &str) -> eyre::Result<bool> {
+pub(crate) fn confirm(prompt: &str) -> eyre::Result<bool> {
     if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
         bail!("This needs an interactive confirmation and there is no terminal; nothing was sent");
     }

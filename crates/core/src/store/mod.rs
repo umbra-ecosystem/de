@@ -19,7 +19,9 @@ pub mod overlays;
 pub mod pipelines;
 pub mod prs;
 pub mod restore;
+pub mod reviews;
 mod sql;
+pub mod suggestion_responses;
 pub mod sync_state;
 pub mod tickets;
 pub mod time;
@@ -28,6 +30,8 @@ pub mod uat_merges;
 
 #[cfg(test)]
 mod domain_tests;
+#[cfg(test)]
+mod next_tests;
 #[cfg(test)]
 mod provider_tests;
 

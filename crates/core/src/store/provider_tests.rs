@@ -82,7 +82,7 @@ fn state_upgrades_to_uat_merges_keeping_tickets_and_activation() {
     }
 
     let store = Store::open_in(dir.path(), Kind::State).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 6);
+    assert_eq!(store.schema_version().unwrap(), 7);
     let t = tickets::get(&store, &key("PROJ-1")).unwrap().unwrap();
     assert_eq!(t.status, crate::domain::LocalStatus::Active);
     assert_eq!(restore::list(&store, &key("PROJ-1")).unwrap().len(), 1);

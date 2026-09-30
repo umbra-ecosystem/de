@@ -49,7 +49,7 @@ fn numbers(store: &Store) -> Vec<i64> {
 fn migrations_apply_on_a_fresh_database() {
     let s = state();
     let c = cache();
-    assert_eq!(s.schema_version().unwrap(), 6);
+    assert_eq!(s.schema_version().unwrap(), 7);
     assert_eq!(c.schema_version().unwrap(), 3);
 
     let tables = |store: &Store| -> Vec<String> {
@@ -113,7 +113,7 @@ fn upgrading_from_the_previous_schema_keeps_rows() {
     }
 
     let store = Store::open_in(dir.path(), Kind::State).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 6);
+    assert_eq!(store.schema_version().unwrap(), 7);
     let value: String = store
         .conn()
         .query_row("SELECT value FROM app_meta WHERE key = 'probe'", [], |r| {
@@ -157,7 +157,7 @@ fn upgrading_from_schema_2_keeps_tickets_and_adds_the_activation_tables() {
     }
 
     let store = Store::open_in(dir.path(), Kind::State).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 6);
+    assert_eq!(store.schema_version().unwrap(), 7);
 
     // Old rows survive untouched.
     let ticket = tickets::get(&store, &key("A-1")).unwrap().unwrap();
