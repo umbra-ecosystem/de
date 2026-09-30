@@ -599,6 +599,85 @@ fn pushing_records_each_merge_and_finalize_makes_the_ticket_integrated() {
 }
 
 #[test]
+fn a_finalize_that_fails_midway_is_resumed_by_integrating_again_without_a_second_push() {
+    let env = Env::new();
+    env.activate();
+    let prep = env.prepare();
+    assert!(env.push(&prep).all_done());
+    let uats = env.origin_uats();
+    let pushed = env.merges();
+
+    // Make the restore of the baseline repo `web` fail: its previous branch is gone.
+    let web_record = restore::list(&env.fx.store, &env.ticket)
+        .unwrap()
+        .into_iter()
+        .find(|r| r.repo == "web")
+        .unwrap();
+    assert_eq!(web_record.role, restore::RepoRole::Baseline);
+    let previous = web_record.previous_branch.clone().unwrap();
+    env.fx.web.git(&["branch", "-m", &previous, "moved-away"]);
+    // Also hide the remote-tracking branch git could recreate it from.
+    let tracking = format!("refs/remotes/origin/{previous}");
+    let tracking_sha = env.fx.web.git(&["rev-parse", &tracking]);
+    env.fx.web.git(&["update-ref", "-d", &tracking]);
+
+    let first = finalize_integration(
+        &env.fx.store,
+        &env.fx.runner,
+        env.data.path(),
+        &prep,
+        &env.fx.repos(),
+        40,
+    )
+    .unwrap();
+    assert!(!first.deactivation.is_complete());
+    assert_eq!(env.status(), LocalStatus::Active, "stuck Active");
+    assert_eq!(env.merges(), pushed, "the pushes stay recorded");
+    // The ticket repos are restored, so nothing with the ticket role is left to prepare.
+    assert!(
+        restore::list(&env.fx.store, &env.ticket)
+            .unwrap()
+            .iter()
+            .all(|r| r.role == restore::RepoRole::Baseline)
+    );
+
+    // Integrating again with the obstacle still there resumes, reports the problem, and
+    // stays Active.
+    let again = env.prepare();
+    assert!(again.is_resume() && !again.is_ready() && again.is_pushable());
+    let stuck = finalize_integration(
+        &env.fx.store,
+        &env.fx.runner,
+        env.data.path(),
+        &again,
+        &env.fx.repos(),
+        50,
+    )
+    .unwrap();
+    assert!(!stuck.deactivation.is_complete());
+    assert_eq!(env.status(), LocalStatus::Active);
+
+    // Remove the obstacle: the resumed run finishes with Integrated and pushes nothing.
+    env.fx.web.git(&["branch", "-m", "moved-away", &previous]);
+    env.fx.web.git(&["update-ref", &tracking, &tracking_sha]);
+    let again = env.prepare();
+    let done = finalize_integration(
+        &env.fx.store,
+        &env.fx.runner,
+        env.data.path(),
+        &again,
+        &env.fx.repos(),
+        60,
+    )
+    .unwrap();
+    assert!(done.deactivation.is_complete());
+    assert_eq!(env.status(), LocalStatus::Integrated);
+    assert_eq!(env.origin_uats(), uats, "no second push");
+    assert_eq!(env.merges(), pushed);
+    assert!(restore::list_all(&env.fx.store).unwrap().is_empty());
+}
+
+#[test]
 fn finalize_refuses_until_every_repo_is_pushed_and_integrated_has_no_other_door() {
     let env = Env::active();
     let prep = env.prepare();

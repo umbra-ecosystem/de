@@ -18,7 +18,11 @@
 //!    confirms it through the [`Gateway`](crate::gateway::Gateway), which pushes and records
 //!    each merge right after its push ([`execute_push`]).
 //! 3. [`finalize_integration`] runs only once every touched repo is pushed (or was already
-//!    in `uat`), and only it can make the ticket `Integrated`.
+//!    in `uat`), and only it can make the ticket `Integrated`. If it fails partway (a repo
+//!    cannot be restored) the ticket stays `Active` with its pushes recorded; preparing
+//!    again resumes it (pushed repos are `AlreadyPushed`, and when every ticket repo was
+//!    restored already the prep is empty, see `IntegrationPrep::is_resume`) and finalize
+//!    runs again without pushing anything.
 //! 4. [`cancel_integration`] removes the temporary worktrees (also done by the next prepare
 //!    and by finalize).
 //!

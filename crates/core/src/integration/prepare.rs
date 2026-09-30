@@ -117,6 +117,13 @@ impl IntegrationPrep {
                 .any(|r| matches!(r.outcome, RepoOutcome::Ready(_)))
     }
 
+    /// Nothing is left to merge or push: every ticket repo was pushed and restored already
+    /// and only the rest of the finalize (baseline repos, overlays) remains. Finalizing is
+    /// idempotent, so integrating again simply resumes it.
+    pub fn is_resume(&self) -> bool {
+        self.repos.is_empty()
+    }
+
     /// Whether finalize could run once everything ready is pushed.
     pub fn is_pushable(&self) -> bool {
         self.repos.iter().all(|r| r.outcome.is_pushable())
@@ -243,7 +250,11 @@ pub fn prepare_integration(
         .filter(|r| r.role == RepoRole::Ticket)
         .collect();
     if touched.is_empty() {
-        bail!("{ticket} has no repo on its ticket branch; nothing to integrate");
+        // Everything was pushed and recorded, and an earlier finalize restored the ticket
+        // repos before failing on another one: what is left is finalizing, not merging.
+        if uat_details::list_for_ticket(store, ticket)?.is_empty() {
+            bail!("{ticket} has no repo on its ticket branch; nothing to integrate");
+        }
     }
 
     let ctx = Ctx {
