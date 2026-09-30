@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use crate::types::Slug;
+use de_core::domain::{BaselineChoice, LocalStatus, TicketKey};
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -57,6 +58,12 @@ pub enum Commands {
     Git {
         #[command(subcommand)]
         command: GitCommands,
+    },
+
+    /// Track tickets and test one at a time: claim, activate, park, notes and checklist.
+    Ticket {
+        #[command(subcommand)]
+        command: TicketCommands,
     },
 
     /// Run `docker compose` for a project or every project in a workspace.
@@ -231,6 +238,113 @@ pub enum GitCommands {
         #[arg(short, long)]
         workspace: Option<Slug>,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TicketCommands {
+    /// Start tracking a ticket.
+    Claim {
+        /// The ticket key, e.g. PROJ-123.
+        key: TicketKey,
+
+        /// A title to show next to the key.
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Mark the ticket as a hotfix: activating it asks which baseline untouched repos use.
+        #[arg(long)]
+        hotfix: bool,
+    },
+
+    /// List the tracked tickets.
+    List,
+
+    /// Show a ticket: status, repos and branches, checklist, notes and time.
+    Show {
+        key: TicketKey,
+
+        /// The workspace whose repos to look at. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
+
+    /// Choose the branch a ticket uses in a repo, or hide the repo from the ticket.
+    Link {
+        key: TicketKey,
+
+        /// The workspace project (repo) name.
+        repo: String,
+
+        /// The branch to use, overriding discovery. Without it the repo is linked and its
+        /// matching branch is discovered.
+        #[arg(long, conflicts_with = "exclude")]
+        branch: Option<String>,
+
+        /// Hide the repo from the ticket (a stale or duplicate branch).
+        #[arg(long)]
+        exclude: bool,
+
+        /// The workspace the repo belongs to. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
+
+    /// Make a ticket the active one: switch repos to its branches and apply the test overlay.
+    Activate {
+        key: TicketKey,
+
+        /// Where repos the ticket does not touch go: base, production or uat. Only used for
+        /// hotfixes; without it a hotfix asks.
+        #[arg(long)]
+        baseline: Option<BaselineChoice>,
+
+        /// `git fetch` every repo first.
+        #[arg(long)]
+        fetch: bool,
+
+        /// The workspace to activate in. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
+
+    /// Set the active ticket aside, restoring the repos and reverting the overlay.
+    Park {
+        /// The ticket. Defaults to the active one, or the one an interrupted activation
+        /// left work to undo for.
+        key: Option<TicketKey>,
+    },
+
+    /// Deactivate the active ticket, restoring the repos and reverting the overlay.
+    Deactivate {
+        /// The ticket. Defaults to the active one, or the one an interrupted activation
+        /// left work to undo for.
+        key: Option<TicketKey>,
+
+        /// The status to move the ticket to. Defaults to parked.
+        #[arg(long)]
+        status: Option<LocalStatus>,
+    },
+
+    /// Add a note to a ticket.
+    Note { key: TicketKey, text: String },
+
+    /// Manage the test checklist of a ticket.
+    Check {
+        #[command(subcommand)]
+        command: CheckCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CheckCommands {
+    /// Add an item to the end of the checklist.
+    Add { key: TicketKey, text: String },
+
+    /// Tick or untick an item, by the number `list` shows.
+    Toggle { key: TicketKey, number: usize },
+
+    /// Show the checklist.
+    List { key: TicketKey },
 }
 
 #[derive(Debug, Subcommand)]

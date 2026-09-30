@@ -1,11 +1,16 @@
 //! Core of `de`: workspaces, projects, tasks and Docker Compose orchestration.
 
+pub mod activation;
 pub mod config;
 pub mod constants;
 pub mod domain;
 pub mod git;
+pub mod overlay;
 pub mod project;
 pub mod store;
 pub mod types;
 pub mod utils;
 pub mod workspace;
+
+#[cfg(test)]
+mod testsupport;

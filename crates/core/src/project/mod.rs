@@ -104,6 +104,15 @@ impl Project {
         })
     }
 
+    /// A project from an already loaded manifest, for callers that read the manifest themselves.
+    pub fn from_parts(dir: PathBuf, manifest: ProjectManifest) -> Self {
+        Self {
+            manifest_path: dir.join("de.toml"),
+            dir,
+            manifest,
+        }
+    }
+
     pub fn from_dir_recursive(dir: &Path) -> eyre::Result<Option<Self>> {
         let mut current_dir = dir.to_path_buf();
 
@@ -164,6 +173,7 @@ impl Project {
             },
             git: Some(ProjectGitSettings::default()),
             tasks: None,
+            ..Default::default()
         };
 
         Ok(Self {

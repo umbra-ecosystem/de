@@ -11,6 +11,7 @@ mod scan;
 pub mod self_;
 mod start;
 mod stop;
+pub mod ticket;
 mod update;
 pub mod workspace;
 
