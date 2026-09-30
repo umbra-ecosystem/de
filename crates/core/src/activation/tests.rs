@@ -1032,11 +1032,18 @@ fn double_overlay_apply_error_is_typed() {
 /// Every file of a checkout outside `.git` with its bytes, plus what `git status` says.
 fn tree_state(repo: &Repo) -> (Vec<(String, Vec<u8>)>, String) {
     fn walk(dir: &std::path::Path, root: &std::path::Path, out: &mut Vec<(String, Vec<u8>)>) {
-        let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap()).collect();
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap())
+            .collect();
         entries.sort_by_key(|e| e.file_name());
         for e in entries {
             let path = e.path();
-            let rel = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+            let rel = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
             // .git is not the tree; vendor/state is what the fake composer writes.
             if rel == ".git" || rel == "vendor/state" {
                 continue;
@@ -1056,7 +1063,10 @@ fn tree_state(repo: &Repo) -> (Vec<(String, Vec<u8>)>, String) {
     }
     let mut files = Vec::new();
     walk(&repo.dir, &repo.dir, &mut files);
-    (files, repo.git(&["status", "--porcelain=v1", "-z", "--ignored"]))
+    (
+        files,
+        repo.git(&["status", "--porcelain=v1", "-z", "--ignored"]),
+    )
 }
 
 #[test]
@@ -1141,8 +1151,40 @@ fn a_ticket_key_that_prefixes_another_never_picks_the_other_tickets_branch() {
     let report = activate_ticket(&fx, "PROJ-1").unwrap();
 
     // Nothing matches PROJ-1, so every repo is on its baseline, not on PROJ-12's branch.
-    assert!(report.repos.iter().all(|r| matches!(r.action, RepoAction::FallBackToBaseline(_))));
+    assert!(
+        report
+            .repos
+            .iter()
+            .all(|r| matches!(r.action, RepoAction::FallBackToBaseline(_)))
+    );
     assert_eq!(fx.api_client.branch(), "develop");
     deactivate_ticket(&fx, "PROJ-1");
     assert_eq!(fx.snapshot(), before);
+}
+
+#[test]
+fn a_restore_point_that_cannot_be_saved_puts_the_repo_and_its_stash_back() {
+    let fx = Fixture::with_ticket();
+    make_dirty(&fx);
+    let before = tree_state(&fx.web);
+    let branch_before = fx.web.branch();
+    // The database refuses the restore point of `web` (locked, full, ...).
+    fx.store
+        .conn()
+        .execute_batch(
+            "CREATE TRIGGER refuse_web BEFORE INSERT ON activation_repos
+             WHEN NEW.repo = 'web' BEGIN SELECT RAISE(ABORT, 'disk is full'); END;",
+        )
+        .unwrap();
+
+    let err = activate_ticket(&fx, "PROJ-1").unwrap_err();
+    assert!(format!("{err:#}").contains("disk is full"), "{err:#}");
+
+    // web is back on its work-in-progress branch with every file, and nothing is stranded
+    // in a stash nobody knows about.
+    assert_eq!(fx.web.branch(), branch_before);
+    assert_eq!(tree_state(&fx.web), before);
+    assert!(fx.web.stashes().is_empty(), "{:?}", fx.web.stashes());
+    no_records(&fx);
+    assert_eq!(status_of(&fx, "PROJ-1"), LocalStatus::Claimed);
 }
