@@ -15,7 +15,7 @@ mod runner;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-mod testutil;
+pub(crate) mod testutil;
 
 pub use diff::{DiffLine, FileDiff, FileStatus, Hunk, LineKind, RepoDiff};
 pub use keymatch::name_contains_key;

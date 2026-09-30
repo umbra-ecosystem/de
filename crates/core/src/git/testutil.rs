@@ -31,7 +31,7 @@ pub fn git_env(dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().into()
 }
 
-fn configure(dir: &Path) {
+pub(crate) fn configure(dir: &Path) {
     // Explicit so tests do not depend on the machine's git config.
     git(dir, &["config", "user.name", "Test User"]);
     git(dir, &["config", "user.email", "test@example.com"]);
