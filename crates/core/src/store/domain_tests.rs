@@ -49,8 +49,8 @@ fn numbers(store: &Store) -> Vec<i64> {
 fn migrations_apply_on_a_fresh_database() {
     let s = state();
     let c = cache();
-    assert_eq!(s.schema_version().unwrap(), 3);
-    assert_eq!(c.schema_version().unwrap(), 2);
+    assert_eq!(s.schema_version().unwrap(), 4);
+    assert_eq!(c.schema_version().unwrap(), 3);
 
     let tables = |store: &Store| -> Vec<String> {
         let mut stmt = store
@@ -72,10 +72,24 @@ fn migrations_apply_on_a_fresh_database() {
         "audit_log",
         "activation_repos",
         "overlay_backups",
+        "uat_merges",
     ] {
         assert!(state_tables.contains(&t.to_string()), "missing {t}");
     }
-    assert!(tables(&c).contains(&"jira_tickets".to_string()));
+    let cache_tables = tables(&c);
+    for t in [
+        "jira_tickets",
+        "prs",
+        "pr_reviewers",
+        "pr_comments",
+        "pipeline_runs",
+        "pipeline_steps",
+        "jira_comments",
+        "jira_comment_mentions",
+        "sync_state",
+    ] {
+        assert!(cache_tables.contains(&t.to_string()), "missing {t}");
+    }
     // Nothing leaks across the two databases.
     assert!(!tables(&c).contains(&"tickets".to_string()));
 }
@@ -99,7 +113,7 @@ fn upgrading_from_the_previous_schema_keeps_rows() {
     }
 
     let store = Store::open_in(dir.path(), Kind::State).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 3);
+    assert_eq!(store.schema_version().unwrap(), 4);
     let value: String = store
         .conn()
         .query_row("SELECT value FROM app_meta WHERE key = 'probe'", [], |r| {
@@ -143,7 +157,7 @@ fn upgrading_from_schema_2_keeps_tickets_and_adds_the_activation_tables() {
     }
 
     let store = Store::open_in(dir.path(), Kind::State).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 3);
+    assert_eq!(store.schema_version().unwrap(), 4);
 
     // Old rows survive untouched.
     let ticket = tickets::get(&store, &key("A-1")).unwrap().unwrap();

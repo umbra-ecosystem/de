@@ -6,6 +6,10 @@ edition.workspace = true
 repository.workspace = true
 license.workspace = true
 
+[features]
+# Exposes `providers::fake` (in-memory provider fakes) to other crates' tests.
+testing = []
+
 [dependencies]
 config.workspace = true
 directories.workspace = true

@@ -148,16 +148,139 @@ CREATE TABLE overlay_backups (
 CREATE UNIQUE INDEX overlay_backups_one_per_dir ON overlay_backups (repo_dir);
 ";
 
+/// The `uat` merge commits the app pushed, so pipelines can be found by commit. Written by
+/// the integration flow (M5); read by sync to know which commits to look up. Irreplaceable:
+/// the pushed merge commit is not recoverable from any remote system by ticket.
+const STATE_UAT_MERGES: &str = "
+CREATE TABLE uat_merges (
+    id          INTEGER PRIMARY KEY,
+    ticket_key  TEXT NOT NULL REFERENCES tickets (key) ON DELETE CASCADE,
+    -- The workspace project name, as in ticket_repos.repo (not the hosting path).
+    repo        TEXT NOT NULL,
+    branch      TEXT NOT NULL,
+    commit_sha  TEXT NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    UNIQUE (ticket_key, repo, commit_sha)
+) STRICT;
+CREATE INDEX uat_merges_by_repo ON uat_merges (repo, id);
+";
+
+/// Mirror of Bitbucket PRs and pipelines and of Jira comments, plus per-source sync
+/// bookkeeping; all disposable.
+///
+/// CHECK lists mirror `providers::PrState` (a test in `store::tests` keeps them in sync).
+const CACHE_PROVIDERS: &str = "
+CREATE TABLE prs (
+    repo               TEXT NOT NULL,
+    id                 INTEGER NOT NULL,
+    title              TEXT NOT NULL,
+    state              TEXT NOT NULL CHECK (state IN ('open','merged','declined','superseded')),
+    source_branch      TEXT NOT NULL,
+    destination_branch TEXT NOT NULL,
+    author             TEXT NOT NULL,
+    url                TEXT NOT NULL,
+    updated_at         INTEGER NOT NULL,
+    fetched_at         INTEGER NOT NULL,
+    PRIMARY KEY (repo, id)
+) STRICT;
+CREATE INDEX prs_by_state ON prs (repo, state);
+
+CREATE TABLE pr_reviewers (
+    repo              TEXT NOT NULL,
+    pr_id             INTEGER NOT NULL,
+    account           TEXT NOT NULL,
+    approved          INTEGER NOT NULL CHECK (approved IN (0, 1)),
+    changes_requested INTEGER NOT NULL CHECK (changes_requested IN (0, 1)),
+    PRIMARY KEY (repo, pr_id, account),
+    FOREIGN KEY (repo, pr_id) REFERENCES prs (repo, id) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE pr_comments (
+    repo        TEXT NOT NULL,
+    pr_id       INTEGER NOT NULL,
+    id          INTEGER NOT NULL,
+    author      TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    inline_path TEXT,
+    inline_line INTEGER,
+    inline_side TEXT CHECK (inline_side IS NULL OR inline_side IN ('old','new')),
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (repo, pr_id, id),
+    FOREIGN KEY (repo, pr_id) REFERENCES prs (repo, id) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE pipeline_runs (
+    repo         TEXT NOT NULL,
+    id           TEXT NOT NULL,
+    number       INTEGER,
+    state        TEXT NOT NULL,
+    branch       TEXT NOT NULL,
+    commit_sha   TEXT NOT NULL,
+    created_at   INTEGER NOT NULL,
+    completed_at INTEGER,
+    url          TEXT NOT NULL,
+    fetched_at   INTEGER NOT NULL,
+    PRIMARY KEY (repo, id)
+) STRICT;
+CREATE INDEX pipeline_runs_by_commit ON pipeline_runs (repo, commit_sha);
+CREATE INDEX pipeline_runs_by_branch ON pipeline_runs (repo, branch, created_at);
+
+CREATE TABLE pipeline_steps (
+    repo                   TEXT NOT NULL,
+    run_id                 TEXT NOT NULL,
+    position               INTEGER NOT NULL,
+    name                   TEXT NOT NULL,
+    state                  TEXT NOT NULL,
+    deployment_environment TEXT,
+    PRIMARY KEY (repo, run_id, position),
+    FOREIGN KEY (repo, run_id) REFERENCES pipeline_runs (repo, id) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE jira_comments (
+    ticket_key         TEXT NOT NULL,
+    id                 TEXT NOT NULL,
+    author_account_id  TEXT NOT NULL,
+    author_name        TEXT NOT NULL,
+    body_text          TEXT NOT NULL,
+    created_at         INTEGER NOT NULL,
+    fetched_at         INTEGER NOT NULL,
+    PRIMARY KEY (ticket_key, id)
+) STRICT;
+
+CREATE TABLE jira_comment_mentions (
+    ticket_key TEXT NOT NULL,
+    comment_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    PRIMARY KEY (ticket_key, comment_id, account_id),
+    FOREIGN KEY (ticket_key, comment_id) REFERENCES jira_comments (ticket_key, id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX jira_comment_mentions_by_account ON jira_comment_mentions (account_id);
+
+-- One row per sync source (`jira`, `bitbucket:workspace/slug`).
+CREATE TABLE sync_state (
+    source          TEXT PRIMARY KEY NOT NULL,
+    last_ok_at      INTEGER,
+    last_attempt_at INTEGER NOT NULL,
+    last_error      TEXT
+) STRICT;
+";
+
 static STATE: LazyLock<Migrations<'static>> = LazyLock::new(|| {
     Migrations::new(vec![
         M::up(APP_META),
         M::up(STATE_TICKETS),
         M::up(STATE_ACTIVATION),
+        M::up(STATE_UAT_MERGES),
     ])
 });
 
-static CACHE: LazyLock<Migrations<'static>> =
-    LazyLock::new(|| Migrations::new(vec![M::up(APP_META), M::up(CACHE_JIRA)]));
+static CACHE: LazyLock<Migrations<'static>> = LazyLock::new(|| {
+    Migrations::new(vec![
+        M::up(APP_META),
+        M::up(CACHE_JIRA),
+        M::up(CACHE_PROVIDERS),
+    ])
+});
 
 pub(super) fn for_kind(kind: Kind) -> &'static Migrations<'static> {
     match kind {
