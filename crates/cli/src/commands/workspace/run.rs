@@ -1,7 +1,6 @@
-use eyre::{Context, Result, bail, eyre};
-use std::process::Command;
+use eyre::{Context, Result, eyre};
 
-use crate::{types::Slug, workspace::Workspace};
+use crate::{project::shell_command, types::Slug, workspace::Workspace};
 
 pub fn run(workspace_name: Option<Slug>, task_name: Slug, args: Vec<String>) -> Result<()> {
     let workspace = if let Some(workspace_name) = workspace_name {
@@ -24,18 +23,6 @@ pub fn run(workspace_name: Option<Slug>, task_name: Slug, args: Vec<String>) -> 
         )
     })?;
 
-    let mut parts = task_command.split_whitespace();
-    let program = parts.next().ok_or_else(|| eyre!("Empty command"))?;
-    let task_args = parts.collect::<Vec<_>>();
-
-    let mut cmd = Command::new(program);
-    cmd.args(&task_args);
-    cmd.args(&args);
-
-    let status = cmd.status()?;
-    if !status.success() {
-        bail!("Command exited with non-zero status: {}", status);
-    }
-
-    Ok(())
+    let dir = std::env::current_dir().wrap_err("Failed to get current directory")?;
+    crate::commands::run::run_to_completion(shell_command(task_command, &dir, &args))
 }

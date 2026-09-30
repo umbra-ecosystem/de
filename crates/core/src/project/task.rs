@@ -1,9 +1,11 @@
-use eyre::eyre;
-use std::process::Command;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use serde::{Deserialize, Serialize};
 
-use crate::project::Project;
+use crate::project::task_detector::TaskSource;
 
 /// A task defined in `de.toml`, either as a bare command string or as a table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,15 +22,71 @@ impl Task {
             Task::Complex { command } => command,
         }
     }
+}
 
-    pub fn command(&self, project: &Project) -> eyre::Result<Command> {
-        let mut parts = self.command_str().split_whitespace();
-        let program = parts.next().ok_or_else(|| eyre!("Empty command"))?;
-        let args = parts.collect::<Vec<_>>();
+/// Where a resolved task came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TaskOrigin {
+    /// Defined under `[tasks]` in `de.toml`.
+    Configured,
+    /// Found in a project file such as `package.json` or a `Makefile`.
+    Detected(TaskSource),
+}
 
-        let mut cmd = Command::new(program);
-        cmd.current_dir(project.dir());
-        cmd.args(&args);
-        Ok(cmd)
+/// A task ready to be run: the command line and the directory to run it in.
+#[derive(Debug, Clone)]
+pub struct ResolvedTask {
+    pub command: String,
+    pub dir: PathBuf,
+    pub origin: TaskOrigin,
+}
+
+impl ResolvedTask {
+    /// Builds the process for this task, appending `args` to the command line.
+    pub fn to_command(&self, args: &[String]) -> Command {
+        shell_command(&self.command, &self.dir, args)
+    }
+}
+
+/// Builds `sh -c '<command> "$@"' de-task <args...>` in `dir`.
+///
+/// Going through the shell lets task commands use quoting, pipes, `&&` and
+/// environment variables, while `args` reach the command as separate words.
+pub fn shell_command(command: &str, dir: &Path, args: &[String]) -> Command {
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c")
+        .arg(format!("{command} \"$@\""))
+        .arg("de-task")
+        .args(args)
+        .current_dir(dir);
+    cmd
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run(command: &str, args: &[&str]) -> String {
+        let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+        let out = shell_command(command, Path::new("."), &args)
+            .output()
+            .expect("sh should run");
+        assert!(out.status.success());
+        String::from_utf8(out.stdout).unwrap()
+    }
+
+    #[test]
+    fn passes_args_as_separate_words() {
+        assert_eq!(run("printf '[%s]'", &["a b", "c"]), "[a b][c]");
+    }
+
+    #[test]
+    fn keeps_quotes_in_the_command() {
+        assert_eq!(run("printf '%s' 'x  y'", &[]), "x  y");
+    }
+
+    #[test]
+    fn supports_shell_operators() {
+        assert_eq!(run("echo one && echo two", &[]), "one\ntwo\n");
     }
 }

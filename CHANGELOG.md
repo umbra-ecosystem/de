@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Compose is now invoked as `docker compose` everywhere (previously `docker-compose` for start/stop).
 - Tasks: removed service tasks (`{ service, command }`) and `de task add --service`.
 - Release targets are macOS only.
+- Tasks now run through the shell (`sh -c '<command> "$@"'`): quoted arguments are preserved and `&&`, pipes and environment variables work in task commands. Configured, detected and workspace tasks all use the same path.
+- A failing task now makes `de` exit with the task's own exit code instead of printing `Error: Task ... failed` and exiting 1.
 
 ### Removed
 

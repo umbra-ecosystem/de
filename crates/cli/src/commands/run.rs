@@ -1,7 +1,12 @@
 use eyre::{Context, eyre};
 use std::process::Command;
 
-use crate::{project::Project, types::Slug, utils::ui::UserInterface, workspace::Workspace};
+use crate::{
+    project::{Project, TaskOrigin},
+    types::Slug,
+    utils::ui::UserInterface,
+    workspace::Workspace,
+};
 
 pub fn run(
     task_name: Slug,
@@ -126,80 +131,37 @@ pub fn run(
 pub fn run_project_task(
     project: &Project,
     task_name: &Slug,
-    args: &Vec<String>,
+    args: &[String],
 ) -> eyre::Result<bool> {
-    // First, try to find the task in configured tasks
-    if let Some(task) = project
-        .manifest()
-        .tasks
-        .as_ref()
-        .and_then(|tasks| tasks.get(task_name))
-    {
-        let mut command = task
-            .command(project)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to build command for task")?;
+    let Some(task) = project
+        .resolve_task(task_name.as_str())
+        .wrap_err("Failed to resolve task")?
+    else {
+        return Ok(false);
+    };
 
-        if !args.is_empty() {
-            command.args(args);
-        }
-
-        let status = command
-            .status()
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to execute task command")?;
-
-        if !status.success() {
-            return Err(eyre!("Task '{}' failed with status: {}", task_name, status));
-        }
-
-        return Ok(true);
-    }
-
-    // If not found in configured tasks, try detected tasks
-    let detected_tasks = project
-        .detect_tasks()
-        .map_err(|e| eyre!(e))
-        .wrap_err("Failed to detect tasks")?;
-
-    if let Some(detected_task) = detected_tasks.get(task_name.as_str()) {
+    if let TaskOrigin::Detected(source) = &task.origin {
         println!(
             "Running detected task '{}' from {}",
             task_name,
-            detected_task.source.display_name()
+            source.display_name()
         );
-
-        // Parse the command to extract program and arguments
-        let mut parts = detected_task.command.split_whitespace();
-        let program = parts
-            .next()
-            .ok_or_else(|| eyre!("Empty command for detected task"))?;
-        let task_args: Vec<&str> = parts.collect();
-
-        let mut command = Command::new(program);
-        command.current_dir(project.dir());
-        command.args(&task_args);
-
-        // Add any additional arguments passed by the user
-        if !args.is_empty() {
-            command.args(args);
-        }
-
-        let status = command
-            .status()
-            .map_err(|e| eyre!(e))
-            .wrap_err_with(|| format!("Failed to execute detected task '{}'", task_name))?;
-
-        if !status.success() {
-            return Err(eyre!(
-                "Detected task '{}' failed with status: {}",
-                task_name,
-                status
-            ));
-        }
-
-        return Ok(true);
     }
 
-    Ok(false)
+    run_to_completion(task.to_command(args))?;
+    Ok(true)
+}
+
+/// Runs `command` attached to the terminal and, as a proxy, exits with its exit code on failure.
+pub fn run_to_completion(mut command: Command) -> eyre::Result<()> {
+    let status = command
+        .status()
+        .map_err(|e| eyre!(e))
+        .wrap_err("Failed to execute task command")?;
+
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
+    }
+
+    Ok(())
 }

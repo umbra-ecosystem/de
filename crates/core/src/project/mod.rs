@@ -1,7 +1,7 @@
 pub mod config;
 mod task;
 pub mod task_detector;
-pub use task::Task;
+pub use task::{ResolvedTask, Task, TaskOrigin, shell_command};
 pub use task_detector::{DetectedTask, TaskDetectorRegistry};
 
 use ::config::FileFormat;
@@ -231,6 +231,29 @@ impl Project {
 
     pub fn manifest_mut(&mut self) -> &mut ProjectManifest {
         &mut self.manifest
+    }
+
+    /// Finds the task called `name`: `de.toml` first, then tasks detected from project files.
+    pub fn resolve_task(&self, name: &str) -> eyre::Result<Option<ResolvedTask>> {
+        if let Some(task) = self
+            .manifest
+            .tasks
+            .as_ref()
+            .and_then(|tasks| tasks.iter().find(|(key, _)| key.as_str() == name))
+            .map(|(_, task)| task)
+        {
+            return Ok(Some(ResolvedTask {
+                command: task.command_str().to_string(),
+                dir: self.dir.clone(),
+                origin: TaskOrigin::Configured,
+            }));
+        }
+
+        Ok(self.detect_tasks()?.remove(name).map(|detected| ResolvedTask {
+            command: detected.command,
+            dir: self.dir.clone(),
+            origin: TaskOrigin::Detected(detected.source),
+        }))
     }
 
     /// Detect tasks from project configuration files

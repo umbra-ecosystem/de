@@ -5,7 +5,7 @@ mod exec_all;
 mod fallthrough;
 mod init;
 mod list;
-mod run;
+pub(crate) mod run;
 mod scan;
 pub mod self_;
 mod start;
