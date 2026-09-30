@@ -386,7 +386,32 @@ pub fn settings(ui: &Ui, inputs: &Inputs, v: &SettingsVm) -> Div {
                                 .child(r.key.label()),
                         )
                         .child(div().flex_1().min_w_0().child(inputs.flat(&Field::Mapping(r.key))))
-                })),
+                        // Something unsaved is an exception, so only then is the row tinted.
+                        .when(v.edited.contains(&r.key), |d| d.bg(pal.accent.opacity(0.12)))
+                }))
+                .child({
+                    let none = v.edited.is_empty();
+                    let nothing = || Some("No unsaved changes.".to_string());
+                    row(pal)
+                        .h(px(SETTING_ROW_H))
+                        .justify_end()
+                        // The way out on the left, the way forward (primary) on the right.
+                        .child(button_ghost(
+                            ui,
+                            &Btn::new("Reset to defaults…", Intent::Do(Command::ResetMapping)),
+                        ))
+                        .child(button(
+                            ui,
+                            &Btn::new("Discard", Intent::DiscardMapping)
+                                .disabled(if none { nothing() } else { None }),
+                        ))
+                        .child(button(
+                            ui,
+                            &Btn::new("Save", Intent::SaveMapping)
+                                .primary()
+                                .disabled(if none { nothing() } else { None }),
+                        ))
+                }),
         ))
         .child(band(
             pal,

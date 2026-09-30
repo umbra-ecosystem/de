@@ -53,24 +53,37 @@ impl CoreStore {
         Outcome::ok()
     }
 
-    /// Write one mapping setting to `config.toml`, then re-read the tickets so renamed statuses show right away.
-    fn save_mapping(&mut self, key: MappingKey, text: &str) -> Outcome {
-        match mapping::save(key, text) {
+    /// Write mapping settings to `config.toml` (or clear them all), then re-read the tickets so renamed statuses
+    /// show right away. `None` when `command` is not a mapping command.
+    fn mapping_command(&mut self, command: &Command) -> Option<Outcome> {
+        let (saved, done) = match command {
+            Command::SaveMapping { changes } => (
+                mapping::save_all(changes),
+                format!(
+                    "Saved {} setting{}. {}",
+                    changes.len(),
+                    if changes.len() == 1 { "" } else { "s" },
+                    mapping::effect(changes.iter().map(|(k, _)| *k))
+                ),
+            ),
+            Command::ResetMapping => (
+                mapping::reset(),
+                "Jira mapping reset to defaults. Status names apply now; the review query from the next sync."
+                    .to_string(),
+            ),
+            _ => return None,
+        };
+        Some(match saved {
             Ok(_) => {
                 if let Ok(fresh) = load_cached() {
                     self.sim.replace_tickets(fresh);
                 }
-                Outcome::ok().with_toast(
-                    format!("Saved {}. {}", key.label().to_lowercase(), mapping::effect(key)),
-                    ToastKind::Ok,
-                    None,
-                )
+                Outcome::ok().with_toast(done, ToastKind::Ok, None)
             }
             Err(e) => Outcome::fail(format!(
-                "Could not save {} to config.toml: {e:#}. Check that the file is writable.",
-                key.label().to_lowercase()
+                "Could not save to config.toml: {e:#}. Check that the file is writable, then try again."
             )),
-        }
+        })
     }
 
     /// Apply a finished sync, if there is one.
@@ -204,13 +217,18 @@ impl Store for CoreStore {
     }
 
     fn dispatch(&mut self, command: LocalCommand) -> Outcome {
+        if let Some(outcome) = self.mapping_command(command.command()) {
+            return outcome;
+        }
         match command.command() {
             Command::Sync => self.begin_sync(),
-            Command::SetMapping { key, text } => self.save_mapping(*key, text),
             _ => self.sim.dispatch(command),
         }
     }
     fn execute(&mut self, confirmed: Confirmed) -> Outcome {
+        if let Some(outcome) = self.mapping_command(confirmed.command()) {
+            return outcome;
+        }
         self.sim.execute(confirmed)
     }
     fn tick(&mut self, millis: i64) -> Vec<(String, ToastKind)> {

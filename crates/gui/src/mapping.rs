@@ -59,17 +59,38 @@ pub fn set(config: &mut Config, key: MappingKey, text: &str) {
     config.jira = (jira != JiraConfig::default()).then_some(jira);
 }
 
-/// Saves one setting to the config file, returning the config as saved.
-pub fn save(key: MappingKey, text: &str) -> eyre::Result<Config> {
-    Config::mutate_persisted(|config| set(config, key, text))
+/// Saves these settings to the config file in one write, returning the config as saved.
+pub fn save_all(changes: &[(MappingKey, String)]) -> eyre::Result<Config> {
+    Config::mutate_persisted(|config| {
+        for (key, text) in changes {
+            set(config, *key, text);
+        }
+    })
 }
 
-/// What a change takes effect on, for the message after saving.
-pub fn effect(key: MappingKey) -> &'static str {
-    match key {
-        MappingKey::ReviewStatus | MappingKey::ReviewJql => "Used from the next sync.",
-        MappingKey::AccountId => "Used from the next sync.",
-        _ => "Applied to the ticket list now.",
+/// Clears every mapping setting, returning the config as saved.
+pub fn reset() -> eyre::Result<Config> {
+    Config::mutate_persisted(|config| {
+        for key in MappingKey::LIST {
+            set(config, key, "");
+        }
+    })
+}
+
+/// What saving these takes effect on, for the message after saving.
+pub fn effect(keys: impl IntoIterator<Item = MappingKey>) -> &'static str {
+    let mut later = false;
+    let mut now = false;
+    for key in keys {
+        match key {
+            MappingKey::ReviewStatus | MappingKey::ReviewJql | MappingKey::AccountId => later = true,
+            _ => now = true,
+        }
+    }
+    match (now, later) {
+        (_, false) => "Applied to the ticket list now.",
+        (false, true) => "Used from the next sync.",
+        (true, true) => "Status names apply now; the review query, review status and account id from the next sync.",
     }
 }
 
@@ -105,6 +126,14 @@ mod tests {
         assert!(c.jira.as_ref().unwrap().statuses.is_none());
         set(&mut c, MappingKey::AccountId, "  ");
         assert!(c.jira.is_none(), "an empty [jira] is not written");
+    }
+
+    #[test]
+    fn effect_says_when_a_change_applies() {
+        use MappingKey::*;
+        assert_eq!(effect([UatStatus]), "Applied to the ticket list now.");
+        assert_eq!(effect([ReviewJql]), "Used from the next sync.");
+        assert!(effect([UatStatus, AccountId]).starts_with("Status names apply now"));
     }
 
     #[test]

@@ -46,7 +46,7 @@ Quote status names inside JQL (`\"In Review\"` in a double-quoted TOML string, o
 
 ### Status names
 
-You can edit all of these in the app under **Settings → Jira mapping**: click a field, type, and press Enter or click away to save it to `config.toml`. An empty field uses the default (shown greyed out). Lists (done and signed-off statuses) are comma-separated. Status names apply to the ticket list straight away; the review status, review query and account id are used from the next sync.
+You can edit all of these in the app under **Settings → Jira mapping**: click a field and type. Edited fields are marked "edited" and nothing is written until you press **Save** (or Enter). **Discard** puts the fields back to what is saved, and **Reset to defaults** clears every setting after asking. An empty field uses the default (shown greyed out). Lists (done and signed-off statuses) are comma-separated. Status names apply to the ticket list straight away; the review status, review query and account id are used from the next sync.
 
 Or edit the file by hand. Map your workflow to the names `de` uses. Matching is case-insensitive. Anything not listed still shows, with Jira's own wording.
 

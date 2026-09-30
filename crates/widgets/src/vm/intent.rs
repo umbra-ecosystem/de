@@ -181,11 +181,12 @@ pub enum Command {
         ready: bool,
     },
     SetWaitMinutes(u32),
-    /// Save one Jira mapping setting; empty text clears it back to its default.
-    SetMapping {
-        key: MappingKey,
-        text: String,
+    /// Save these Jira mapping settings together; empty text clears a setting back to its default.
+    SaveMapping {
+        changes: Vec<(MappingKey, String)>,
     },
+    /// Clear every Jira mapping setting back to its default. Asks first.
+    ResetMapping,
     StartWorkspace,
     StopWorkspace,
     ResetDemo,
@@ -239,6 +240,10 @@ pub enum Intent {
     CloseTab(TicketKey),
     ForceCloseTab(TicketKey),
     Diagnose,
+    /// Save every edited Jira mapping field in one go.
+    SaveMapping,
+    /// Put the Jira mapping fields back to what is stored.
+    DiscardMapping,
     /// Show this sync log (again: read it again, it may still be growing).
     SelectLog(String),
     PinTab(TicketKey),
@@ -414,7 +419,8 @@ mod tests {
             | Command::MarkSeen(_)
             | Command::SetProvider { .. }
             | Command::SetWaitMinutes(_)
-            | Command::SetMapping { .. }
+            | Command::SaveMapping { .. }
+            | Command::ResetMapping
             | Command::StartWorkspace
             | Command::StopWorkspace
             | Command::ResetDemo
@@ -468,10 +474,10 @@ mod tests {
                 also_return: false,
             },
             Command::Sync,
-            Command::SetMapping {
-                key: MappingKey::ReviewStatus,
-                text: String::new(),
+            Command::SaveMapping {
+                changes: vec![(MappingKey::ReviewStatus, String::new())],
             },
+            Command::ResetMapping,
             Command::Claim(key.clone()),
             Command::Park(key.clone()),
             Command::BreakLock("web".into()),

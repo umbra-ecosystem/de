@@ -282,8 +282,6 @@ impl AppView {
                         this.on_text(field.clone(), text, cx);
                     }
                     InputEvent::PressEnter { .. } => this.on_enter(&field, cx),
-                    // Leaving a settings field saves it.
-                    InputEvent::Blur => this.on_enter(&field, cx),
                     _ => {}
                 },
             ));

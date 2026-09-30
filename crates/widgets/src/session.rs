@@ -70,6 +70,9 @@ pub struct Session {
     seen_snap: BTreeMap<TicketKey, u32>,
     /// The sync log being read: its id and lines, loaded once when selected.
     log_view: Option<(String, Rc<Vec<String>>)>,
+    /// The mapping fields have been filled from the store. Edits then stay until saved or discarded, also when
+    /// the user leaves the page and comes back.
+    mapping_seeded: bool,
 }
 
 impl Session {
@@ -98,6 +101,7 @@ impl Session {
             texts: BTreeMap::new(),
             seen_snap: BTreeMap::new(),
             log_view: None,
+            mapping_seeded: false,
         }
     }
 
@@ -175,6 +179,17 @@ impl Session {
             }
             Intent::Diagnose => self.sheet = Some(Sheet::Diagnose),
             Intent::SelectLog(id) => self.select_log(id),
+            Intent::SaveMapping => {
+                let changes = self.mapping_edits();
+                if !changes.is_empty() {
+                    self.run(Command::SaveMapping { changes });
+                    // Saved: show the stored form. A failed save leaves the edits where they are.
+                    if self.mapping_edits().is_empty() {
+                        self.seed_mapping();
+                    }
+                }
+            }
+            Intent::DiscardMapping => self.seed_mapping(),
             Intent::PinTab(key) => {
                 if let Some(t) = self.tabs.iter_mut().find(|t| t.key == key) {
                     t.pinned = true;
@@ -287,23 +302,7 @@ impl Session {
     fn submit(&mut self, field: Field) {
         let text = self.text(&field);
         match field {
-            Field::Mapping(key) => {
-                let mut text = text.trim().to_string();
-                // Typing the default back means "not set".
-                if key.literal_default() == Some(text.as_str()) {
-                    text.clear();
-                }
-                let stored = self
-                    .store
-                    .settings()
-                    .mapping
-                    .into_iter()
-                    .find(|r| r.key == key)
-                    .map(|r| r.value);
-                if stored.as_deref() != Some(text.as_str()) {
-                    self.run(Command::SetMapping { key, text });
-                }
-            }
+            Field::Mapping(_) => self.handle(Intent::SaveMapping),
             Field::Checklist(key) => {
                 if !text.trim().is_empty() {
                     self.local(Command::AddChecklist {
@@ -347,6 +346,37 @@ impl Session {
         }
     }
 
+    /// Fill the mapping fields from the store: the stored value, or the default when that is a plain value, so an
+    /// unset field reads like a set one.
+    fn seed_mapping(&mut self) {
+        for row in self.store.settings().mapping {
+            let text = if row.value.is_empty() {
+                row.key.literal_default().unwrap_or_default().to_string()
+            } else {
+                row.value
+            };
+            self.set_text(Field::Mapping(row.key), text);
+        }
+        self.mapping_seeded = true;
+    }
+
+    /// The mapping fields whose text is not what is stored, with the value to save. Typing the default back
+    /// means "not set".
+    fn mapping_edits(&self) -> Vec<(MappingKey, String)> {
+        self.store
+            .settings()
+            .mapping
+            .into_iter()
+            .filter_map(|row| {
+                let mut text = self.text(&Field::Mapping(row.key)).trim().to_string();
+                if row.key.literal_default() == Some(text.as_str()) {
+                    text.clear();
+                }
+                (text != row.value).then_some((row.key, text))
+            })
+            .collect()
+    }
+
     fn select_log(&mut self, id: String) {
         let text = self.store.log_text(&id);
         let lines: Vec<String> = text.lines().map(str::to_string).collect();
@@ -354,17 +384,8 @@ impl Session {
     }
 
     fn go(&mut self, route: Route) {
-        if route == Route::Settings {
-            // The fields start from what is stored, or from the default when that is a plain value, so an unset
-            // field reads like a set one.
-            for row in self.store.settings().mapping {
-                let text = if row.value.is_empty() {
-                    row.key.literal_default().unwrap_or_default().to_string()
-                } else {
-                    row.value
-                };
-                self.set_text(Field::Mapping(row.key), text);
-            }
+        if route == Route::Settings && !self.mapping_seeded {
+            self.seed_mapping();
         }
         if route == Route::Logs
             && self.log_view.is_none()
@@ -477,6 +498,9 @@ impl Session {
     }
 
     fn apply(&mut self, cmd: &Command, out: Outcome) {
+        if matches!(cmd, Command::ResetMapping) && out.is_done() {
+            self.seed_mapping();
+        }
         match out {
             Outcome::NeedsBaseline => {
                 if let Command::Activate { key, .. } = cmd {
@@ -815,6 +839,7 @@ impl Session {
             }
             Route::Settings => {
                 let mut v = self.store.settings();
+                v.edited = self.mapping_edits().into_iter().map(|(k, _)| k).collect();
                 v.appearance = ThemeChoice::LIST
                     .iter()
                     .map(|t| {
@@ -1738,6 +1763,62 @@ mod tests {
         s.handle(Intent::SetText(f.clone(), "In Review".into()));
         s.handle(Intent::Submit(f));
         assert_eq!(mapping_value(&s, MappingKey::ReviewStatus), "");
+    }
+
+    #[test]
+    fn edits_are_saved_together_marked_until_then_and_kept_when_leaving_the_page() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Settings));
+        let edited = |s: &Session| {
+            let ScreenVm::Settings(v) = s.view().screen else {
+                panic!()
+            };
+            v.edited
+        };
+        assert!(edited(&s).is_empty());
+
+        s.handle(Intent::SetText(Field::Mapping(MappingKey::UatStatus), "Acceptance".into()));
+        s.handle(Intent::SetText(Field::Mapping(MappingKey::AccountId), "acct-7".into()));
+        assert_eq!(edited(&s), [MappingKey::UatStatus, MappingKey::AccountId]);
+        assert_eq!(mapping_value(&s, MappingKey::UatStatus), "", "nothing is saved while typing");
+
+        // Leaving the page and coming back keeps the edits.
+        s.handle(Intent::Go(Route::Next));
+        s.handle(Intent::Go(Route::Settings));
+        assert_eq!(edited(&s).len(), 2);
+
+        let toasts = s.view().toasts.len();
+        s.handle(Intent::SaveMapping);
+        assert_eq!(mapping_value(&s, MappingKey::UatStatus), "Acceptance");
+        assert_eq!(mapping_value(&s, MappingKey::AccountId), "acct-7");
+        assert!(edited(&s).is_empty());
+        assert_eq!(s.view().toasts.len(), toasts + 1, "one toast for the whole save");
+    }
+
+    #[test]
+    fn discard_puts_the_fields_back_to_what_is_stored() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Settings));
+        let f = Field::Mapping(MappingKey::AccountId);
+        s.handle(Intent::SetText(f.clone(), "typo".into()));
+        s.handle(Intent::DiscardMapping);
+        assert_eq!(s.text(&f), "acct-0001");
+        assert_eq!(mapping_value(&s, MappingKey::AccountId), "acct-0001");
+    }
+
+    #[test]
+    fn reset_asks_first_then_clears_everything_and_the_fields() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Settings));
+        s.handle(Intent::Do(Command::ResetMapping));
+        assert!(s.has_sheet(), "a reset is confirmed first");
+        assert_eq!(mapping_value(&s, MappingKey::AccountId), "acct-0001");
+
+        s.handle(Intent::ConfirmSheet);
+        assert_eq!(mapping_value(&s, MappingKey::AccountId), "");
+        assert_eq!(mapping_value(&s, MappingKey::ReviewJql), "");
+        assert_eq!(s.text(&Field::Mapping(MappingKey::AccountId)), "");
+        assert_eq!(s.text(&Field::Mapping(MappingKey::ReviewStatus)), "In Review");
     }
 
     #[test]

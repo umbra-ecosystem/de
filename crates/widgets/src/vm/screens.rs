@@ -599,6 +599,8 @@ pub struct SettingsVm {
     pub providers: Vec<ProviderVm>,
     pub wait_options: Vec<(String, bool, Btn)>,
     pub mapping: Vec<MappingRow>,
+    /// The mapping fields whose text differs from what is stored; filled in by the session, which owns the text.
+    pub edited: Vec<MappingKey>,
     pub repos: Vec<[String; 4]>,
     pub data: Vec<(String, String)>,
     pub reset: Btn,

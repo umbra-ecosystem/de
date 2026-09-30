@@ -813,6 +813,14 @@ impl Sim {
                     .collect();
                 Some(p)
             }
+            Command::ResetMapping => Some(self.pv(
+                c,
+                "Reset the Jira mapping",
+                None,
+                Risk::Low,
+                "Local only. Every status name, the review query and the account id go back to their defaults.",
+                "Reset",
+            )),
             Command::Park(key) => {
                 let t = self.tk(key)?;
                 let mut p = self.pv(
@@ -1335,6 +1343,7 @@ impl Store for Sim {
                     )
                 })
                 .collect(),
+            edited: Vec::new(),
             mapping: MappingKey::LIST
                 .iter()
                 .map(|k| MappingRow {
@@ -1639,17 +1648,27 @@ impl Sim {
                 self.wait_min = *m;
                 Outcome::ok()
             }
-            Command::SetMapping { key, text } => {
-                if text.trim().is_empty() {
-                    self.mapping.remove(key);
-                } else {
-                    self.mapping.insert(*key, text.trim().to_string());
+            Command::SaveMapping { changes } => {
+                for (key, text) in changes {
+                    if text.trim().is_empty() {
+                        self.mapping.remove(key);
+                    } else {
+                        self.mapping.insert(*key, text.trim().to_string());
+                    }
                 }
                 Outcome::ok().with_toast(
-                    format!("Saved {}", key.label().to_lowercase()),
+                    format!(
+                        "Saved {} setting{}",
+                        changes.len(),
+                        if changes.len() == 1 { "" } else { "s" }
+                    ),
                     ToastKind::Ok,
                     None,
                 )
+            }
+            Command::ResetMapping => {
+                self.mapping.clear();
+                Outcome::ok().with_toast("Jira mapping reset to defaults", ToastKind::Ok, None)
             }
             Command::StartWorkspace => {
                 self.ws.up = true;
