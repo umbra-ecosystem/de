@@ -376,6 +376,11 @@ impl Confirmed {
         &self.draft_id
     }
 
+    /// The facts given to `Gateway::draft_because`.
+    pub fn facts_json(&self) -> Value {
+        self.facts.clone()
+    }
+
     pub(super) fn facts_with_id(&self) -> Value {
         json!({ "draft": self.draft_id, "payload_hash": self.payload_hash, "facts": self.facts })
     }
