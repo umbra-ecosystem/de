@@ -18,7 +18,10 @@ pub fn compose(
         let workspace = get_workspace_for_cli(Some(workspace_name))?;
 
         for (name, project) in ordered_projects(&workspace, Order::Startup)? {
-            ui.info_item(&format!("Project: {}", ui.theme.highlight(name.as_str())))?;
+            ui.info_item(&format!(
+                "Project: {}",
+                ui.theme.highlight(name.as_str())
+            ))?;
 
             if !project.compose(&args)? {
                 ui.warning_item("No docker compose file found", None)?;
