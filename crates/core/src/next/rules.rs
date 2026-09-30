@@ -20,6 +20,9 @@ use crate::{domain::LocalStatus, gateway::Action, git::short_sha, integration::D
 pub const SYNC_STALE_SECS: i64 = 300;
 /// After a sync attempt (successful or not) another is not suggested for this long.
 pub const SYNC_RETRY_SECS: i64 = 60;
+/// Back-off after an attempt that ended in an error or only partly succeeded: a source that
+/// keeps failing is not re-suggested every minute.
+pub const SYNC_FAILURE_RETRY_SECS: i64 = 15 * 60;
 /// An `Active` ticket untouched for this long (five days) is stale.
 pub const STALE_ACTIVE_SECS: i64 = 5 * 86_400;
 /// A `Parked` ticket untouched for this long (two weeks) is stale.
@@ -136,7 +139,12 @@ pub fn sync_stale(s: &Snapshot, now: i64, out: &mut Vec<Suggestion>) {
             None => true,
             Some(st) => {
                 let fresh = st.last_ok_at.is_some_and(|ok| now - ok < SYNC_STALE_SECS);
-                let tried_lately = now - st.last_attempt_at < SYNC_RETRY_SECS;
+                let wait = if st.last_error.is_some() {
+                    SYNC_FAILURE_RETRY_SECS
+                } else {
+                    SYNC_RETRY_SECS
+                };
+                let tried_lately = now - st.last_attempt_at < wait;
                 !fresh && !tried_lately
             }
         };

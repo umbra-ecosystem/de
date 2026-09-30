@@ -118,7 +118,38 @@ fn sync_is_suggested_for_missing_or_old_sources_only() {
         last_error: Some("offline".into()),
     };
     assert!(only(&s, RuleId::SyncStale).is_empty());
+    // A failing source backs off for 15 minutes, not one.
     s.sync.states[0].last_attempt_at = NOW - 61;
+    assert!(only(&s, RuleId::SyncStale).is_empty());
+    s.sync.states[0].last_attempt_at = NOW - 899;
+    assert!(only(&s, RuleId::SyncStale).is_empty());
+    s.sync.states[0].last_attempt_at = NOW - 901;
+    assert_eq!(only(&s, RuleId::SyncStale).len(), 1);
+}
+
+#[test]
+fn a_persistently_partial_source_backs_off_but_a_merely_stale_one_does_not() {
+    let mut s = snap(vec![]);
+    s.sync.expected = vec!["jira".into()];
+    // Partial: it has synced before (old data) but the last attempt ended in an error.
+    let partial = |attempt_age: i64| SourceState {
+        source: "jira".into(),
+        last_ok_at: Some(NOW - 5000),
+        last_attempt_at: NOW - attempt_age,
+        last_error: Some("2 tickets failed".into()),
+    };
+    s.sync.states = vec![partial(120)];
+    assert!(only(&s, RuleId::SyncStale).is_empty());
+    s.sync.states = vec![partial(16 * 60)];
+    assert_eq!(only(&s, RuleId::SyncStale).len(), 1);
+
+    // Stale but the last attempt succeeded (no error): back to the one-minute retry.
+    s.sync.states = vec![SourceState {
+        source: "jira".into(),
+        last_ok_at: Some(NOW - 5000),
+        last_attempt_at: NOW - 120,
+        last_error: None,
+    }];
     assert_eq!(only(&s, RuleId::SyncStale).len(), 1);
 }
 
