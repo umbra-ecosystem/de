@@ -195,12 +195,6 @@ pub fn ticket_row(ui: &Ui, r: &TicketRowVm, show_local: bool) -> Stateful<Div> {
         )
 }
 
-/// What the list shows, flattened so every item has the same height.
-enum Item {
-    Heading(String),
-    Ticket(TicketRowVm),
-}
-
 fn filter_groups(vm: &TicketListVm) -> Vec<FilterGroup> {
     let on = |f: &TicketFilter| vm.filters.is_on(f);
     let mut groups = Vec::new();
@@ -267,16 +261,10 @@ fn filter_groups(vm: &TicketListVm) -> Vec<FilterGroup> {
 pub fn tickets(ui: &Ui, inputs: &Inputs, vm: &TicketListVm) -> AnyElement {
     let pal = &ui.pal;
     let show_local = vm.show_local;
-    let items: Vec<Item> = vm
+    let items: Vec<TicketRowVm> = vm
         .sections
         .iter()
-        .flat_map(|s| {
-            s.heading
-                .iter()
-                .map(|h| Item::Heading(h.clone()))
-                .chain(s.rows.iter().cloned().map(Item::Ticket))
-                .collect::<Vec<_>>()
-        })
+        .flat_map(|s| s.rows.iter().cloned())
         .collect();
     let strip = div()
         .flex()
@@ -323,6 +311,43 @@ pub fn tickets(ui: &Ui, inputs: &Inputs, vm: &TicketListVm) -> AnyElement {
             .child(empty_state(pal, text))
             .when_some(link, |d, a| d.child(button_ghost(ui, &a)))
             .into_any_element()
+    } else if vm.sections.iter().any(|s| s.heading.is_some()) {
+        // A list with group headings (Returned) is short by nature, so it is a plain scrolling column: a heading
+        // can then be a slim label instead of a full-height row, which a uniform list would force.
+        div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h_0()
+            .child(header(ui, vm, show_local))
+            .child(
+                div()
+                    .id("ticket-sections")
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .children(vm.sections.iter().map(|sec| {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .children(sec.heading.iter().map(|h| {
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .h_8()
+                                    .px_4()
+                                    .text_xs()
+                                    .text_color(pal.muted)
+                                    .border_b_1()
+                                    .border_color(pal.border.opacity(0.5))
+                                    .child(h.clone())
+                            }))
+                            .children(sec.rows.iter().map(|r| ticket_row(ui, r, show_local)))
+                    })),
+            )
+            .into_any_element()
     } else {
         let items = Rc::new(items);
         let list_ui = ui.clone();
@@ -335,19 +360,7 @@ pub fn tickets(ui: &Ui, inputs: &Inputs, vm: &TicketListVm) -> AnyElement {
             .child(
                 uniform_list("ticket-list", items.len(), move |range, _, _| {
                     range
-                        .map(|i| match &items[i] {
-                            Item::Heading(h) => div()
-                                .flex()
-                                .items_end()
-                                .h(px(ROW_H))
-                                .px_4()
-                                .pb_1()
-                                .child(h.clone())
-                                .into_any_element(),
-                            Item::Ticket(r) => {
-                                ticket_row(&list_ui, r, show_local).into_any_element()
-                            }
-                        })
+                        .map(|i| ticket_row(&list_ui, &items[i], show_local).into_any_element())
                         .collect::<Vec<_>>()
                 })
                 .w_full()
