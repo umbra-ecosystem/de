@@ -55,15 +55,11 @@ pub fn filter_menu(
         .flat_map(|g| &g.rows)
         .filter(|r| r.checked)
         .count();
-    // Struck through and highlighted while anything narrows the view, so a hidden row is never a mystery.
+    // Highlighted, with a count, while anything narrows the view, so a hidden row is never a mystery.
     let trigger = Button::new(id)
         .ghost()
         .small()
-        .icon(if active > 0 {
-            IconName::EyeOff
-        } else {
-            IconName::Eye
-        })
+        .icon(Icon::new(gpui_kit::assets::IconName::Funnel))
         .selected(active > 0)
         .tooltip(if active > 0 {
             format!("Filters ({active} active)")

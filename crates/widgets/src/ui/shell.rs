@@ -242,6 +242,9 @@ pub fn tabstrip(ui: &Ui, vm: &AppVm) -> Div {
                             .rounded_sm()
                             .text_color(pal.faint)
                             .hover(|s| s.bg(pal.border).text_color(pal.fg))
+                            // The tab under it selects on click; closing must not also select.
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                             .on_click(ui.on_click(Intent::CloseTab(key)))
                             .child("×"),
                     )
