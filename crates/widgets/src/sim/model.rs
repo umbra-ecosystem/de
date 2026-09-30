@@ -24,6 +24,8 @@ pub enum JiraStatus {
     AlphaTesting,
     Returned,
     Done,
+    /// A workflow status the prototype has no word for; the ticket's `jira_name` says which.
+    Other,
 }
 
 impl JiraStatus {
@@ -33,6 +35,7 @@ impl JiraStatus {
             JiraStatus::AlphaTesting => "Alpha Testing",
             JiraStatus::Returned => "Returned",
             JiraStatus::Done => "Done",
+            JiraStatus::Other => "Jira",
         }
     }
 
@@ -672,6 +675,8 @@ pub struct Ticket {
     pub priority: Priority,
     pub title: String,
     pub jira: JiraStatus,
+    /// Jira's own spelling of the status, when it is not one of the four above.
+    pub jira_name: Option<String>,
     pub assignee: &'static str,
     pub reporter: &'static str,
     pub sprint: &'static str,
@@ -715,6 +720,7 @@ impl Ticket {
             priority: Priority::Medium,
             title: title.to_string(),
             jira: JiraStatus::InReview,
+            jira_name: None,
             assignee: "",
             reporter: "",
             sprint: "Sprint 41",

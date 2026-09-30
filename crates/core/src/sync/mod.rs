@@ -77,7 +77,7 @@ pub fn sync_all(
                 SyncSource::Jira,
                 sync_state::JIRA.into(),
                 error,
-                ctx.config.jira.is_none(),
+                false,
             ),
         });
     }

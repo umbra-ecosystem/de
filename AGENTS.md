@@ -2,10 +2,11 @@
 
 ## Project
 
-Rust CLI (`de`, v0.6.1) for managing isolated Docker Compose dev environments. Edition 2024. Cargo workspace of three crates:
+Rust CLI (`de`, v0.6.1) for managing isolated Docker Compose dev environments. Edition 2024. Cargo workspace of four crates:
 
 - `crates/core` (`de-core`, lib) — workspace/project config, task resolution, Compose orchestration. No CLI concerns.
 - `crates/cli` (package `de`, the binary) — `clap` definitions, `src/commands/*`, terminal UI.
+- `crates/gui` (`de-gui`, lib) — the desktop app: a `Store` over `de-core` (`CoreStore`) and `run()`. Tickets and `Sync now` are real (Jira via `acli`, read-only); PRs, review, shipping and the workspace are still the widgets' `Sim` running on the real tickets. `de` with no arguments calls `de_gui::run()`. Live check: `cargo test -p de-gui -- --ignored live_`.
 - `crates/widgets` (`de-widgets`, lib + `showcase` bin) — the GUI's view layer on `gpui-kit`: view models, widgets, and a fully working showcase app over a simulated store. **No engine, no data, no SQLite.** See "Widgets and the GUI" below.
 
 Dependency versions live in the root `[workspace.dependencies]`; crates use `dep.workspace = true`.
@@ -24,6 +25,17 @@ Configured once in the root `[workspace.lints]` and inherited by each crate via 
 - `clippy::inconsistent_struct_constructor`
 - `unused_must_use`
 
+
+## User-facing messages
+
+Every message a user can see (CLI errors, sync reports, toasts, banners, empty states) is friendly and, where there is something to do, says what to do next.
+
+- Say what happened in plain words, then the fix: `Jira is not logged in. Run acli jira auth login, then sync again.` Not `NotAuthenticated { tool: "acli" }`.
+- Name the exact command, setting or screen to use. Point to the docs page when setup is involved (for example `docs/JIRA.md`).
+- Say what was kept or left untouched when it matters (`Your cached tickets are still shown.`). Never leave the user wondering if data was lost.
+- No internal jargon, type names, debug output or raw stderr as the headline; put technical detail after the guidance, or behind `de providers probe` and logs.
+- Keep it calm: no blame, no exclamation marks, no bare "failed". Sentence case, full sentences, one idea per message.
+- An error type that reaches the user needs its friendly wording and its guidance written where the error is defined, so every surface (CLI, GUI) shows the same text. Add a test for it, as for any other behaviour.
 
 ## Architecture
 

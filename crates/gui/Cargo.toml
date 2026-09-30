@@ -1,0 +1,20 @@
+[package]
+name = "de-gui"
+description = "The de desktop app: the de-widgets views over the real engine (de-core)."
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+de-core.workspace = true
+de-widgets = { path = "../widgets" }
+
+eyre.workspace = true
+
+[dev-dependencies]
+de-core = { workspace = true, features = ["testing"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

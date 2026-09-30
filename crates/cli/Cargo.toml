@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 de-core.workspace = true
+de-gui = { path = "../gui" }
 
 axoupdater.workspace = true
 clap.workspace = true

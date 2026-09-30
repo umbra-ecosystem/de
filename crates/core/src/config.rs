@@ -179,6 +179,15 @@ impl Config {
         self.jira.clone().unwrap_or_default()
     }
 
+    /// The JQL of the Review pool: the configured `review_jql`, else every ticket in the review status updated
+    /// in the last 30 days (the bound keeps an unscoped search from paginating a whole company's history).
+    pub fn review_jql(&self) -> String {
+        self.jira().review_jql.unwrap_or_else(|| {
+            let name = self.jira_statuses().review_name().replace('\\', "\\\\").replace('"', "\\\"");
+            format!("status = \"{name}\" AND updated >= -30d ORDER BY updated DESC")
+        })
+    }
+
     /// The Jira workflow status names; use the `*_name` accessors to get defaults filled in.
     pub fn jira_statuses(&self) -> JiraStatuses {
         self.jira

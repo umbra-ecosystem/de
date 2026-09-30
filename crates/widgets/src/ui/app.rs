@@ -174,7 +174,7 @@ pub struct AppView {
 }
 
 impl AppView {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(mut session: Session, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         // One simulated minute passes per four real seconds; the session advances the fake world.
@@ -193,7 +193,6 @@ impl AppView {
             }
         })
         .detach();
-        let mut session = Session::demo();
         apply_env(&mut session);
         let vm = Rc::new(session.view());
 
@@ -484,8 +483,13 @@ impl Render for AppView {
     }
 }
 
-/// Open the showcase window and run until it closes.
+/// Open the showcase window over the simulated store and run until it closes.
 pub fn run() {
+    run_with(Session::demo);
+}
+
+/// Open the window over the session `make` builds (on the UI thread, once) and run until it closes.
+pub fn run_with(make: impl FnOnce() -> Session + 'static) {
     gpui_kit::application()
         .with_assets(super::assets::AppAssets)
         .run(|cx| {
@@ -518,7 +522,7 @@ pub fn run() {
                 ..TitleBar::window_options()
             };
             gpui_kit::open_window(options, cx, |window, cx| {
-                cx.new(|cx| AppView::new(window, cx))
+                cx.new(|cx| AppView::new(make(), window, cx))
             })
             .expect("failed to open the showcase window");
             cx.activate(true);

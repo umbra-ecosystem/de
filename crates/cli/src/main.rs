@@ -30,7 +30,12 @@ fn main() -> eyre::Result<()> {
 
     let cli = Cli::parse();
 
-    let result = match cli.command {
+    let Some(command) = cli.command else {
+        de_gui::run();
+        return Ok(());
+    };
+
+    let result = match command {
         Commands::Init {
             path,
             name,

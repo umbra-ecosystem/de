@@ -19,7 +19,7 @@ pub fn jira_tone(s: JiraStatus) -> Tone {
         JiraStatus::Returned => Tone::Warn,
         JiraStatus::AlphaTesting => Tone::Accent,
         JiraStatus::Done => Tone::Ok,
-        JiraStatus::InReview => Tone::Neutral,
+        JiraStatus::InReview | JiraStatus::Other => Tone::Neutral,
     }
 }
 
@@ -34,6 +34,14 @@ pub fn local_tone(l: Local) -> Tone {
 
 pub fn jira_badge(s: JiraStatus) -> Badge {
     Badge::new(s.label(), jira_tone(s))
+}
+
+/// The status badge of a ticket: Jira's own word when the prototype has none.
+pub fn jira_badge_of(t: &Ticket) -> Badge {
+    match &t.jira_name {
+        Some(name) => Badge::new(name.clone(), jira_tone(t.jira)),
+        None => jira_badge(t.jira),
+    }
 }
 
 pub fn local_badge(l: Option<Local>) -> Option<Badge> {
@@ -395,7 +403,7 @@ impl Sim {
         Some(TicketHeadVm {
             key: key.clone(),
             title: t.title.clone(),
-            jira: jira_badge(t.jira),
+            jira: jira_badge_of(t),
             local: local_badge(st),
             hotfix: self.is_hotfix(t),
             uat_flag: self.uat_flag(t),
@@ -780,7 +788,7 @@ impl Sim {
         } else if !signed {
             Some(format!(
                 "Approval unlocks when the ticket reaches a signed-off status (now: {}).",
-                t.jira.label()
+                t.jira_name.as_deref().unwrap_or(t.jira.label())
             ))
         } else if !self.gh_ready {
             Some("gh is signed out.".to_string())
@@ -1148,7 +1156,7 @@ impl Sim {
         let announce = match d {
             Some(d) if d.posted => AnnounceBody::Posted {
                 text: d.body.clone(),
-                moved: moved.then(|| jira_badge(t.jira)),
+                moved: moved.then(|| jira_badge_of(t)),
                 transition: (!moved).then(|| {
                     Btn::new(
                         format!("Move to {}…", JiraStatus::AlphaTesting.label()),

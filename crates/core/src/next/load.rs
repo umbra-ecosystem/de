@@ -373,9 +373,7 @@ impl Snapshot {
         }
 
         let mut expected = Vec::new();
-        if ctx.config.jira.is_some() {
-            expected.push(sync_state::JIRA.to_string());
-        }
+        expected.push(sync_state::JIRA.to_string());
         expected.extend(
             ctx.hosted
                 .iter()

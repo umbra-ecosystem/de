@@ -237,21 +237,24 @@ fn a_ticket_deleted_in_jira_is_a_problem_but_does_not_stop_the_rest_or_lose_the_
 }
 
 #[test]
-fn missing_review_jql_is_a_note_and_never_deletes() {
+fn unset_review_jql_uses_the_default_query_even_without_a_jira_section() {
+    let default_jql = "status = \"In Review\" AND updated >= -30d ORDER BY updated DESC";
     let mut w = World::new();
-    w.config = Config::parse("[jira]\nsite = \"x\"\n").unwrap();
-    jira_cache::upsert_remote(&w.cache, &ticket("PROJ-1", "In Review"), 1).unwrap();
-    let report = sync_jira(&w.ctx(1000, false), &w.jira);
-    assert_eq!(report.outcome, SourceOutcome::Synced);
-    assert!(report.notes[0].contains("review_jql"));
-    assert_eq!(w.cached_keys(), ["PROJ-1"]);
+    w.jira
+        .on_search(default_jql, vec![ticket("PROJ-1", "In Review")]);
 
-    // No [jira] section at all: nothing to do, and the provider is never called.
-    w.config = Config::default();
-    w.jira.log().clear();
-    let report = sync_jira(&w.ctx(2000, true), &w.jira);
-    assert!(matches!(report.outcome, SourceOutcome::NotConfigured(_)));
-    assert!(w.jira.log().calls().is_empty());
+    for text in ["[jira]\nsite = \"x\"\n", ""] {
+        w.config = Config::parse(text).unwrap();
+        let report = sync_jira(&w.ctx(1000, true), &w.jira);
+        assert_eq!(report.outcome, SourceOutcome::Synced, "config: {text:?}");
+        assert_eq!(w.cached_keys(), ["PROJ-1"]);
+    }
+    assert!(w.jira.log().args_of("search").iter().any(|a| a.contains(default_jql)));
+
+    // The default follows the configured review status name.
+    w.config =
+        Config::parse("[jira.statuses]\nreview = \"Code Review\"\n").unwrap();
+    assert!(w.config.review_jql().starts_with("status = \"Code Review\" AND"));
 }
 
 #[test]
@@ -732,7 +735,7 @@ fn sync_all_reports_unavailable_adapters_and_honours_only() {
         SourceOutcome::NotConfigured(_)
     ));
 
-    // Unconfigured Jira with an unavailable adapter is "not configured", not a failure.
+    // Jira needs no config section (acli owns the login), so an unavailable adapter is a failure.
     let mut bare = World::new();
     bare.config = Config::default();
     let report = sync_all(
@@ -743,7 +746,11 @@ fn sync_all_reports_unavailable_adapters_and_honours_only() {
         &[],
         None,
     );
-    assert!(report.is_ok());
+    assert!(!report.is_ok());
+    assert_eq!(
+        report.sources[0].problem().map(|p| p.kind),
+        Some(ProviderErrorKind::NotInstalled)
+    );
 }
 
 #[test]

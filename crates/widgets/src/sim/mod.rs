@@ -82,6 +82,72 @@ impl Sim {
         }
     }
 
+    /// A simulation that starts from these tickets instead of the invented ones (the real store uses it for what
+    /// the engine does not serve yet: PRs, review and shipping stay simulated).
+    pub fn with_tickets(tickets: Vec<Ticket>) -> Self {
+        Self {
+            tickets,
+            ..Self::new()
+        }
+    }
+
+    /// Swap in freshly read tickets. A ticket already known keeps its simulated local state; the Jira-side
+    /// fields come from the new one.
+    pub fn replace_tickets(&mut self, fresh: Vec<Ticket>) {
+        let mut old = std::mem::take(&mut self.tickets);
+        self.tickets = fresh
+            .into_iter()
+            .map(|mut t| {
+                if let Some(i) = old.iter().position(|o| o.key == t.key) {
+                    let o = old.swap_remove(i);
+                    if t.stage.local().is_none() {
+                        t.stage = o.stage;
+                    }
+                }
+                t
+            })
+            .collect();
+    }
+
+    /// A real sync is under way: the status bar shows it and the fake completion never fires.
+    pub fn sync_began(&mut self) {
+        self.sync.running = true;
+        self.sync.last_attempt = self.ms;
+        self.sync.finish_at = None;
+    }
+
+    /// A real sync ended. `report` is `(ok, source, text)` per source; any failed one makes it partial.
+    pub fn sync_ended(&mut self, report: Vec<(bool, String, String)>) {
+        self.sync.running = false;
+        self.sync.finish_at = None;
+        let failed = report.iter().any(|r| !r.0);
+        if !failed {
+            self.sync.last_ok = self.ms;
+        }
+        self.sync.last_error = failed.then(|| "partial".to_string());
+        let text = report
+            .iter()
+            .map(|r| r.2.clone())
+            .collect::<Vec<_>>()
+            .join("; ");
+        self.sync.report = report;
+        self.audit(
+            "sync",
+            None,
+            None,
+            if failed {
+                AuditOutcome::Failure
+            } else {
+                AuditOutcome::Success
+            },
+            &text,
+        );
+    }
+
+    pub fn set_jira_ready(&mut self, ready: bool) {
+        self.jira_ready = ready;
+    }
+
     /* ---------------------------- small helpers ---------------------------- */
 
     pub(crate) fn idx(&self, key: &TicketKey) -> Option<usize> {

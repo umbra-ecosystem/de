@@ -11,4 +11,4 @@ pub mod shell;
 pub mod theme;
 pub mod widgets;
 
-pub use app::{AppView, run};
+pub use app::{AppView, run, run_with};

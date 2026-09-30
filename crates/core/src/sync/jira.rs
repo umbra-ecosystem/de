@@ -22,13 +22,6 @@ use crate::store::{jira_cache, jira_comments, sync_state, tickets};
 /// that point on; a per-ticket error (deleted ticket, unparsable comment) is recorded as a
 /// problem and the rest continues.
 pub fn sync_jira(ctx: &SyncContext<'_>, jira: &dyn TicketProvider) -> SourceReport {
-    if ctx.config.jira.is_none() {
-        return SourceReport::not_configured(
-            SyncSource::Jira,
-            sync_state::JIRA,
-            "no [jira] section in the config",
-        );
-    }
     run_source(ctx, SyncSource::Jira, sync_state::JIRA.into(), |c| {
         jira_body(ctx, jira, c)
     })
@@ -77,17 +70,9 @@ fn jira_body(ctx: &SyncContext<'_>, jira: &dyn TicketProvider, c: &mut Collector
     let mut complete = true;
 
     // 1. The Review pool.
-    match jira_config.review_jql.as_deref() {
-        Some(jql) => match search_and_cache(ctx, jira, c, "Review pool", jql)? {
-            Some(found) => seen.extend(found.into_iter().map(|t| t.key)),
-            None => complete = false,
-        },
-        None => {
-            complete = false;
-            c.notes.push(
-                "jira.review_jql is not configured; the Review pool was not refreshed".into(),
-            );
-        }
+    match search_and_cache(ctx, jira, c, "Review pool", &ctx.config.review_jql())? {
+        Some(found) => seen.extend(found.into_iter().map(|t| t.key)),
+        None => complete = false,
     }
 
     // 2. Returned tickets.
