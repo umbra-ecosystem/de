@@ -138,6 +138,9 @@ pub fn ticket(
         .child(content)
 }
 
+/// Wide enough for `09-30 21:24`, the time of an entry from another day.
+const TIME_W: f32 = 112.0;
+
 fn audit_table(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
     let pal = &ui.pal;
     let col = |w: f32| div().flex_none().w(px(w)).px_2();
@@ -153,7 +156,7 @@ fn audit_table(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
                 .border_color(pal.border.opacity(0.6))
                 .text_xs()
                 .text_color(pal.faint)
-                .child(col(60.0).child("Time"))
+                .child(col(TIME_W).child("Time"))
                 .child(col(220.0).child("Action"))
                 .child(col(100.0).child("Repo"))
                 .child(col(80.0).child("Outcome"))
@@ -168,7 +171,7 @@ fn audit_table(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
                 .border_b_1()
                 .border_color(pal.border.opacity(0.4))
                 .text_sm()
-                .child(col(60.0).font_family(ui.mono.clone()).child(a.at.clone()))
+                .child(col(TIME_W).font_family(ui.mono.clone()).child(a.at.clone()))
                 .child(
                     col(220.0)
                         .font_family(ui.mono.clone())

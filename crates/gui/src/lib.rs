@@ -10,6 +10,7 @@
 // The widgets crate allows these for its view models; the store implements traits over them.
 #![allow(clippy::result_large_err)]
 
+pub mod audit;
 pub mod localtime;
 pub mod logs;
 pub mod mapping;

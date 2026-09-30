@@ -6,7 +6,7 @@ Rust CLI (`de`, v0.6.1) for managing isolated Docker Compose dev environments. E
 
 - `crates/core` (`de-core`, lib) — workspace/project config, task resolution, Compose orchestration. No CLI concerns.
 - `crates/cli` (package `de`, the binary) — `clap` definitions, `src/commands/*`, terminal UI.
-- `crates/gui` (`de-gui`, lib) — the desktop app: a `Store` over `de-core` (`CoreStore`) and `run()`. Tickets and `Sync now` are real (Jira via `acli`, read-only); PRs, review, shipping and the workspace are still the widgets' `Sim` running on the real tickets. `de` with no arguments calls `de_gui::run()`. Live check: `cargo test -p de-gui -- --ignored live_`.
+- `crates/gui` (`de-gui`, lib) — the desktop app: a `Store` over `de-core` (`CoreStore`) and `run()`. Tickets and `Sync now` are real (Jira via `acli`, read-only); PRs, review, shipping and the workspace are still the widgets' `Sim` running on the real tickets. `de` with no arguments calls `de_gui::run()`. The audit log is `state.db`'s `audit_log` (the app records its syncs and settings changes there; the gateway's writes land in the same table) and is loaded on start. Live check: `cargo test -p de-gui -- --ignored live_`.
 - `crates/widgets` (`de-widgets`, lib + `showcase` bin) — the GUI's view layer on `gpui-kit`: view models, widgets, and a fully working showcase app over a simulated store. **No engine, no data, no SQLite.** See "Widgets and the GUI" below.
 
 Dependency versions live in the root `[workspace.dependencies]`; crates use `dep.workspace = true`.

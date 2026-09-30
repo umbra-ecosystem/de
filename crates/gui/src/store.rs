@@ -8,13 +8,14 @@ use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use de_core::config::Config;
+use de_core::store::{Kind, Store as Db};
 use de_core::synclog;
 use de_widgets::sim::Sim;
 use de_widgets::sim::model::MS_PER_MIN;
 use de_widgets::vm::*;
 use de_widgets::{Outcome, ReviewSel, Store};
 
-use crate::{localtime, logs, mapping};
+use crate::{audit, localtime, logs, mapping};
 use crate::sync::{SyncDone, last_sync_minutes_ago, load_cached, sync_real};
 
 pub struct CoreStore {
@@ -32,6 +33,11 @@ fn to_sim_ms(carry: i64, real: i64) -> (i64, i64) {
     (total / per_sim_ms, total % per_sim_ms)
 }
 
+/// The audit log from `state.db`, as the window's entries.
+fn stored_audit() -> eyre::Result<Vec<de_widgets::sim::model::AuditEntry>> {
+    audit::entries(&Db::open_default(Kind::State)?, now())
+}
+
 fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -46,6 +52,8 @@ impl CoreStore {
         let mut sim = Sim::with_tickets(cached);
         sim.set_last_sync_minutes_ago(last_sync_minutes_ago(now()));
         sim.set_start_minute_of_day(localtime::minute_of_day(now()));
+        // The audit log is on disk; the simulation only shows it.
+        sim.use_external_audit(stored_audit().unwrap_or_default());
         let mut store = Self {
             sim,
             running: None,
@@ -53,6 +61,24 @@ impl CoreStore {
         };
         store.begin_sync();
         store
+    }
+
+    /// Write one line to the audit log and show it. A log that cannot be written is reported to the user, since
+    /// an action nobody can see afterwards is a problem of its own.
+    fn record(&mut self, action: &str, ok: bool, text: &str) -> Option<(String, ToastKind)> {
+        let saved = Db::open_default(Kind::State)
+            .and_then(|state| audit::record(&state, now(), action, None, ok, text).map(|()| state))
+            .and_then(|state| audit::entries(&state, now()));
+        match saved {
+            Ok(entries) => {
+                self.sim.set_audit(entries);
+                None
+            }
+            Err(e) => Some((
+                format!("Could not write to the audit log: {e:#}. Check that the data folder is writable."),
+                ToastKind::Warn,
+            )),
+        }
     }
 
     fn begin_sync(&mut self) -> Outcome {
@@ -93,11 +119,16 @@ impl CoreStore {
                 if let Ok(fresh) = load_cached() {
                     self.sim.replace_tickets(fresh);
                 }
-                Outcome::ok().with_toast(done, ToastKind::Ok, None)
+                match self.record("config.jira", true, &done) {
+                    Some((warning, kind)) => Outcome::ok().with_toast(warning, kind, None),
+                    None => Outcome::ok().with_toast(done, ToastKind::Ok, None),
+                }
             }
-            Err(e) => Outcome::fail(format!(
-                "Could not save to config.toml: {e:#}. Check that the file is writable, then try again."
-            )),
+            Err(e) => {
+                let why = format!("Could not save to config.toml: {e:#}");
+                self.record("config.jira", false, &why);
+                Outcome::fail(format!("{why}. Check that the file is writable, then try again."))
+            }
         })
     }
 
@@ -132,7 +163,14 @@ impl CoreStore {
                 .unwrap_or_default();
             toasts.push((format!("Sync problem: {why}"), ToastKind::Warn));
         }
+        let text = done
+            .report
+            .iter()
+            .map(|r| r.2.clone())
+            .collect::<Vec<_>>()
+            .join("; ");
         self.sim.sync_ended(done.report);
+        toasts.extend(self.record("sync", ok, &text));
         toasts
     }
 }

@@ -37,6 +37,9 @@ pub struct Sim {
     pub(crate) mapping: BTreeMap<MappingKey, String>,
     pub(crate) tickets: Vec<Ticket>,
     pub(crate) audit: Vec<AuditEntry>,
+    /// The audit log is kept elsewhere (a real store persists it); the simulation then neither adds to it nor
+    /// loses it.
+    pub(crate) audit_external: bool,
     pub(crate) responses: Responses,
     pub(crate) repos: Vec<RepoCfg>,
     pub(crate) toasts: Vec<(String, ToastKind)>,
@@ -88,6 +91,7 @@ impl Sim {
             .collect(),
             tickets: data::seed_tickets(),
             audit: Vec::new(),
+            audit_external: false,
             responses: Responses::new(),
             repos: repos(),
             toasts: Vec::new(),
@@ -217,6 +221,18 @@ impl Sim {
         ((self.ms - ms) / MS_PER_MIN).max(0)
     }
 
+    /// Hand the audit log over to whoever stores it: from now on it is exactly what `set_audit` was given (newest
+    /// first), and what the simulation would have recorded is dropped.
+    pub fn use_external_audit(&mut self, entries: Vec<AuditEntry>) {
+        self.audit_external = true;
+        self.audit = entries;
+    }
+
+    /// Replace the externally kept audit log (newest first).
+    pub fn set_audit(&mut self, entries: Vec<AuditEntry>) {
+        self.audit = entries;
+    }
+
     pub(crate) fn audit(
         &mut self,
         action: &str,
@@ -225,6 +241,9 @@ impl Sim {
         outcome: AuditOutcome,
         details: &str,
     ) {
+        if self.audit_external {
+            return;
+        }
         let id = self.next_seq();
         let at = self.clock(None);
         self.audit.insert(
