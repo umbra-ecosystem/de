@@ -474,7 +474,7 @@ pub fn resolve_baseline(
     }
 }
 
-fn ask_baseline() -> eyre::Result<BaselineChoice> {
+pub(crate) fn ask_baseline() -> eyre::Result<BaselineChoice> {
     let choices = BaselineChoice::ALL;
     let labels = [
         "base       (develop, or the repo's configured base)",

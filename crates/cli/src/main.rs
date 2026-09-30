@@ -11,7 +11,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::{
     cli::{
-        Cli, Commands, GitCommands, ProvidersCommands, SelfCommands, TaskCommands, TicketCommands, WorkspaceCommands,
+        Cli, Commands, GitCommands, NextCommands, ProvidersCommands, SelfCommands, TaskCommands, TicketCommands, WorkspaceCommands,
     },
     utils::theme::Theme,
     workspace::Workspace,
@@ -85,6 +85,21 @@ fn main() -> eyre::Result<()> {
             }
         },
         Commands::Sync { only, force } => commands::sync::sync(only.map(Into::into), force),
+        Commands::Next {
+            command,
+            workspace,
+            all,
+            json,
+        } => match command {
+            None => commands::next::list(workspace, all, json),
+            Some(NextCommands::Dismiss { id, reason }) => {
+                commands::next::dismiss(id, reason, workspace)
+            }
+            Some(NextCommands::Snooze { id, duration }) => {
+                commands::next::snooze(id, duration, workspace)
+            }
+            Some(NextCommands::Do { id }) => commands::next::do_it(id, workspace),
+        },
         Commands::Providers { command } => match command {
             ProvidersCommands::Check => commands::sync::providers_check(),
             ProvidersCommands::Probe { ticket, repo, out } => {
