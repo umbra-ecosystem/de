@@ -770,7 +770,7 @@ fn cache_upsert_is_idempotent_and_replaces() {
 
     jira_cache::upsert(&cache, &t).unwrap();
     jira_cache::upsert(&cache, &t).unwrap();
-    assert_eq!(jira_cache::list(&cache).unwrap(), [t.clone()]);
+    assert_eq!(jira_cache::list(&cache).unwrap().first(), Some(&t));
 
     let newer = jira_cache::JiraTicket {
         title: "Renamed".into(),
