@@ -6,7 +6,7 @@ use super::SyncContext;
 use super::report::{Collector, Problem, SourceReport, Step, SyncSource, local, run_source};
 use crate::domain::TicketKey;
 use crate::providers::{RemoteTicket, TicketProvider};
-use crate::store::{jira_cache, jira_comments, sync_state, tickets};
+use crate::store::{jira_cache, jira_comments, jira_details, sync_state, tickets};
 
 /// Refreshes the Jira mirror. Reads only (`jira` is a read trait object).
 ///
@@ -14,9 +14,10 @@ use crate::store::{jira_cache, jira_comments, sync_state, tickets};
 /// 2. **Returned** tickets: `search(returned_jql)`, or `status = "<returned>"`.
 /// 3. Every **locally tracked** ticket not returned by those, by key (`get`), so a ticket
 ///    that left the pool is still refreshed.
-/// 4. **Comments** (with mentions) of tracked tickets and of Returned tickets.
+/// 4. **Comments** (with mentions) and **detail** (description, reporter, sprint, links...) of every
+///    ticket found or tracked, in one `view` call each.
 /// 5. Only if both searches succeeded: cached tickets that are neither in a result nor
-///    tracked, and comments of tickets that are neither tracked nor Returned, are removed.
+///    tracked, with their comments and detail, are removed.
 ///
 /// An environmental error (offline, not logged in) aborts with the cache untouched from
 /// that point on; a per-ticket error (deleted ticket, unparsable comment) is recorded as a
@@ -105,17 +106,21 @@ fn jira_body(ctx: &SyncContext<'_>, jira: &dyn TicketProvider, c: &mut Collector
         }
     }
 
-    // 4. Comments of tracked and Returned tickets.
+    // 4. Comments and detail of everything in the pool, returned or tracked: one `view` each.
     let with_comments: BTreeSet<TicketKey> = tracked
         .iter()
         .cloned()
-        .chain(returned.iter().cloned())
+        .chain(seen.iter().cloned())
         .collect();
     for key in &with_comments {
-        match jira.comments(key) {
-            Ok(list) => {
-                jira_comments::replace_for_ticket(ctx.cache, key, &list, ctx.now).map_err(local)?;
-                c.counts.ticket_comments += list.len();
+        match jira.view(key) {
+            Ok(viewed) => {
+                jira_comments::replace_for_ticket(ctx.cache, key, &viewed.comments, ctx.now)
+                    .map_err(local)?;
+                c.counts.ticket_comments += viewed.comments.len();
+                if let Some(detail) = &viewed.detail {
+                    jira_details::upsert(ctx.cache, key, detail, ctx.now).map_err(local)?;
+                }
             }
             Err(e) => c.handle(format!("comments of {key}"), &e)?,
         }
@@ -134,6 +139,8 @@ fn jira_body(ctx: &SyncContext<'_>, jira: &dyn TicketProvider, c: &mut Collector
         c.counts.removed += jira_cache::delete_except(ctx.cache, &keep_tickets).map_err(local)?;
         c.counts.removed +=
             jira_comments::delete_except(ctx.cache, &keep_comments).map_err(local)?;
+        // Details go with their ticket; they are not counted as removed rows of their own.
+        jira_details::delete_except(ctx.cache, &keep_tickets).map_err(local)?;
     }
     Ok(())
 }

@@ -262,6 +262,87 @@ fn every_acli_call_is_written_to_the_run_log() {
     assert!(text.contains("Fix login redirect"), "raw stdout is kept: {text}");
 }
 
+/// A synthetic `view --fields '*all'` output with the structure of a real one: invented values throughout.
+const VIEW_ALL: &str = r#"{
+  "key": "PROJ-7",
+  "fields": {
+    "summary": "Synthetic ticket",
+    "issuetype": {"name": "Story"},
+    "reporter": {"accountId": "acc-r", "displayName": "Riley Reporter"},
+    "created": "2026-09-01T08:30:00.000+0000",
+    "updated": "2026-09-02T09:45:10.000+0000",
+    "labels": ["web", "reports"],
+    "components": [{"name": "Frontend"}],
+    "fixVersions": [{"name": "2.14.0"}],
+    "timetracking": {"originalEstimate": "3d"},
+    "customfield_10018": [
+      {"boardId": 1, "id": 11, "name": "Sprint 40", "state": "closed"},
+      {"boardId": 1, "id": 12, "name": "Sprint 41", "state": "active"}
+    ],
+    "customfield_10019": "0|i00abc:",
+    "parent": {"key": "PROJ-1", "fields": {"summary": "Reporting epic"}},
+    "description": {"type": "doc", "version": 1, "content": [
+      {"type": "paragraph", "content": [{"type": "text", "text": "First paragraph."}]},
+      {"type": "bulletList", "content": [
+        {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "one"}]}]},
+        {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "two"}]}]}
+      ]}
+    ]},
+    "attachment": [{"filename": "spec.pdf", "size": 2048}],
+    "issuelinks": [
+      {"type": {"inward": "is blocked by", "outward": "blocks"},
+       "outwardIssue": {"key": "PROJ-8", "fields": {"summary": "Downstream", "status": {"name": "To Do"}}}},
+      {"type": {"inward": "is blocked by", "outward": "blocks"},
+       "inwardIssue": {"key": "PROJ-2", "fields": {"summary": "Upstream", "status": {"name": "Done"}}}}
+    ],
+    "subtasks": [
+      {"key": "PROJ-9", "fields": {"summary": "Write tests", "status": {"statusCategory": {"key": "done"}}}},
+      {"key": "PROJ-10", "fields": {"summary": "Ship it", "status": {"statusCategory": {"key": "new"}}}}
+    ],
+    "comment": {"total": 0, "comments": []}
+  }
+}"#;
+
+#[test]
+fn view_all_reads_the_detail_and_the_comments_in_one_output() {
+    let (detail, comments, total) = wire::parse_view_all(VIEW_ALL, &key("PROJ-7")).unwrap();
+    assert!(comments.is_empty() && total == Some(0));
+    assert_eq!(detail.issue_type.as_deref(), Some("Story"));
+    assert_eq!(detail.reporter.as_deref(), Some("Riley Reporter"));
+    assert_eq!(detail.created_at, crate::providers::acli::time::parse_timestamp("2026-09-01T08:30:00.000+0000"));
+    assert!(detail.updated_at > detail.created_at);
+    assert_eq!(detail.labels, ["web", "reports"]);
+    assert_eq!(detail.components, ["Frontend"]);
+    assert_eq!(detail.fix_versions, ["2.14.0"]);
+    assert_eq!(detail.original_estimate.as_deref(), Some("3d"));
+    assert_eq!(detail.sprint.as_deref(), Some("Sprint 41"), "found by shape, the active one");
+    assert_eq!(detail.parent, Some(("PROJ-1".into(), "Reporting epic".into())));
+    assert_eq!(detail.description, "First paragraph.\n\n- one\n- two");
+    assert_eq!(detail.attachments[0].name, "spec.pdf");
+    assert_eq!(detail.attachments[0].bytes, 2048);
+    assert_eq!(detail.links.len(), 2);
+    assert_eq!((detail.links[0].relation.as_str(), detail.links[0].key.as_str()), ("blocks", "PROJ-8"));
+    assert_eq!((detail.links[1].relation.as_str(), detail.links[1].status.as_str()), ("is blocked by", "Done"));
+    assert_eq!(detail.subtasks.iter().map(|s| s.done).collect::<Vec<_>>(), [true, false]);
+}
+
+#[test]
+fn view_all_with_a_bare_ticket_gives_an_empty_detail_not_an_error() {
+    let bare = r#"{"key":"PROJ-7","fields":{"summary":"x","description":null,"labels":[],"comment":{"total":0,"comments":[]}}}"#;
+    let (detail, comments, _) = wire::parse_view_all(bare, &key("PROJ-7")).unwrap();
+    assert!(comments.is_empty());
+    assert_eq!(detail, crate::providers::TicketDetail::default());
+}
+
+#[test]
+fn view_asks_for_all_fields_in_a_single_call() {
+    let argv = ["jira", "workitem", "view", "PROJ-7", "--json", "--fields", "*all"];
+    let (jira, fake) = reader(Fake::default().on(&argv, ok(VIEW_ALL)));
+    let viewed = jira.view(&key("PROJ-7")).unwrap();
+    assert_eq!(viewed.detail.unwrap().sprint.as_deref(), Some("Sprint 41"));
+    assert_eq!(fake.calls().len(), 1);
+}
+
 #[test]
 fn search_never_asks_for_updated_which_real_acli_rejects() {
     // `--fields ...,updated` makes the real acli exit 1: "field 'updated' is not allowed".

@@ -56,7 +56,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use super::error::{ProviderError, ProviderResult};
-use super::model::{Health, RemoteComment, RemoteTicket};
+use super::model::{Health, RemoteComment, RemoteTicket, Viewed};
 use super::traits::{TicketProvider, TicketWriter};
 use crate::config::Config;
 use crate::domain::TicketKey;
@@ -80,6 +80,9 @@ const SEARCH_FIELDS: &str = "key,summary,status,priority,assignee";
 
 /// Fields requested from view, where `updated` is allowed.
 const VIEW_FIELDS: &str = "key,summary,status,priority,assignee,updated";
+
+/// Fields requested by `view` for the detail and the comments.
+const DETAIL_FIELDS: &str = "*all";
 
 /// Field requested to read comments.
 const COMMENT_FIELDS: &str = "comment";
@@ -286,6 +289,22 @@ impl<R: CommandRunner + Send + Sync> AcliJira<R> {
     }
 }
 
+impl<R: CommandRunner> AcliJira<R> {
+    /// A comment list acli cut short is a note on the sync report, not an error.
+    fn note_truncated(&self, key: &TicketKey, got: usize, total: Option<usize>) {
+        if let Some(total) = total
+            && total > got
+        {
+            self.warnings
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(format!(
+                    "{key}: acli returned {got} of {total} comments; some are missing"
+                ));
+        }
+    }
+}
+
 impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
     fn health(&self) -> Health {
         let version_out = match self.inner.run_raw(&["--version"]) {
@@ -404,18 +423,28 @@ impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
             COMMENT_FIELDS,
         ])?;
         let (comments, total) = wire::parse_comment_field(&out.stdout, key)?;
-        if let Some(total) = total
-            && total > comments.len()
-        {
-            self.warnings
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .push(format!(
-                    "{key}: acli returned {} of {total} comments; some are missing",
-                    comments.len()
-                ));
-        }
+        self.note_truncated(key, comments.len(), total);
         Ok(comments)
+    }
+
+    fn view(&self, key: &TicketKey) -> ProviderResult<Viewed> {
+        // One call for the comments and the detail. `*all` because the sprint is a custom field whose id is
+        // not known in advance.
+        let out = self.inner.run(&[
+            "jira",
+            "workitem",
+            "view",
+            key.as_str(),
+            "--json",
+            "--fields",
+            DETAIL_FIELDS,
+        ])?;
+        let (detail, comments, total) = wire::parse_view_all(&out.stdout, key)?;
+        self.note_truncated(key, comments.len(), total);
+        Ok(Viewed {
+            detail: Some(detail),
+            comments,
+        })
     }
 
     fn take_warnings(&self) -> Vec<String> {
@@ -500,6 +529,7 @@ impl<R: CommandRunner + Send + Sync> TicketWriter for AcliJiraWriter<R> {
                     author_account_id: String::new(),
                     author_name: String::new(),
                     body_text: body.into(),
+                    rich: String::new(),
                     mentions,
                     created_at: now_secs(),
                 })

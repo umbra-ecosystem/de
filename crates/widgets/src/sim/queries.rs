@@ -65,7 +65,13 @@ pub fn block_text(b: &Block) -> String {
             .map(|i| format!("- {i}"))
             .collect::<Vec<_>>()
             .join("\n"),
-        Block::Para(x) | Block::Heading(x) | Block::Code(x) => x.clone(),
+        Block::Numbered(items) => items
+            .iter()
+            .enumerate()
+            .map(|(n, i)| format!("{}. {i}", n + 1))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Block::Para(x) | Block::Heading(x) | Block::Code(x) | Block::Quote(x) => x.clone(),
     };
     raw.replace("@[you]", "@you")
 }

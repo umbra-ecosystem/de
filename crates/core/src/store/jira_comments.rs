@@ -21,6 +21,7 @@ fn load(
                 author_account_id: r.get(2)?,
                 author_name: r.get(3)?,
                 body_text: r.get(4)?,
+                rich: r.get(6)?,
                 mentions: Vec::new(),
                 created_at: r.get(5)?,
             })
@@ -40,7 +41,7 @@ fn load(
     Ok(comments)
 }
 
-const SELECT: &str = "SELECT ticket_key, id, author_account_id, author_name, body_text, created_at
+const SELECT: &str = "SELECT ticket_key, id, author_account_id, author_name, body_text, created_at, rich
                       FROM jira_comments";
 
 /// Makes the cached comments of `ticket` exactly `comments` (one transaction). Call this
@@ -60,8 +61,8 @@ pub fn replace_for_ticket(
     for c in comments {
         tx.execute(
             "INSERT OR REPLACE INTO jira_comments
-                (ticket_key, id, author_account_id, author_name, body_text, created_at, fetched_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                (ticket_key, id, author_account_id, author_name, body_text, created_at, fetched_at, rich)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 ticket,
                 c.id,
@@ -69,7 +70,8 @@ pub fn replace_for_ticket(
                 c.author_name,
                 c.body_text,
                 c.created_at,
-                now
+                now,
+                c.rich
             ],
         )?;
         for account in &c.mentions {
@@ -138,4 +140,26 @@ pub fn delete_except(cache: &Store, keep: &[TicketKey]) -> eyre::Result<usize> {
         )?;
     }
     Ok(removed)
+}
+
+#[cfg(test)]
+mod rich_tests {
+    use super::*;
+    use crate::providers::fake::build::comment;
+    use crate::store::Kind;
+
+    #[test]
+    fn the_rich_body_is_stored_beside_the_plain_text() {
+        let cache = Store::open_in_memory(Kind::Cache).unwrap();
+        let key: TicketKey = "PROJ-1".parse().unwrap();
+        let mut c = comment("PROJ-1", "c1", &["me"]);
+        c.body_text = "Plan\nstep".into();
+        c.rich = "## Plan\n\n- step".into();
+        replace_for_ticket(&cache, &key, &[c], 1).unwrap();
+
+        let back = list_for_ticket(&cache, &key).unwrap();
+        assert_eq!(back[0].body_text, "Plan\nstep");
+        assert_eq!(back[0].rich, "## Plan\n\n- step");
+        assert_eq!(mentioning(&cache, "me").unwrap()[0].rich, "## Plan\n\n- step");
+    }
 }

@@ -30,6 +30,64 @@ pub struct RemoteTicket {
     pub updated_at: i64,
 }
 
+/// What Jira knows about a ticket beyond the search row: who raised it, when, what it says and what it is
+/// linked to. Read together with the comments (one `view` call) and kept next to the ticket in the cache.
+/// Every field may be empty: Jira sites differ in what they use.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TicketDetail {
+    /// `Task`, `Bug`, `Story`.
+    pub issue_type: Option<String>,
+    pub reporter: Option<String>,
+    /// Unix seconds.
+    pub created_at: Option<i64>,
+    pub updated_at: Option<i64>,
+    pub labels: Vec<String>,
+    pub components: Vec<String>,
+    pub fix_versions: Vec<String>,
+    /// The current sprint's name (the newest one the ticket is in).
+    pub sprint: Option<String>,
+    /// The parent, usually the epic: `(key, title)`.
+    pub parent: Option<(String, String)>,
+    /// Jira's own spelling (`2h`, `3d`).
+    pub original_estimate: Option<String>,
+    /// The description as light markup (see `adf::body_to_rich`): blocks separated by a blank line, `#` headings,
+    /// `- ` / `1. ` lists, fenced code, `> ` quotes, `@[Name|account id]` mentions.
+    pub description: String,
+    pub attachments: Vec<Attachment>,
+    pub links: Vec<IssueLink>,
+    pub subtasks: Vec<Subtask>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Attachment {
+    pub name: String,
+    pub bytes: u64,
+}
+
+/// A link to another ticket, from this ticket's point of view (`blocks`, `is blocked by`, `relates to`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IssueLink {
+    pub relation: String,
+    pub key: TicketKey,
+    pub title: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subtask {
+    pub key: TicketKey,
+    pub title: String,
+    /// Its status is in Jira's "done" category.
+    pub done: bool,
+}
+
+/// One `view` of a ticket: its detail (when the provider can give one) and its comments.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Viewed {
+    pub detail: Option<TicketDetail>,
+    pub comments: Vec<RemoteComment>,
+}
+
 /// A Jira comment, flattened to text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteComment {
@@ -40,6 +98,10 @@ pub struct RemoteComment {
     pub author_name: String,
     /// The comment rendered as plain text (mentions appear as `@Name`).
     pub body_text: String,
+    /// The same comment with its block structure kept as light markup (see `adf::body_to_rich`); empty for
+    /// comments cached before it existed, which fall back to `body_text`.
+    #[serde(default)]
+    pub rich: String,
     /// Account ids mentioned in the comment. This is what "@mentioned" is decided on.
     pub mentions: Vec<String>,
     pub created_at: i64,

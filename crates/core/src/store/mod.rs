@@ -12,6 +12,7 @@ pub mod audit;
 pub mod drafts;
 pub mod jira_cache;
 pub mod jira_comments;
+pub mod jira_details;
 pub mod links;
 mod migrations;
 pub mod notes;

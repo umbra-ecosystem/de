@@ -364,6 +364,33 @@ pub fn blocks(pal: &Pal, cx: &App, items: &[Block]) -> Div {
                     }))
                     .into_any_element(),
                 Block::Code(x) => code_block(pal, cx, x.clone()).into_any_element(),
+                Block::Numbered(items) => div()
+                    .flex()
+                    .flex_col()
+                    .gap_0p5()
+                    .children(items.iter().enumerate().map(|(n, i)| {
+                        div()
+                            .flex()
+                            .gap_2()
+                            .text_sm()
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .min_w_4()
+                                    .text_color(pal.muted)
+                                    .child(format!("{}.", n + 1)),
+                            )
+                            .child(div().child(inline_text(pal, i)))
+                    }))
+                    .into_any_element(),
+                Block::Quote(x) => div()
+                    .pl_3()
+                    .border_l_2()
+                    .border_color(pal.border)
+                    .text_sm()
+                    .text_color(pal.muted)
+                    .child(inline_text(pal, x))
+                    .into_any_element(),
             }
         }))
 }

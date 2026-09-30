@@ -6,10 +6,10 @@ use crate::domain::TicketKey;
 use crate::providers::fake::build::{comment, key, pr, run, ticket};
 use crate::providers::fake::{FakeBitbucket, FakeJira};
 use crate::providers::{
-    PipelineState, PipelineStep, PrState, ProviderError, ProviderErrorKind, RemoteTicket,
+    TicketDetail, PipelineState, PipelineStep, PrState, ProviderError, ProviderErrorKind, RemoteTicket,
 };
 use crate::store::{
-    Kind, Store, jira_cache, jira_comments, links, pipelines, prs, sync_state, tickets, uat_merges,
+    Kind, Store, jira_cache, jira_comments, jira_details, links, pipelines, prs, sync_state, tickets, uat_merges,
 };
 
 const POOL_JQL: &str = "project = PROJ AND status = 'In Review'";
@@ -95,7 +95,15 @@ fn jira_sync_refreshes_pool_returned_tracked_and_comments() {
         .set_comments(&key("PROJ-3"), vec![comment("PROJ-3", "c1", &["me"])]);
     w.jira
         .set_comments(&key("PROJ-4"), vec![comment("PROJ-4", "c2", &[])]);
-    // Pool ticket comments are NOT fetched (not tracked, not returned).
+    // Pool tickets get their comments and detail too (one `view` each).
+    w.jira.set_detail(
+        &key("PROJ-1"),
+        TicketDetail {
+            reporter: Some("Riley Reporter".into()),
+            description: "Do the thing".into(),
+            ..TicketDetail::default()
+        },
+    );
     w.jira
         .set_comments(&key("PROJ-1"), vec![comment("PROJ-1", "c9", &["me"])]);
 
@@ -110,14 +118,23 @@ fn jira_sync_refreshes_pool_returned_tracked_and_comments() {
         "Alpha Testing"
     );
 
-    let mentions = jira_comments::mentioning(&w.cache, "me").unwrap();
-    assert_eq!(mentions.len(), 1);
-    assert_eq!(mentions[0].id, "c1");
-    assert!(
+    let mut mentions: Vec<String> = jira_comments::mentioning(&w.cache, "me")
+        .unwrap()
+        .into_iter()
+        .map(|c| c.id)
+        .collect();
+    mentions.sort();
+    assert_eq!(mentions, ["c1", "c9"]);
+    assert_eq!(
         jira_comments::list_for_ticket(&w.cache, &key("PROJ-1"))
             .unwrap()
-            .is_empty()
+            .len(),
+        1
     );
+    let detail = jira_details::get(&w.cache, &key("PROJ-1")).unwrap().unwrap();
+    assert_eq!(detail.reporter.as_deref(), Some("Riley Reporter"));
+    assert_eq!(detail.description, "Do the thing");
+    assert!(jira_details::get(&w.cache, &key("PROJ-2")).unwrap().is_none(), "the fake gave it none");
     assert_eq!(w.jira.log().args_of("get"), ["PROJ-4"]);
     assert_eq!(
         sync_state::get(&w.cache, "jira")

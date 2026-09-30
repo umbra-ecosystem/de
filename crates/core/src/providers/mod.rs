@@ -20,7 +20,7 @@ pub mod traits;
 
 pub use error::{ProviderError, ProviderErrorKind, ProviderResult};
 pub use model::{
-    DiffSide, Health, InlineAnchor, NewPrComment, PipelineFilter, PipelineRun, PipelineState,
+    Attachment, DiffSide, Health, IssueLink, Subtask, TicketDetail, Viewed, InlineAnchor, NewPrComment, PipelineFilter, PipelineRun, PipelineState,
     PipelineStep, Pr, PrComment, PrFilter, PrState, RemoteComment, RemoteTicket, Reviewer,
     TriggerSpec, commit_matches,
 };

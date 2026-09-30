@@ -456,6 +456,7 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
         author_account_id: "sam".into(),
         author_name: "Sam".into(),
         body_text: "@me this still breaks export".into(),
+        rich: String::new(),
         mentions: vec!["me".into()],
         created_at: w.now.get() + 5,
     };

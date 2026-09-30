@@ -27,7 +27,7 @@
 
 use super::error::ProviderResult;
 use super::model::{
-    Health, NewPrComment, PipelineFilter, PipelineRun, Pr, PrComment, PrFilter, RemoteComment,
+    Health, Viewed, NewPrComment, PipelineFilter, PipelineRun, Pr, PrComment, PrFilter, RemoteComment,
     RemoteTicket, TriggerSpec,
 };
 use crate::domain::TicketKey;
@@ -47,6 +47,16 @@ pub trait TicketProvider: Send {
 
     /// All comments of a ticket, oldest first, with the account ids each one mentions.
     fn comments(&self, key: &TicketKey) -> ProviderResult<Vec<RemoteComment>>;
+
+    /// Everything one call can tell about a ticket: its detail and its comments. The default has no detail and
+    /// reads the comments; an adapter that can get both at once overrides it, so a sync costs one call per
+    /// ticket.
+    fn view(&self, key: &TicketKey) -> ProviderResult<Viewed> {
+        Ok(Viewed {
+            detail: None,
+            comments: self.comments(key)?,
+        })
+    }
 
     /// Human-readable notes accumulated by earlier calls that succeeded but were lossy
     /// (for example a comment list the tool truncated), cleared by this call. Sync surfaces

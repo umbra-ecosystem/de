@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use super::error::{ProviderError, ProviderResult};
 use super::model::{
     Health, NewPrComment, PipelineFilter, PipelineRun, Pr, PrComment, PrFilter, RemoteComment,
-    RemoteTicket, TriggerSpec,
+    RemoteTicket, TicketDetail, TriggerSpec, Viewed,
 };
 use super::traits::{CodeHost, CodeHostWriter, TicketProvider, TicketWriter};
 use crate::domain::TicketKey;
@@ -102,6 +102,7 @@ struct JiraState {
     tickets: BTreeMap<TicketKey, RemoteTicket>,
     searches: HashMap<String, Vec<TicketKey>>,
     comments: BTreeMap<TicketKey, Vec<RemoteComment>>,
+    details: BTreeMap<TicketKey, TicketDetail>,
     health: Option<Health>,
     /// Fails every call except `health`.
     failure: Option<ProviderError>,
@@ -148,6 +149,12 @@ impl FakeJira {
     /// Scripts the comments of a ticket.
     pub fn set_comments(&self, key: &TicketKey, comments: Vec<RemoteComment>) -> &Self {
         lock(&self.state).comments.insert(key.clone(), comments);
+        self
+    }
+
+    /// Scripts the detail `view` returns for a ticket (without one, `view` gives none).
+    pub fn set_detail(&self, key: &TicketKey, detail: TicketDetail) -> &Self {
+        lock(&self.state).details.insert(key.clone(), detail);
         self
     }
 
@@ -267,6 +274,15 @@ impl TicketProvider for FakeJira {
             .unwrap_or_default())
     }
 
+    /// The comments (logged as a `comments` call, as before `view` existed) plus any scripted detail.
+    fn view(&self, key: &TicketKey) -> ProviderResult<Viewed> {
+        let comments = self.comments(key)?;
+        Ok(Viewed {
+            detail: lock(&self.state).details.get(key).cloned(),
+            comments,
+        })
+    }
+
     fn take_warnings(&self) -> Vec<String> {
         std::mem::take(&mut lock(&self.state).warnings)
     }
@@ -284,6 +300,7 @@ impl TicketWriter for FakeJira {
             author_account_id: "fake-self".into(),
             author_name: "Fake".into(),
             body_text: body.into(),
+            rich: String::new(),
             mentions: Vec::new(),
             created_at: 0,
         };
@@ -646,6 +663,7 @@ pub mod build {
             author_account_id: "someone".into(),
             author_name: "Someone".into(),
             body_text: format!("comment {id}"),
+            rich: String::new(),
             mentions: mentions.iter().map(|m| String::from(*m)).collect(),
             created_at: 100,
         }

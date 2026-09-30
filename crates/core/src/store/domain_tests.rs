@@ -50,7 +50,7 @@ fn migrations_apply_on_a_fresh_database() {
     let s = state();
     let c = cache();
     assert_eq!(s.schema_version().unwrap(), 7);
-    assert_eq!(c.schema_version().unwrap(), 3);
+    assert_eq!(c.schema_version().unwrap(), 5);
 
     let tables = |store: &Store| -> Vec<String> {
         let mut stmt = store

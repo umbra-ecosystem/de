@@ -368,34 +368,55 @@ impl Sim {
         let tags = |v: &[&str]| -> Vec<Badge> {
             v.iter().map(|x| Badge::new(*x, Tone::Neutral)).collect()
         };
+        // A field Jira has no value for is not shown at all.
+        let kv = |label: &str, value: &str| {
+            (!value.is_empty()).then(|| RightRow::Kv(Kv::text(label, value.to_string())))
+        };
         let mut out = vec![RightSection {
             title: "People".to_string(),
-            rows: vec![
-                RightRow::Kv(Kv::text("Assignee", t.assignee)),
-                RightRow::Kv(Kv::text("Reporter", t.reporter)),
-            ],
+            rows: [
+                kv(
+                    "Assignee",
+                    if t.assignee.is_empty() {
+                        "Unassigned"
+                    } else {
+                        t.assignee
+                    },
+                ),
+                kv("Reporter", t.reporter),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
         }];
-        let mut plan = vec![
-            RightRow::Kv(Kv::text("Type", t.kind)),
-            RightRow::Kv(Kv::badges(
+        let mut plan: Vec<RightRow> = [
+            kv("Type", t.kind),
+            Some(RightRow::Kv(Kv::badges(
                 "Priority",
                 vec![Badge::new(t.priority.label(), priority_tone(t.priority))],
-            )),
-            RightRow::Kv(Kv::text("Sprint", t.sprint)),
-            RightRow::Kv(Kv::text("Epic", t.epic)),
-            RightRow::Kv(Kv::text("Fix version", t.fix_version)),
-            RightRow::Kv(Kv::text("Estimate", t.estimate)),
-        ];
+            ))),
+            kv("Sprint", t.sprint),
+            kv("Epic", t.epic),
+            kv("Fix version", t.fix_version),
+            kv("Estimate", t.estimate),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
         if self.duration_ms(t) > 0 {
             plan.push(RightRow::Kv(Kv::text(
                 "Time spent",
                 Self::fmt_dur(self.duration_ms(t)),
             )));
         }
-        plan.push(RightRow::Muted(format!(
-            "Created {} · updated {}",
-            t.created, t.updated
-        )));
+        let when: Vec<String> = [("Created", t.created), ("updated", t.updated)]
+            .into_iter()
+            .filter(|(_, v)| !v.is_empty())
+            .map(|(k, v)| format!("{k} {v}"))
+            .collect();
+        if !when.is_empty() {
+            plan.push(RightRow::Muted(when.join(" · ")));
+        }
         out.push(RightSection {
             title: "Planning".to_string(),
             rows: plan,

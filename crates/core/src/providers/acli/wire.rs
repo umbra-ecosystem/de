@@ -16,7 +16,9 @@ use super::adf::body_to_text;
 use super::time::parse_timestamp;
 use crate::domain::TicketKey;
 use crate::providers::error::{ProviderError, ProviderResult};
-use crate::providers::model::{RemoteComment, RemoteTicket};
+use crate::providers::model::{
+    Attachment, IssueLink, RemoteComment, RemoteTicket, Subtask, TicketDetail,
+};
 
 pub const TOOL: &str = "acli";
 
@@ -283,6 +285,160 @@ pub fn parse_comment_field(
     Ok((comments, total))
 }
 
+/// A `view --fields '*all'` output: the ticket's comments (as [`parse_comment_field`]) and its detail. The
+/// detail is read leniently: a field that is missing or in a shape we do not know is left empty, so it can
+/// never cost the comments.
+pub fn parse_view_all(
+    output: &str,
+    ticket: &TicketKey,
+) -> ProviderResult<(TicketDetail, Vec<RemoteComment>, Option<usize>)> {
+    let (comments, total) = parse_comment_field(output, ticket)?;
+    let doc = json_documents(output, "ticket detail")?
+        .into_iter()
+        .next()
+        .map(|d| match d {
+            Value::Array(items) => items.into_iter().next().unwrap_or(Value::Null),
+            other => other,
+        })
+        .unwrap_or(Value::Null);
+    Ok((detail_from(&doc), comments, total))
+}
+
+fn str_at<'a>(v: &'a Value, pointer: &str) -> Option<&'a str> {
+    v.pointer(pointer)
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+}
+
+fn names_at(f: &Value, field: &str) -> Vec<String> {
+    f.get(field)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|i| i.get("name").and_then(Value::as_str).or(i.as_str()))
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The sprint field is a custom field whose id differs per site, so it is found by its shape: an array of
+/// objects with a `boardId` and a `name`. The active sprint wins, else the newest (last) one.
+fn sprint_of(fields: &Value) -> Option<String> {
+    let map = fields.as_object()?;
+    map.values().find_map(|v| {
+        let sprints: Vec<&Value> = v
+            .as_array()?
+            .iter()
+            .filter(|s| s.get("boardId").is_some() && s.get("name").is_some())
+            .collect();
+        let chosen = sprints
+            .iter()
+            .find(|s| s.get("state").and_then(Value::as_str) == Some("active"))
+            .or(sprints.last())?;
+        chosen.get("name")?.as_str().map(String::from)
+    })
+}
+
+fn detail_from(doc: &Value) -> TicketDetail {
+    let f = doc.get("fields").unwrap_or(&Value::Null);
+    let time = |field: &str| {
+        f.get(field)
+            .and_then(Value::as_str)
+            .and_then(parse_timestamp)
+    };
+    TicketDetail {
+        issue_type: str_at(f, "/issuetype/name").map(String::from),
+        reporter: str_at(f, "/reporter/displayName")
+            .or_else(|| str_at(f, "/reporter/name"))
+            .map(String::from),
+        created_at: time("created"),
+        updated_at: time("updated"),
+        labels: f
+            .get("labels")
+            .and_then(Value::as_array)
+            .map(|l| {
+                l.iter()
+                    .filter_map(Value::as_str)
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        components: names_at(f, "components"),
+        fix_versions: names_at(f, "fixVersions"),
+        sprint: sprint_of(f),
+        parent: doc
+            .pointer("/fields/parent")
+            .or_else(|| f.get("parent"))
+            .and_then(|p| {
+                let key = p.get("key")?.as_str()?;
+                let title = str_at(p, "/fields/summary").unwrap_or_default();
+                Some((key.to_string(), title.to_string()))
+            }),
+        original_estimate: str_at(f, "/timetracking/originalEstimate").map(String::from),
+        description: f
+            .get("description")
+            .map(super::adf::body_to_rich)
+            .unwrap_or_default(),
+        attachments: f
+            .get("attachment")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|a| {
+                        Some(Attachment {
+                            name: a.get("filename")?.as_str()?.to_string(),
+                            bytes: a.get("size").and_then(Value::as_u64).unwrap_or(0),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        links: f
+            .get("issuelinks")
+            .and_then(Value::as_array)
+            .map(|items| items.iter().filter_map(link_from).collect())
+            .unwrap_or_default(),
+        subtasks: f
+            .get("subtasks")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|s| {
+                        Some(Subtask {
+                            key: s.get("key")?.as_str()?.parse().ok()?,
+                            title: str_at(s, "/fields/summary")
+                                .unwrap_or_default()
+                                .to_string(),
+                            done: str_at(s, "/fields/status/statusCategory/key") == Some("done"),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
+}
+
+fn link_from(link: &Value) -> Option<IssueLink> {
+    let (relation, issue) = match (link.get("outwardIssue"), link.get("inwardIssue")) {
+        (Some(issue), _) => (str_at(link, "/type/outward")?, issue),
+        (None, Some(issue)) => (str_at(link, "/type/inward")?, issue),
+        (None, None) => return None,
+    };
+    Some(IssueLink {
+        relation: relation.to_string(),
+        key: issue.get("key")?.as_str()?.parse().ok()?,
+        title: str_at(issue, "/fields/summary").unwrap_or_default().to_string(),
+        status: str_at(issue, "/fields/status/name")
+            .unwrap_or_default()
+            .to_string(),
+    })
+}
+
 /// One comment object (the result of `comment create`).
 pub fn parse_created_comment(
     output: &str,
@@ -336,12 +492,14 @@ fn comment_from(
         _ => user_of(&c.update_author),
     };
     let (body_text, mentions) = body_to_text(&c.body);
+    let rich = super::adf::body_to_rich(&c.body);
     Ok(RemoteComment {
         id,
         ticket: ticket.clone(),
         author_account_id: account,
         author_name: name,
         body_text,
+        rich,
         mentions,
         created_at: timestamp_of(&c.created, what, output)?,
     })

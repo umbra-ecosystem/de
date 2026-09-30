@@ -213,6 +213,9 @@ pub enum Block {
     Heading(String),
     List(Vec<String>),
     Code(String),
+    /// A numbered list; the items carry no numbers of their own.
+    Numbered(Vec<String>),
+    Quote(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

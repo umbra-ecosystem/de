@@ -29,7 +29,7 @@ fn cache_upgrades_from_every_earlier_version_keeping_data() {
         .unwrap()
         .schema_version()
         .unwrap() as usize;
-    assert!(latest >= 3);
+    assert!(latest >= 5);
     for from in 1..latest {
         let dir = tempfile::tempdir().unwrap();
         {
@@ -56,6 +56,7 @@ fn cache_upgrades_from_every_earlier_version_keeping_data() {
         // The new tables are usable after the upgrade.
         prs::upsert(&store, &pr("acme/web", 1, "b", "develop"), 1).unwrap();
         sync_state::record_ok(&store, "jira", 1).unwrap();
+        super::jira_details::upsert(&store, &key("PROJ-1"), &Default::default(), 1).unwrap();
     }
 }
 

@@ -104,6 +104,20 @@ CREATE TABLE jira_tickets (
 ) STRICT;
 ";
 
+/// The part of a Jira ticket the search row does not carry (description, reporter, sprint, links...), as one JSON
+/// document per ticket. Kept apart from `jira_tickets` so a search refresh never drops it.
+const CACHE_JIRA_DETAILS: &str = "
+CREATE TABLE jira_details (
+    key        TEXT PRIMARY KEY NOT NULL,
+    json       TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
+) STRICT;
+";
+
+/// Comments keep their block structure (paragraphs, lists, code) next to the flat text, which stays what
+/// mentions and suggestions read. Comments cached before this have it empty until the next sync.
+const CACHE_COMMENT_RICH: &str = "ALTER TABLE jira_comments ADD COLUMN rich TEXT NOT NULL DEFAULT '';";
+
 /// What activating a ticket changed, so deactivating (or recovering from a crash) can put
 /// everything back using nothing but this database.
 const STATE_ACTIVATION: &str = "
@@ -342,6 +356,8 @@ static CACHE: LazyLock<Migrations<'static>> = LazyLock::new(|| {
         M::up(APP_META),
         M::up(CACHE_JIRA),
         M::up(CACHE_PROVIDERS),
+        M::up(CACHE_JIRA_DETAILS),
+        M::up(CACHE_COMMENT_RICH),
     ])
 });
 

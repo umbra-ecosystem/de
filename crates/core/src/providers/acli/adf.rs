@@ -149,7 +149,11 @@ fn block_children(node: &Value) -> Vec<String> {
 }
 
 fn inline_children(node: &Value) -> String {
-    children(node).iter().map(render_inline).collect()
+    children(node).iter().map(|n| render_inline(n, false)).collect()
+}
+
+fn rich_inline_children(node: &Value) -> String {
+    children(node).iter().map(|n| render_inline(n, true)).collect()
 }
 
 fn render_block(node: &Value) -> String {
@@ -190,7 +194,7 @@ fn render_block(node: &Value) -> String {
             .collect::<Vec<_>>()
             .join("\n"),
         "media" | "mediaSingle" | "mediaGroup" => "[attachment]".into(),
-        _ if is_inline(t) => render_inline(node),
+        _ if is_inline(t) => render_inline(node, false),
         // "doc", "listItem", "panel", "expand", table cells and node types we have never
         // heard of: render what is inside.
         _ => {
@@ -235,7 +239,8 @@ fn fallback_text(node: &Value) -> String {
         .into()
 }
 
-fn render_inline(node: &Value) -> String {
+/// `rich` writes a mention as `@[Name|account id]` (what the views highlight); plain text writes `@Name`.
+fn render_inline(node: &Value, rich: bool) -> String {
     match node_type(node) {
         "text" => {
             let text = node.get("text").and_then(Value::as_str).unwrap_or("");
@@ -255,7 +260,11 @@ fn render_inline(node: &Value) -> String {
         "mention" => {
             let name = attr_str(node, "text").map(|t| t.trim_start_matches('@'));
             match (name, attr_str(node, "id")) {
+                // The account id rides along so a view can tell which mention is the reader.
+                (Some(n), Some(id)) if !n.is_empty() && rich => format!("@[{n}|{id}]"),
+                (Some(n), _) if !n.is_empty() && rich => format!("@[{n}]"),
                 (Some(n), _) if !n.is_empty() => format!("@{n}"),
+                (_, Some(id)) if rich => format!("@[{id}]"),
                 (_, Some(id)) => format!("@{id}"),
                 _ => "@".into(),
             }
@@ -269,7 +278,7 @@ fn render_inline(node: &Value) -> String {
         "date" => attr_str(node, "timestamp").unwrap_or("").into(),
         "media" | "mediaInline" => "[attachment]".into(),
         _ => {
-            let inner = inline_children(node);
+            let inner: String = children(node).iter().map(|n| render_inline(n, rich)).collect();
             if inner.is_empty() {
                 fallback_text(node)
             } else {
@@ -279,10 +288,174 @@ fn render_inline(node: &Value) -> String {
     }
 }
 
+// ---- rich text ------------------------------------------------------------------------
+
+/// A body as light markup the views turn into blocks: paragraphs and other blocks separated by a blank line,
+/// `#` headings, `- ` and `1. ` lists (`- [ ]` tasks, nested items indented two spaces), fenced code,
+/// `> ` quotes and `@[Name|account id]` mentions. Unlike [`body_to_text`] it keeps the block structure.
+pub fn body_to_rich(body: &Value) -> String {
+    match body {
+        Value::Null => String::new(),
+        Value::String(s) => {
+            let trimmed = s.trim_start();
+            if trimmed.starts_with('{')
+                && let Ok(doc) = serde_json::from_str::<Value>(trimmed)
+                && doc.get("type").is_some()
+            {
+                return adf_to_rich(&doc);
+            }
+            string_body(s).0
+        }
+        Value::Object(_) => adf_to_rich(body),
+        other => other.to_string(),
+    }
+}
+
+pub fn adf_to_rich(node: &Value) -> String {
+    rich_blocks(node).join("\n\n").trim().to_string()
+}
+
+/// The blocks inside `node`. A node whose children are all inline is one paragraph.
+fn rich_blocks(node: &Value) -> Vec<String> {
+    let kids = children(node);
+    if !kids.is_empty() && kids.iter().all(|k| is_inline(node_type(k))) {
+        return vec![rich_inline_children(node)];
+    }
+    kids.iter()
+        .map(rich_block)
+        .filter(|s| !s.trim().is_empty())
+        .collect()
+}
+
+fn rich_block(node: &Value) -> String {
+    let t = node_type(node);
+    match t {
+        "paragraph" | "caption" => rich_inline_children(node),
+        "heading" => {
+            let level = node
+                .pointer("/attrs/level")
+                .and_then(Value::as_u64)
+                .unwrap_or(1)
+                .clamp(1, 6) as usize;
+            format!("{} {}", "#".repeat(level), rich_inline_children(node))
+        }
+        "codeBlock" => format!("```\n{}\n```", inline_children(node)),
+        "bulletList" => rich_list(node, |_, _| "- ".into()),
+        "orderedList" => {
+            let start = node
+                .pointer("/attrs/order")
+                .and_then(Value::as_u64)
+                .unwrap_or(1);
+            rich_list(node, |i, _| format!("{}. ", start + i as u64))
+        }
+        "taskList" => rich_list(node, |_, item| {
+            if attr_str(item, "state") == Some("DONE") {
+                "- [x] ".into()
+            } else {
+                "- [ ] ".into()
+            }
+        }),
+        "blockquote" => rich_blocks(node)
+            .join("\n\n")
+            .lines()
+            .map(|l| {
+                if l.is_empty() {
+                    ">".to_string()
+                } else {
+                    format!("> {l}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        "rule" => "---".into(),
+        "table" => children(node)
+            .iter()
+            .map(|row| {
+                let cells: Vec<String> = children(row)
+                    .iter()
+                    .map(|cell| rich_blocks(cell).join(" "))
+                    .collect();
+                format!("| {} |", cells.join(" | "))
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        "media" | "mediaSingle" | "mediaGroup" => "[attachment]".into(),
+        _ if is_inline(t) => render_inline(node, true),
+        _ => {
+            let kids = children(node);
+            if kids.is_empty() {
+                fallback_text(node)
+            } else {
+                rich_blocks(node).join("\n\n")
+            }
+        }
+    }
+}
+
+/// A list: each item's first block on the marker's line, anything after it (another paragraph, a nested list)
+/// indented under it.
+fn rich_list(node: &Value, marker: impl Fn(usize, &Value) -> String) -> String {
+    children(node)
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let marker = marker(i, item);
+            let inner = rich_blocks(item).join("\n");
+            let pad = "  ";
+            let mut lines = inner.lines();
+            let mut out = format!("{marker}{}", lines.next().unwrap_or(""));
+            for l in lines {
+                out.push('\n');
+                out.push_str(pad);
+                out.push_str(l);
+            }
+            out
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn rich_text_keeps_the_block_structure() {
+        let doc = json!({"type":"doc","version":1,"content":[
+            {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Plan"}]},
+            {"type":"paragraph","content":[
+                {"type":"text","text":"Ask "},
+                {"type":"mention","attrs":{"id":"a1","text":"@Ada"}},
+                {"type":"hardBreak"},
+                {"type":"text","text":"second line"}
+            ]},
+            {"type":"bulletList","content":[
+                {"type":"listItem","content":[
+                    {"type":"paragraph","content":[{"type":"text","text":"one"}]},
+                    {"type":"bulletList","content":[{"type":"listItem","content":[
+                        {"type":"paragraph","content":[{"type":"text","text":"nested"}]}]}]}
+                ]},
+                {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"two"}]}]}
+            ]},
+            {"type":"orderedList","attrs":{"order":3},"content":[
+                {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"third"}]}]}
+            ]},
+            {"type":"taskList","content":[
+                {"type":"taskItem","attrs":{"state":"DONE"},"content":[{"type":"text","text":"done"}]},
+                {"type":"taskItem","attrs":{"state":"TODO"},"content":[{"type":"text","text":"todo"}]}
+            ]},
+            {"type":"codeBlock","content":[{"type":"text","text":"let x = 1;"}]},
+            {"type":"blockquote","content":[{"type":"paragraph","content":[{"type":"text","text":"quoted"}]}]},
+            {"type":"paragraph","content":[{"type":"text","text":"End"}]}
+        ]});
+        assert_eq!(
+            adf_to_rich(&doc),
+            "## Plan\n\nAsk @[Ada|a1]\nsecond line\n\n- one\n  - nested\n- two\n\n3. third\n\n- [x] done\n- [ ] todo\n\n```\nlet x = 1;\n```\n\n> quoted\n\nEnd"
+        );
+        // The plain rendering is unchanged: no headings marks, mentions as `@Name`.
+        assert!(adf_to_text(&doc).starts_with("Plan\nAsk @Ada"));
+    }
 
     #[test]
     fn paragraphs_marks_links_breaks_and_mentions() {

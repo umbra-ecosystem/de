@@ -87,6 +87,12 @@ In the app, use **Sync now** (the app also syncs once when it opens). The status
 
 A failed sync never deletes cached data. Tickets are removed from the cache only after a sync that completed fully shows they left the pool.
 
+## Ticket detail and rich text
+
+A sync reads each ticket once with `acli jira workitem view KEY --fields '*all'`. That one call gives the comments and the detail: description, type, reporter, created and updated times, labels, components, fix versions, sprint, epic, estimate, attachments, linked issues and subtasks. The description and comments keep their structure (headings, paragraphs and line breaks, bullet and numbered lists, checklists, code blocks, quotes and mentions). A field Jira has no value for is left out of the ticket page.
+
+Because of the extra call per ticket, a sync takes longer when the Review pool is large (about two seconds per ticket). Comments cached by an earlier version show as plain lines until the next sync rewrites them.
+
 ## Sync logs
 
 Every sync writes a raw log of what it asked Jira for and what came back: the `acli` commands, their exit codes and timings, and the output as `acli` printed it. One file per run, named by its start time in UTC (`sync-20261001-094012.log`), in `<data dir>/logs` (on macOS `~/Library/Application Support/Umbra.de/logs`).

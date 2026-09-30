@@ -152,16 +152,24 @@ pub fn overview(ui: &Ui, cx: &App, inputs: &Inputs, o: &OverviewVm) -> Div {
     let mut bands: Vec<(String, AnyElement)> = Vec::new();
     bands.push((
         "Description".to_string(),
-        pad(blocks(pal, cx, &o.description)).into_any_element(),
-    ));
-    bands.push((
-        "Acceptance criteria".to_string(),
-        pad(checks(
-            ui,
-            o.acceptance.iter().map(|a| (false, a.clone())).collect(),
-        ))
+        pad(if o.description.is_empty() {
+            faint(pal, "No description in Jira.").into_any_element()
+        } else {
+            blocks(pal, cx, &o.description).into_any_element()
+        })
         .into_any_element(),
     ));
+    // Acceptance criteria are only a band when the ticket has some.
+    if !o.acceptance.is_empty() {
+        bands.push((
+            "Acceptance criteria".to_string(),
+            pad(checks(
+                ui,
+                o.acceptance.iter().map(|a| (false, a.clone())).collect(),
+            ))
+            .into_any_element(),
+        ));
+    }
     if !o.subtasks.is_empty() {
         bands.push((
             "Subtasks".to_string(),
