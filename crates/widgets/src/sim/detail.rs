@@ -505,6 +505,10 @@ impl Sim {
             .iter()
             .filter(|(_, s)| matches!(s, UatState::Overlap(_)))
             .collect();
+        if bad.is_empty() && ov.is_empty() {
+            // Merging cleanly is the normal case: say nothing.
+            return None;
+        }
         let (tone, title) = if !bad.is_empty() {
             (Tone::Bad, "✕ Conflicts with uat")
         } else if !ov.is_empty() {
@@ -642,6 +646,7 @@ impl Sim {
                                 adds: f.adds,
                                 dels: f.dels,
                                 progress: (!since).then(|| format!("{nv}/{}", hunks.len())),
+                                viewed_all: !since && nv == hunks.len(),
                                 selected: p.id == pr.id && i == fi,
                                 select: Intent::SelectFile {
                                     key: key.clone(),
@@ -818,12 +823,7 @@ impl Sim {
                 reviewers: pr
                     .reviewers
                     .iter()
-                    .map(|r| {
-                        Badge::new(
-                            format!("{}{}", r.name, if r.approved { " ✓" } else { "" }),
-                            if r.approved { Tone::Ok } else { Tone::Neutral },
-                        )
-                    })
+                    .map(|r| (r.name.clone(), r.approved))
                     .collect(),
             }),
             groups,

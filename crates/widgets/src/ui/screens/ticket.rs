@@ -8,25 +8,36 @@ use crate::ui::ctx::{Inputs, Ui};
 use crate::ui::widgets::*;
 use crate::vm::*;
 
+/// The part of the screen that never scrolls: the ticket's identity and its tabs.
 fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
     let pal = &ui.pal;
     div()
         .flex()
         .flex_col()
-        .gap_2()
+        .flex_none()
+        .gap_3()
+        .px_6()
+        .pt_4()
         .child(
             div()
                 .flex()
                 .items_center()
-                .justify_between()
                 .gap_3()
+                .child(key_text(ui, &h.key))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_lg()
+                        .child(h.title.clone()),
+                )
                 .child(
                     div()
                         .flex()
-                        .flex_wrap()
                         .items_center()
-                        .gap_2()
-                        .child(key_text(ui, &h.key))
+                        .gap_1()
+                        .flex_none()
                         .child(pill(pal, &h.jira))
                         .when_some(h.local.clone(), |d, b| d.child(pill(pal, &b)))
                         .when(h.hotfix, |d| d.child(hotfix_pill(pal)))
@@ -34,9 +45,6 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
                 )
                 .child(buttons(ui, &h.actions)),
         )
-        .child(div().text_xl().child(h.title.clone()))
-        .children(h.banners.iter().map(|b| banner(ui, b)))
-        .child(stepper(pal, &h.stepper))
         .child(tab_bar(
             ui,
             "ticket-tabs",
@@ -52,6 +60,9 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
         ))
 }
 
+/// A ticket: a fixed head (identity, tabs) above a body. The body scrolls, except on Review, whose panes scroll
+/// on their own, so the tabs are always where you left them.
+#[allow(clippy::too_many_arguments)]
 pub fn ticket(
     ui: &Ui,
     cx: &App,
@@ -64,20 +75,59 @@ pub fn ticket(
 ) -> Div {
     let pal = &ui.pal;
     let _ = (comment, checklist_add);
+    let notices = div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .children(h.banners.iter().map(|b| banner(ui, b)));
+    let content = match body {
+        TicketBody::Review(r) => div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h_0()
+            .when(!h.banners.is_empty(), |d| {
+                d.child(div().px_6().py_2().child(notices))
+            })
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .child(review::review(ui, cx, inputs, r)),
+            )
+            .into_any_element(),
+        other => div()
+            .id("ticket-scroll")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .px_6()
+            .py_4()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_4()
+                    .child(notices)
+                    .child(stepper(pal, &h.stepper))
+                    .child(match other {
+                        TicketBody::Overview(o) => overview::overview(ui, cx, inputs, o),
+                        TicketBody::Test(t) => test_tab::test(ui, cx, inputs, &h.key, t),
+                        TicketBody::Ship(s) => ship::ship(ui, cx, inputs, s),
+                        TicketBody::Timeline(rows) => timeline(ui, rows),
+                        TicketBody::Review(_) => div(),
+                    })
+                    .child(div().h_8()),
+            )
+            .into_any_element(),
+    };
     div()
         .flex()
         .flex_col()
-        .gap_4()
-        .child(head(ui, h, tab))
-        .child(match body {
-            TicketBody::Overview(o) => overview::overview(ui, cx, inputs, o),
-            TicketBody::Review(r) => review::review(ui, cx, inputs, r),
-            TicketBody::Test(t) => test_tab::test(ui, cx, inputs, &h.key, t),
-            TicketBody::Ship(s) => ship::ship(ui, cx, inputs, s),
-            TicketBody::Timeline(rows) => timeline(ui, &h.key, rows),
-        })
-        .child(div().h_8())
+        .size_full()
         .text_color(pal.fg)
+        .child(head(ui, h, tab))
+        .child(content)
 }
 
 fn audit_table(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
@@ -138,9 +188,10 @@ pub fn audit_rows(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
     audit_table(ui, rows, show_ticket)
 }
 
-fn timeline(ui: &Ui, key: &str, rows: &[AuditRow]) -> Div {
+/// The ticket's audit log. The tab already says what it is, so there is no title.
+fn timeline(ui: &Ui, rows: &[AuditRow]) -> Div {
     let pal = &ui.pal;
-    section(pal, format!("Audit log for {key}")).child(if rows.is_empty() {
+    div().child(if rows.is_empty() {
         empty_state(pal, "No activity yet for this ticket.").into_any_element()
     } else {
         audit_table(ui, rows, false).into_any_element()

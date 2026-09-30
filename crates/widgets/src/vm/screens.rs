@@ -299,6 +299,8 @@ pub struct FileRowVm {
     pub adds: u32,
     pub dels: u32,
     pub progress: Option<String>,
+    /// Every hunk of the file is marked viewed.
+    pub viewed_all: bool,
     pub selected: bool,
     pub select: Intent,
 }
@@ -314,7 +316,8 @@ pub struct PrHeadVm {
     pub title: String,
     pub source: String,
     pub dest: Badge,
-    pub reviewers: Vec<Badge>,
+    /// `(name, approved)`.
+    pub reviewers: Vec<(String, bool)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -1,5 +1,6 @@
 //! Ship tab: one vertical stepper, each step shows its state and the one thing to do next.
 
+use gpui_kit::component::{Icon, IconName, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
@@ -7,19 +8,62 @@ use crate::ui::ctx::{Inputs, Ui};
 use crate::ui::widgets::*;
 use crate::vm::*;
 
-fn step(ui: &Ui, n: usize, title: &str, state: StepState, body: Div) -> Div {
-    let pal = &ui.pal;
-    div().flex().gap_3().child(step_badge(pal, n, state)).child(
-        div()
+fn state_icon(pal: &crate::ui::theme::Pal, state: StepState) -> AnyElement {
+    match state {
+        StepState::Done => Icon::new(IconName::CircleCheck)
+            .small()
+            .text_color(pal.ok)
+            .into_any_element(),
+        StepState::Bad => Icon::new(IconName::TriangleAlert)
+            .small()
+            .text_color(pal.bad)
+            .into_any_element(),
+        StepState::Now => div()
+            .size_4()
             .flex()
-            .flex_col()
-            .gap_2()
-            .flex_1()
-            .min_w_0()
-            .pb_4()
-            .child(div().text_base().child(title.to_string()))
-            .child(body),
-    )
+            .items_center()
+            .justify_center()
+            .child(dot(pal.accent))
+            .into_any_element(),
+        StepState::Todo => div()
+            .size_4()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(dot(pal.faint))
+            .into_any_element(),
+    }
+}
+
+/// One stage of shipping: a status icon and a title, its content beneath, hairlines between stages.
+fn step(ui: &Ui, index: usize, title: &str, state: StepState, body: Div) -> Div {
+    let pal = &ui.pal;
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .py_3()
+        .when(index > 0, |d| {
+            d.border_t_1().border_color(pal.border.opacity(0.6))
+        })
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(state_icon(pal, state))
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(if state == StepState::Todo {
+                            pal.muted
+                        } else {
+                            pal.fg
+                        })
+                        .child(title.to_string()),
+                ),
+        )
+        .child(div().pl_6().child(body))
 }
 
 fn row(ui: &Ui) -> Div {
@@ -44,14 +88,13 @@ fn repo_cell(ui: &Ui, repo: &str) -> Div {
 fn integrate(ui: &Ui, b: &IntegrateBody) -> Div {
     let pal = &ui.pal;
     match b {
-        IntegrateBody::Inactive(msg) => muted(pal, msg.clone()),
+        IntegrateBody::Inactive(msg) => faint(pal, msg.clone()),
         IntegrateBody::Pushed { rows, new_commits } => div()
             .flex()
             .flex_col()
             .child(div().flex().flex_col().children(rows.iter().map(|(repo, commit, at)| {
                 row(ui)
                     .child(repo_cell(ui, repo))
-                    .child(pill(pal, &Badge::new("on uat", Tone::Ok)))
                     .child(div().font_family(ui.mono.clone()).text_xs().text_color(pal.faint).child(commit.clone()))
                     .child(faint(pal, at.clone()))
             })))
@@ -78,14 +121,7 @@ fn integrate(ui: &Ui, b: &IntegrateBody) -> Div {
                     .flex_col()
                     .gap_1()
                     .children(rows.iter().map(|r| prep_row(ui, r)))
-                    .child(
-                        div()
-                            .flex()
-                            .gap_2()
-                            .pt_1()
-                            .child(pill(pal, &Badge::new("overlay guard ✓ by SHA", Tone::Ok)))
-                            .child(pill(pal, &Badge::new("no overlay in worktree ✓", Tone::Ok))),
-                    ),
+                    .child(faint(pal, "Overlay guard passed (by SHA); no overlay in the worktree.")),
             })
             .when(!prepush.is_empty(), |d| {
                 d.child(
@@ -93,11 +129,7 @@ fn integrate(ui: &Ui, b: &IntegrateBody) -> Div {
                         .flex()
                         .flex_col()
                         .gap_1()
-                        .p_2()
-                        .rounded_md()
-                        .border_1()
-                        .border_color(pal.border)
-                        .child(faint(pal, "BEFORE YOU PUSH"))
+                        .child(faint(pal, "Before you push"))
                         .children(prepush.iter().map(|g| {
                             div()
                                 .flex()
@@ -170,7 +202,7 @@ fn prep_row(ui: &Ui, r: &PrepRow) -> Div {
 fn runs(ui: &Ui, cx: &App, s: &ShipVm) -> Div {
     let pal = &ui.pal;
     if s.runs.is_empty() {
-        return muted(pal, "Workflow runs appear after the push.");
+        return faint(pal, "Workflow runs appear after the push.");
     }
     div()
         .flex()
@@ -183,7 +215,11 @@ fn runs(ui: &Ui, cx: &App, s: &ShipVm) -> Div {
                 .child(
                     row(ui)
                         .child(repo_cell(ui, &r.repo))
-                        .child(deploy_chip(pal, &r.chip))
+                        .child(if r.chip.tone == Tone::Ok {
+                            faint(pal, format!("deployed to alpha · run #{}", r.chip.run))
+                        } else {
+                            deploy_chip(pal, &r.chip)
+                        })
                         .when_some(r.rerun.clone(), |d, a| d.child(button(ui, &a))),
                 )
                 .when_some(r.failure.clone(), |d, (step, run, log)| {
@@ -193,10 +229,9 @@ fn runs(ui: &Ui, cx: &App, s: &ShipVm) -> Div {
                             .flex_col()
                             .gap_1()
                             .my_1()
-                            .p_2()
-                            .rounded_md()
-                            .border_1()
-                            .border_color(pal.bad.opacity(0.5))
+                            .pl_3()
+                            .border_l_2()
+                            .border_color(pal.bad)
                             .child(
                                 div()
                                     .flex()
@@ -222,7 +257,7 @@ fn runs(ui: &Ui, cx: &App, s: &ShipVm) -> Div {
 fn announce(ui: &Ui, cx: &App, inputs: &Inputs, key: &TicketKey, b: &AnnounceBody) -> Div {
     let pal = &ui.pal;
     match b {
-        AnnounceBody::Unavailable => muted(pal, "Available when every touched repo is deployed."),
+        AnnounceBody::Unavailable => faint(pal, "Available when every touched repo is deployed."),
         AnnounceBody::Compose(a) => div().flex().child(button(ui, a)),
         AnnounceBody::Draft { id, post, .. } => div()
             .flex()
@@ -242,13 +277,13 @@ fn announce(ui: &Ui, cx: &App, inputs: &Inputs, key: &TicketKey, b: &AnnounceBod
             .flex_col()
             .gap_2()
             .child(code_block(pal, cx, text.clone()))
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(pill(pal, &Badge::new("posted to Jira", Tone::Ok)))
-                    .when_some(moved.clone(), |d, b| d.child(pill(pal, &b))),
-            )
+            .child(faint(
+                pal,
+                match moved {
+                    Some(b) => format!("Posted to Jira · now {}", b.text),
+                    None => "Posted to Jira".to_string(),
+                },
+            ))
             .when_some(transition.clone(), |d, a| {
                 d.child(div().flex().child(button(ui, &a)))
             }),
@@ -261,7 +296,7 @@ pub fn ship(ui: &Ui, cx: &App, inputs: &Inputs, s: &ShipVm) -> Div {
         .flex()
         .flex_col()
         .gap_2()
-        .child(muted(pal, s.after_text.clone()))
+        .child(faint(pal, s.after_text.clone()))
         .when_some(s.approve_all.clone(), |d, a| {
             d.child(div().flex().child(button(ui, &a)))
         })
@@ -283,18 +318,18 @@ pub fn ship(ui: &Ui, cx: &App, inputs: &Inputs, s: &ShipVm) -> Div {
         .flex_col()
         .child(step(
             ui,
-            1,
+            0,
             "Integrate to uat",
             s.integrate_state,
             integrate(ui, &s.integrate),
         ))
-        .child(step(ui, 2, "GitHub Actions", s.runs_state, runs(ui, cx, s)))
+        .child(step(ui, 1, "GitHub Actions", s.runs_state, runs(ui, cx, s)))
         .child(step(
             ui,
-            3,
+            2,
             "Announce",
             s.announce_state,
             announce(ui, cx, inputs, &s.key, &s.announce),
         ))
-        .child(step(ui, 4, "After alpha", s.after_state, after))
+        .child(step(ui, 3, "After alpha", s.after_state, after))
 }

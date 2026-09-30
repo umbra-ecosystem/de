@@ -384,13 +384,16 @@ impl AppView {
         let ui = self.ui(cx, self.weak.clone());
         let screen = self.screen(&ui, cx, &self.vm.screen);
         // Lists own their scrolling (a uniform list needs a bounded height); every other screen scrolls as a page.
-        let is_list = matches!(self.vm.screen, ScreenVm::Next(_) | ScreenVm::Tickets(_));
+        let is_list = matches!(
+            self.vm.screen,
+            ScreenVm::Next(_) | ScreenVm::Tickets(_) | ScreenVm::Ticket { .. }
+        );
+        let is_ticket = matches!(self.vm.screen, ScreenVm::Ticket { .. });
         let body = if is_list {
             div()
                 .flex_1()
                 .min_h_0()
-                .px_4()
-                .pt_4()
+                .when(!is_ticket, |d| d.px_4().pt_4())
                 .child(screen)
                 .into_any_element()
         } else {
