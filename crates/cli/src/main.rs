@@ -11,7 +11,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::{
     cli::{
-        Cli, Commands, GitCommands, SelfCommands, TaskCommands, TicketCommands, WorkspaceCommands,
+        Cli, Commands, GitCommands, ProvidersCommands, SelfCommands, TaskCommands, TicketCommands, WorkspaceCommands,
     },
     utils::theme::Theme,
     workspace::Workspace,
@@ -65,6 +65,10 @@ fn main() -> eyre::Result<()> {
             }
             TicketCommands::Note { key, text } => commands::ticket::note(key, text),
             TicketCommands::Check { command } => commands::ticket::check(command),
+        },
+        Commands::Sync { only, force } => commands::sync::sync(only.map(Into::into), force),
+        Commands::Providers { command } => match command {
+            ProvidersCommands::Check => commands::sync::providers_check(),
         },
         Commands::Compose {
             project,
