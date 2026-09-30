@@ -1,8 +1,8 @@
 //! Jira sync: the Review pool, tracked tickets, and comments.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use super::SyncContext;
+use super::{FULL_REFRESH_AFTER_SECS, SyncContext};
 use super::report::{Collector, Problem, SourceReport, Step, SyncSource, local, run_source};
 use crate::domain::TicketKey;
 use crate::providers::{RemoteTicket, TicketProvider};
@@ -58,6 +58,43 @@ fn search_and_cache(
     }
 }
 
+/// Which tickets need a full `view`: those never fetched or fetched too long ago, everything on a `full` sync,
+/// and of the rest only those Jira reports as updated since they were cached. Tickets cached together are asked
+/// about together (by how long ago, in ten-minute steps plus a margin), so one search answers for most of them.
+/// When Jira cannot be asked, the tickets are fetched: slower, never stale.
+fn plan_views(
+    ctx: &SyncContext<'_>,
+    jira: &dyn TicketProvider,
+    c: &mut Collector,
+    wanted: &BTreeSet<TicketKey>,
+) -> Result<BTreeSet<TicketKey>, Problem> {
+    let fetched = jira_details::fetched_at(ctx.cache).map_err(local)?;
+    let mut need = BTreeSet::new();
+    let mut groups: BTreeMap<u32, Vec<TicketKey>> = BTreeMap::new();
+    for key in wanted {
+        match fetched.get(key) {
+            Some(at) if !ctx.full && ctx.now - at < FULL_REFRESH_AFTER_SECS => {
+                let minutes = u32::try_from((ctx.now - at).max(0) / 60).unwrap_or(u32::MAX);
+                let window = (minutes / 10 + 1).saturating_mul(10).saturating_add(5);
+                groups.entry(window).or_default().push(key.clone());
+            }
+            _ => {
+                need.insert(key.clone());
+            }
+        }
+    }
+    for (window, group) in groups {
+        match jira.changed_since(&group, window) {
+            Ok(changed) => need.extend(changed),
+            Err(e) => {
+                c.handle("which tickets changed", &e)?;
+                need.extend(group);
+            }
+        }
+    }
+    Ok(need)
+}
+
 fn jira_body(ctx: &SyncContext<'_>, jira: &dyn TicketProvider, c: &mut Collector) -> Step {
     let jira_config = ctx.config.jira();
     let statuses = ctx.config.jira_statuses();
@@ -106,13 +143,14 @@ fn jira_body(ctx: &SyncContext<'_>, jira: &dyn TicketProvider, c: &mut Collector
         }
     }
 
-    // 4. Comments and detail of everything in the pool, returned or tracked: one `view` each.
+    // 4. Comments and detail, in full only for what changed since it was cached.
     let with_comments: BTreeSet<TicketKey> = tracked
         .iter()
         .cloned()
         .chain(seen.iter().cloned())
         .collect();
-    for key in &with_comments {
+    let to_view = plan_views(ctx, jira, c, &with_comments)?;
+    for key in &to_view {
         match jira.view(key) {
             Ok(viewed) => {
                 jira_comments::replace_for_ticket(ctx.cache, key, &viewed.comments, ctx.now)
@@ -124,6 +162,13 @@ fn jira_body(ctx: &SyncContext<'_>, jira: &dyn TicketProvider, c: &mut Collector
             }
             Err(e) => c.handle(format!("comments of {key}"), &e)?,
         }
+    }
+    if to_view.len() < with_comments.len() {
+        c.notes.push(format!(
+            "{} of {} tickets changed since they were cached; the rest were kept as they were",
+            to_view.len(),
+            with_comments.len()
+        ));
     }
 
     c.notes.extend(jira.take_warnings());

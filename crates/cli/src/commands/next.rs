@@ -341,7 +341,7 @@ pub fn do_it(id: String, workspace: Option<Slug>) -> eyre::Result<()> {
     let ran = match &s.action {
         // Automatic: no prompt.
         SuggestedAction::Sync => {
-            super::sync::sync(None, false)?;
+            super::sync::sync(None, false, false)?;
             true
         }
         // Nothing to run: say what there is to say.

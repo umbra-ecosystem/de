@@ -91,7 +91,9 @@ A failed sync never deletes cached data. Tickets are removed from the cache only
 
 A sync reads each ticket once with `acli jira workitem view KEY --fields '*all'`. That one call gives the comments and the detail: description, type, reporter, created and updated times, labels, components, fix versions, sprint, epic, estimate, attachments, linked issues and subtasks. The description and comments keep their structure (headings, paragraphs and line breaks, bullet and numbered lists, checklists, code blocks, quotes and mentions). A field Jira has no value for is left out of the ticket page.
 
-Because of the extra call per ticket, a sync takes longer when the Review pool is large (about two seconds per ticket). Comments cached by an earlier version show as plain lines until the next sync rewrites them.
+Only tickets that changed are read again. Search cannot return a ticket's update time, but it can filter on it, so a sync asks Jira once per hundred cached tickets which of them were `updated` since they were cached (`key in (...) AND updated >= "-25m"`, a relative time so the Jira site's timezone does not matter) and reads in full only those, plus tickets never read before. The sync report says how many changed. A ticket cached more than a week ago is read in full anyway, and `de sync --full` reads every ticket. If Jira cannot answer the "what changed" question, the tickets are read in full, so the cache may be slower to refresh but never stale.
+
+The first sync, or one after a long time away, reads every ticket (about two seconds each). Comments cached by an earlier version show as plain lines until their ticket next changes or a `--full` sync.
 
 ## Sync logs
 

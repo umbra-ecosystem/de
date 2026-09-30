@@ -46,6 +46,7 @@ impl World {
             now,
             force,
             min_interval: 60,
+            full: false,
         }
     }
 
@@ -832,4 +833,165 @@ fn hotfix_kind_follows_synced_prs() {
     sync_code_host(&w.ctx(2000, true), &w.bb, &repos, &[]);
     let d = ticket_kind(&w.state, &w.cache, &k, &repos).unwrap();
     assert_eq!(d.kind, crate::domain::TicketKind::Normal);
+}
+
+
+// ---------------------------------------------------------------- incremental detail fetches
+
+fn viewed(w: &World) -> Vec<String> {
+    let mut keys = w.jira.log().args_of("comments");
+    keys.sort();
+    keys
+}
+
+fn pool_of_three() -> World {
+    let w = World::new();
+    w.jira.on_search(
+        POOL_JQL,
+        vec![
+            ticket("PROJ-1", "In Review"),
+            ticket("PROJ-2", "In Review"),
+            ticket("PROJ-3", "In Review"),
+        ],
+    );
+    // A real adapter always gives a detail; that is what records when a ticket was fetched.
+    for k in ["PROJ-1", "PROJ-2", "PROJ-3", "PROJ-4"] {
+        w.jira.set_detail(&key(k), crate::providers::TicketDetail::default());
+    }
+    w
+}
+
+#[test]
+fn the_first_sync_views_everything_and_a_later_one_only_what_changed() {
+    let w = pool_of_three();
+    sync_jira(&w.ctx(1000, true), &w.jira);
+    assert_eq!(viewed(&w), ["PROJ-1", "PROJ-2", "PROJ-3"], "nothing cached yet");
+    assert_eq!(w.jira.log().count("changed_since"), 0, "nothing to compare with");
+
+    w.jira.log().clear();
+    w.jira.set_changed(vec![key("PROJ-2")]);
+    let report = sync_jira(&w.ctx(1600, true), &w.jira);
+
+    assert_eq!(viewed(&w), ["PROJ-2"]);
+    // One question for the three of them: they were cached at the same time, ten minutes ago (rounded up to the next ten, plus a five minute margin).
+    assert_eq!(w.jira.log().args_of("changed_since"), ["25m: 3"]);
+    assert!(
+        report.notes.iter().any(|n| n.starts_with("1 of 3 tickets changed")),
+        "{:?}",
+        report.notes
+    );
+    assert_eq!(report.outcome, SourceOutcome::Synced);
+}
+
+#[test]
+fn nothing_changed_means_no_views_at_all_and_the_cache_is_kept() {
+    let w = pool_of_three();
+    w.jira.set_detail(
+        &key("PROJ-1"),
+        crate::providers::TicketDetail {
+            description: "kept".into(),
+            ..Default::default()
+        },
+    );
+    sync_jira(&w.ctx(1000, true), &w.jira);
+    w.jira.log().clear();
+    w.jira.set_changed(vec![]);
+    // The fake would now give a different detail; it must not be asked.
+    w.jira.set_detail(
+        &key("PROJ-1"),
+        crate::providers::TicketDetail {
+            description: "different".into(),
+            ..Default::default()
+        },
+    );
+
+    sync_jira(&w.ctx(1100, true), &w.jira);
+
+    assert!(viewed(&w).is_empty());
+    let d = jira_details::get(&w.cache, &key("PROJ-1")).unwrap().unwrap();
+    assert_eq!(d.description, "kept");
+}
+
+#[test]
+fn a_full_sync_views_everything_whatever_jira_says() {
+    let w = pool_of_three();
+    sync_jira(&w.ctx(1000, true), &w.jira);
+    w.jira.log().clear();
+    w.jira.set_changed(vec![]);
+
+    let mut ctx = w.ctx(1100, true);
+    ctx.full = true;
+    sync_jira(&ctx, &w.jira);
+
+    assert_eq!(viewed(&w), ["PROJ-1", "PROJ-2", "PROJ-3"]);
+    assert_eq!(w.jira.log().count("changed_since"), 0);
+}
+
+#[test]
+fn a_ticket_cached_too_long_ago_is_viewed_anyway() {
+    let w = pool_of_three();
+    sync_jira(&w.ctx(1000, true), &w.jira);
+    w.jira.log().clear();
+    w.jira.set_changed(vec![]);
+
+    sync_jira(&w.ctx(1000 + FULL_REFRESH_AFTER_SECS + 1, true), &w.jira);
+
+    assert_eq!(viewed(&w), ["PROJ-1", "PROJ-2", "PROJ-3"]);
+}
+
+#[test]
+fn a_ticket_new_to_the_pool_is_viewed_while_the_known_ones_are_checked() {
+    let w = pool_of_three();
+    sync_jira(&w.ctx(1000, true), &w.jira);
+    w.jira.log().clear();
+    w.jira.on_search(
+        POOL_JQL,
+        vec![
+            ticket("PROJ-1", "In Review"),
+            ticket("PROJ-2", "In Review"),
+            ticket("PROJ-3", "In Review"),
+            ticket("PROJ-4", "In Review"),
+        ],
+    );
+    w.jira.set_changed(vec![]);
+
+    sync_jira(&w.ctx(1100, true), &w.jira);
+
+    assert_eq!(viewed(&w), ["PROJ-4"]);
+    assert_eq!(w.jira.log().args_of("changed_since"), ["15m: 3"], "the new one is not asked about");
+}
+
+#[test]
+fn when_jira_cannot_say_what_changed_everything_is_viewed_not_skipped() {
+    let w = pool_of_three();
+    sync_jira(&w.ctx(1000, true), &w.jira);
+    w.jira.log().clear();
+    w.jira.fail_changed(ProviderError::Command {
+        tool: "acli".into(),
+        status: Some(1),
+        stderr: "bad jql".into(),
+    });
+
+    let report = sync_jira(&w.ctx(1100, true), &w.jira);
+
+    assert_eq!(viewed(&w), ["PROJ-1", "PROJ-2", "PROJ-3"]);
+    assert!(matches!(report.outcome, SourceOutcome::Partial(_)), "the problem is reported");
+}
+
+#[test]
+fn tickets_cached_at_different_times_are_asked_about_with_their_own_windows() {
+    let w = pool_of_three();
+    sync_jira(&w.ctx(1000, true), &w.jira);
+    // Only PROJ-3 is refreshed later (as if it had changed).
+    w.jira.set_changed(vec![key("PROJ-3")]);
+    sync_jira(&w.ctx(1000 + 3 * 3600, true), &w.jira);
+    w.jira.log().clear();
+    w.jira.set_changed(vec![]);
+
+    sync_jira(&w.ctx(1000 + 3 * 3600 + 600, true), &w.jira);
+
+    let mut asked = w.jira.log().args_of("changed_since");
+    asked.sort();
+    // PROJ-3: 10 minutes ago -> 25m. PROJ-1 and PROJ-2: 3h10m ago -> 205m.
+    assert_eq!(asked, ["205m: 2", "25m: 1"]);
 }

@@ -120,6 +120,7 @@ impl World {
             now: self.tick(),
             force: true,
             min_interval: DEFAULT_MIN_INTERVAL,
+            full: false,
         };
         let commits = uat_commits(&self.fx.store, &self.hosted).unwrap();
         let report = sync_all(

@@ -49,7 +49,7 @@ pub fn run_sync(
 }
 
 /// `de sync [--only jira|bitbucket] [--force]`.
-pub fn sync(only: Option<SyncSource>, force: bool) -> eyre::Result<()> {
+pub fn sync(only: Option<SyncSource>, force: bool, full: bool) -> eyre::Result<()> {
     let ui = UserInterface::new();
     let config = Config::load()?;
     let state = Store::open_default(Kind::State)?;
@@ -75,6 +75,7 @@ pub fn sync(only: Option<SyncSource>, force: bool) -> eyre::Result<()> {
         now,
         force,
         min_interval: DEFAULT_MIN_INTERVAL,
+        full,
     };
     let report = run_sync(&ctx, &providers, &repos, only)?;
 
@@ -552,6 +553,7 @@ mod tests {
             now: 1000,
             force: false,
             min_interval: 60,
+            full: false,
         };
 
         let report = run_sync(&ctx, &providers, &repos, None).unwrap();
@@ -589,6 +591,7 @@ mod tests {
             now: 1,
             force: false,
             min_interval: 60,
+            full: false,
         };
         let report = run_sync(&ctx, &providers, &[], None).unwrap();
         let text = render_sync_report(&report).join("\n");

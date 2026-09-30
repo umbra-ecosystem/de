@@ -103,6 +103,9 @@ struct JiraState {
     searches: HashMap<String, Vec<TicketKey>>,
     comments: BTreeMap<TicketKey, Vec<RemoteComment>>,
     details: BTreeMap<TicketKey, TicketDetail>,
+    /// When set, `changed_since` answers with these keys (among those asked); otherwise with all of them.
+    changed: Option<Vec<TicketKey>>,
+    fail_changed: Option<ProviderError>,
     health: Option<Health>,
     /// Fails every call except `health`.
     failure: Option<ProviderError>,
@@ -155,6 +158,18 @@ impl FakeJira {
     /// Scripts the detail `view` returns for a ticket (without one, `view` gives none).
     pub fn set_detail(&self, key: &TicketKey, detail: TicketDetail) -> &Self {
         lock(&self.state).details.insert(key.clone(), detail);
+        self
+    }
+
+    /// Scripts which tickets `changed_since` reports as changed.
+    pub fn set_changed(&self, keys: Vec<TicketKey>) -> &Self {
+        lock(&self.state).changed = Some(keys);
+        self
+    }
+
+    /// Makes `changed_since` fail with `error`.
+    pub fn fail_changed(&self, error: ProviderError) -> &Self {
+        lock(&self.state).fail_changed = Some(error);
         self
     }
 
@@ -272,6 +287,19 @@ impl TicketProvider for FakeJira {
             .get(key)
             .cloned()
             .unwrap_or_default())
+    }
+
+    fn changed_since(&self, keys: &[TicketKey], minutes: u32) -> ProviderResult<Vec<TicketKey>> {
+        self.log.record("changed_since", format!("{minutes}m: {}", keys.len()));
+        self.check(None)?;
+        let state = lock(&self.state);
+        if let Some(e) = &state.fail_changed {
+            return Err(e.clone());
+        }
+        Ok(match &state.changed {
+            Some(changed) => keys.iter().filter(|k| changed.contains(k)).cloned().collect(),
+            None => keys.to_vec(),
+        })
     }
 
     /// The comments (logged as a `comments` call, as before `view` existed) plus any scripted detail.

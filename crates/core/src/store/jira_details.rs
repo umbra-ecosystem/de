@@ -37,6 +37,16 @@ pub fn all(cache: &Store) -> eyre::Result<BTreeMap<TicketKey, TicketDetail>> {
         .collect())
 }
 
+/// When each cached detail was fetched (unix seconds).
+pub fn fetched_at(cache: &Store) -> eyre::Result<BTreeMap<TicketKey, i64>> {
+    let mut stmt = cache.conn().prepare("SELECT key, fetched_at FROM jira_details")?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, TicketKey>(0)?, r.get::<_, i64>(1)?)))?
+        .collect::<Result<BTreeMap<_, _>, _>>()
+        .wrap_err("Failed to read when the ticket details were fetched")?;
+    Ok(rows)
+}
+
 pub fn get(cache: &Store, key: &TicketKey) -> eyre::Result<Option<TicketDetail>> {
     Ok(all(cache)?.remove(key))
 }

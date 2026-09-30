@@ -80,6 +80,10 @@ pub enum Commands {
         /// Sync even sources that were synced very recently.
         #[arg(long)]
         force: bool,
+
+        /// Fetch every ticket in full. By default only the tickets that changed since they were cached are.
+        #[arg(long)]
+        full: bool,
     },
 
     /// Show what to do next: ranked suggestions from the state of your tickets.

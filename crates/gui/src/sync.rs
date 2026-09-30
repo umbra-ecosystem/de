@@ -40,6 +40,7 @@ pub fn sync_now(
         now,
         force: true,
         min_interval: DEFAULT_MIN_INTERVAL,
+        full: false,
     };
     // No code host yet (GitHub is not wired): only Jira is asked for.
     let no_host = ProviderError::not_installed("code host", "not connected yet");

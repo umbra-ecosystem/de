@@ -38,6 +38,10 @@ use crate::store::{Store, sync_state};
 /// forced). Callers may pass their own; this is the default of `de sync`.
 pub const DEFAULT_MIN_INTERVAL: i64 = 60;
 
+/// A cached ticket older than this is fetched in full whether or not Jira says it changed, so a missed change
+/// (a clock that was off, a comment removed without bumping the ticket) cannot linger.
+pub const FULL_REFRESH_AFTER_SECS: i64 = 7 * 24 * 3600;
+
 /// Everything a sync needs besides the providers.
 pub struct SyncContext<'a> {
     /// `state.db`: read for the tracked tickets, links and recorded `uat` merges.
@@ -51,6 +55,8 @@ pub struct SyncContext<'a> {
     pub force: bool,
     /// Seconds a completely successful sync stays fresh.
     pub min_interval: i64,
+    /// Fetch every ticket in full, even those Jira says have not changed since they were cached.
+    pub full: bool,
 }
 
 /// Runs the sources selected by `only` (all when `None`) independently and reports each.

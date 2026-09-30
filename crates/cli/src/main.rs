@@ -90,7 +90,9 @@ fn main() -> eyre::Result<()> {
                 commands::ship::cancel(key, workspace)
             }
         },
-        Commands::Sync { only, force } => commands::sync::sync(only.map(Into::into), force),
+        Commands::Sync { only, force, full } => {
+            commands::sync::sync(only.map(Into::into), force, full)
+        }
         Commands::Next {
             command,
             workspace,

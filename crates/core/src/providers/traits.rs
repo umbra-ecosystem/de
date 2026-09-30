@@ -48,6 +48,14 @@ pub trait TicketProvider: Send {
     /// All comments of a ticket, oldest first, with the account ids each one mentions.
     fn comments(&self, key: &TicketKey) -> ProviderResult<Vec<RemoteComment>>;
 
+    /// Which of `keys` were updated within the last `minutes` minutes. A sync uses it to fetch in full only
+    /// the tickets that changed since they were cached. The default says "all of them", which is always
+    /// safe and is what an adapter that cannot ask gets.
+    fn changed_since(&self, keys: &[TicketKey], minutes: u32) -> ProviderResult<Vec<TicketKey>> {
+        let _ = minutes;
+        Ok(keys.to_vec())
+    }
+
     /// Everything one call can tell about a ticket: its detail and its comments. The default has no detail and
     /// reads the comments; an adapter that can get both at once overrides it, so a sync costs one call per
     /// ticket.

@@ -344,6 +344,28 @@ fn view_asks_for_all_fields_in_a_single_call() {
 }
 
 #[test]
+fn changed_since_filters_by_a_relative_updated_time_and_asks_a_hundred_keys_at_a_time() {
+    let keys: Vec<TicketKey> = (1..=150).map(|n| key(&format!("PROJ-{n}"))).collect();
+    let first: Vec<String> = keys[..100].iter().map(|k| k.to_string()).collect();
+    let rest: Vec<String> = keys[100..].iter().map(|k| k.to_string()).collect();
+    let jql1 = format!("key in ({}) AND updated >= \"-25m\"", first.join(","));
+    let jql2 = format!("key in ({}) AND updated >= \"-25m\"", rest.join(","));
+    let (jira, fake) = reader(
+        Fake::default()
+            .on(&search_argv(&jql1), ok(SEARCH))
+            .on(&search_argv(&jql2), ok("[]")),
+    );
+
+    let changed = jira.changed_since(&keys, 25).unwrap();
+
+    assert_eq!(
+        changed.iter().map(|k| k.as_str()).collect::<Vec<_>>(),
+        ["PROJ-123", "PROJ-124", "PROJ-125"]
+    );
+    assert_eq!(fake.calls().len(), 2);
+}
+
+#[test]
 fn search_never_asks_for_updated_which_real_acli_rejects() {
     // `--fields ...,updated` makes the real acli exit 1: "field 'updated' is not allowed".
     let fields: Vec<&str> = SEARCH_FIELDS.split(',').collect();

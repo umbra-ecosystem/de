@@ -427,6 +427,22 @@ impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
         Ok(comments)
     }
 
+    /// One search per hundred keys: `key in (...) AND updated >= "-Nm"`. Search cannot return `updated` (acli
+    /// rejects the field), but JQL can filter on it, and a relative time does not depend on the site's timezone.
+    fn changed_since(&self, keys: &[TicketKey], minutes: u32) -> ProviderResult<Vec<TicketKey>> {
+        let mut changed = Vec::new();
+        for chunk in keys.chunks(100) {
+            let list = chunk
+                .iter()
+                .map(|k| k.as_str())
+                .collect::<Vec<_>>()
+                .join(",");
+            let jql = format!("key in ({list}) AND updated >= \"-{minutes}m\"");
+            changed.extend(self.search(&jql)?.into_iter().map(|t| t.key));
+        }
+        Ok(changed)
+    }
+
     fn view(&self, key: &TicketKey) -> ProviderResult<Viewed> {
         // One call for the comments and the detail. `*all` because the sprint is a custom field whose id is
         // not known in advance.
