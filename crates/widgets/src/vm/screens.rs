@@ -62,6 +62,13 @@ pub enum RightRow {
         title: String,
         sub: Option<String>,
     },
+    /// One line about a ticket that opens it when clicked: key and title, with a mark for what is urgent.
+    Ticket {
+        key: TicketKey,
+        title: String,
+        /// A hotfix or a high priority (`text` says which); drawn as a mark before the key.
+        mark: Option<Badge>,
+    },
     Activity {
         at: String,
         text: String,

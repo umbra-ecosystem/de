@@ -1714,6 +1714,33 @@ mod tests {
     }
 
     #[test]
+    fn the_claim_queue_in_the_side_panel_is_one_clickable_line_per_ticket() {
+        let s = Session::demo();
+        let right = s.view().right;
+        let queue = right
+            .iter()
+            .find(|sec| sec.title == "Claim queue")
+            .expect("the claim queue");
+        let tickets: Vec<(&TicketKey, &Option<Badge>)> = queue
+            .rows
+            .iter()
+            .filter_map(|r| match r {
+                RightRow::Ticket { key, mark, .. } => Some((key, mark)),
+                _ => None,
+            })
+            .collect();
+        assert!(!tickets.is_empty());
+        assert_eq!(tickets.len(), queue.rows.len(), "nothing but ticket lines");
+        // Only a hotfix or a high priority is marked.
+        for (_, mark) in &tickets {
+            if let Some(m) = mark {
+                assert!(["Hotfix", "High", "Highest"].contains(&m.text.as_str()), "{}", m.text);
+            }
+        }
+        assert!(tickets.iter().any(|(_, m)| m.is_some()) && tickets.iter().any(|(_, m)| m.is_none()));
+    }
+
+    #[test]
     fn diagnose_shows_raw_output_and_reflects_sign_out() {
         let mut s = Session::demo();
         s.handle(Intent::Do(Command::SetProvider {

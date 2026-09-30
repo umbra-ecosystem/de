@@ -2,7 +2,7 @@
 
 use gpui_kit::component::badge::Badge as CountBadge;
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, IconName, Selectable, Sizable};
+use gpui_kit::component::{Disableable, Icon, IconName, Selectable, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
@@ -300,6 +300,43 @@ fn right_row(ui: &Ui, r: &RightRow) -> AnyElement {
             .child(div().text_sm().child(title.clone()))
             .when_some(sub.clone(), |d, s| d.child(faint(pal, s)))
             .into_any_element(),
+        // One line, clickable as a whole: a mark for what is urgent, the key, then as much of the title as fits.
+        RightRow::Ticket { key, title, mark } => {
+            let full: SharedString = title.clone().into();
+            div()
+                .id(hash_id("right-ticket", key))
+                .flex()
+                .items_center()
+                .gap_2()
+                .h(px(28.0))
+                .px_2()
+                .mx_neg_2()
+                .rounded_md()
+                .cursor_pointer()
+                .hover(|d| d.bg(pal.hover))
+                .on_click(ui.on_click(Intent::go_ticket(key.clone(), TicketTab::Overview)))
+                .tooltip(move |window, cx| {
+                    gpui_kit::component::tooltip::Tooltip::new(full.clone()).build(window, cx)
+                })
+                .child(
+                    div().flex_none().w(px(14.0)).children(mark.as_ref().map(|m| {
+                        Icon::new(IconName::TriangleAlert)
+                            .small()
+                            .text_color(pal.tone(m.tone))
+                    })),
+                )
+                .child(key_text(ui, key))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_sm()
+                        .text_color(pal.muted)
+                        .child(title.clone()),
+                )
+                .into_any_element()
+        }
         RightRow::Activity { at, text, failed } => div()
             .flex()
             .gap_2()

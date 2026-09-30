@@ -338,15 +338,16 @@ impl Sim {
             .sorted_group(Group::Pool)
             .into_iter()
             .take(4)
-            .map(|t| RightRow::Item {
-                head: Vec::new(),
-                key: Some(t.key.clone()),
+            .map(|t| RightRow::Ticket {
+                key: t.key.clone(),
                 title: t.title.clone(),
-                sub: Some(if self.is_hotfix(t) {
-                    format!("{} · hotfix", t.priority.label())
+                mark: if self.is_hotfix(t) {
+                    Some(Badge::new("Hotfix", Tone::Hot))
+                } else if matches!(t.priority, Priority::High | Priority::Highest) {
+                    Some(Badge::new(t.priority.label(), priority_tone(t.priority)))
                 } else {
-                    t.priority.label().to_string()
-                }),
+                    None
+                },
             })
             .collect();
         out.push(RightSection {
