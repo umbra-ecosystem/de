@@ -1,123 +1,135 @@
 //! The state changes: claim, review, activate, integrate, deploy, announce, approve, sync.
+//!
+//! A change of a ticket's stage always goes through a `Stage` transition; an illegal move becomes a refused
+//! outcome instead of a silent assignment.
 
 use super::Sim;
 use super::data;
 use super::model::*;
 use crate::store::Outcome;
-use crate::vm::{Baseline, Block, ReportRow, ReportVm, SimEvent, ToastKind, Undo, WaitKind};
+use crate::vm::{
+    Baseline, Block, Branch, ClaimBlock, DraftId, Phase, PrNumber, RepoName, ReportRow, ReportVm,
+    SimEvent, SuggestionId, Then, TicketKey, ToastKind, Undo, WaitKind,
+};
+
+fn phase_of(t: &Ticket) -> Option<Phase> {
+    match &t.stage {
+        Stage::InHand { phase, .. } => Some(*phase),
+        _ => None,
+    }
+}
+
+fn refuse(e: Illegal) -> Outcome {
+    Outcome::fail(e.to_string())
+}
 
 impl Sim {
     /* ---------------------------- local lifecycle ---------------------------- */
 
-    pub(crate) fn claim(&mut self, key: &str) -> Outcome {
+    pub(crate) fn claim(&mut self, key: &TicketKey) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
-        if self.tickets[i].local.is_some() {
+        if self.tickets[i].local().is_some() {
             return Outcome::fail("Already claimed.");
         }
         if let Some(b) = self.claim_block(key) {
-            return Outcome::blocked(b);
+            return Outcome::Blocked(b);
         }
-        self.tickets[i].local = Some(Local::Claimed);
+        if let Err(e) = self.tickets[i].stage.claim() {
+            return refuse(e);
+        }
         self.start_pr_wait(i);
         self.ok("ticket.claim", Some(key), None, "");
         Outcome::ok().with_toast(
             format!("Claimed {key}"),
             ToastKind::Ok,
-            Some(Undo::Claim(key.to_string())),
+            Some(Undo::Claim(key.clone())),
         )
     }
 
-    pub(crate) fn unclaim(&mut self, key: &str) {
+    pub(crate) fn unclaim(&mut self, key: &TicketKey) {
         if let Some(i) = self.idx(key)
-            && self.tickets[i].local == Some(Local::Claimed)
+            && self.tickets[i].stage.unclaim().is_ok()
         {
-            self.tickets[i].local = None;
             self.ok("undo.claim", Some(key), None, "");
         }
     }
 
-    pub(crate) fn start_review(&mut self, key: &str) -> Outcome {
+    pub(crate) fn start_review(&mut self, key: &TicketKey) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
-        if self.tickets[i].local.is_none()
+        if self.tickets[i].local().is_none()
             && let Some(b) = self.claim_block(key)
         {
-            return Outcome::blocked(b);
+            return Outcome::Blocked(b);
         }
         if let Some(e) = self.gap_error(&self.tickets[i]) {
             return Outcome::fail(e);
         }
-        let t = &mut self.tickets[i];
-        if t.local.is_none() {
-            t.local = Some(Local::Claimed);
+        if let Err(e) = self.tickets[i].stage.start_review() {
+            return refuse(e);
         }
-        if matches!(t.local, Some(Local::Claimed | Local::Reviewing)) {
-            t.local = Some(Local::Reviewing);
-        }
-        t.reviewed = false;
-        t.reviewed_seq = None;
         self.ok("review.start", Some(key), None, "");
         Outcome::ok()
     }
 
-    pub(crate) fn mark_reviewed(&mut self, key: &str) -> Outcome {
+    pub(crate) fn mark_reviewed(&mut self, key: &TicketKey) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
         if let Some(e) = self.gap_error(&self.tickets[i]) {
             return Outcome::fail(e);
         }
-        let prev = Undo::Reviewed {
-            key: key.to_string(),
-            prev_seq: self.tickets[i].reviewed_seq,
-            prev_status: self.tickets[i]
-                .local
-                .map_or("claimed", Local::word)
-                .to_string(),
+        let Some(prev_phase) = phase_of(&self.tickets[i]) else {
+            return Outcome::fail("Only a ticket in your hands can be marked reviewed.");
         };
-        let t = &mut self.tickets[i];
-        t.reviewed = true;
-        t.reviewed_seq = Some(t.prs.iter().map(|p| p.updated_seq).max().unwrap_or(0));
-        for p in &mut t.prs {
-            p.since = None;
+        let prev = Undo::Reviewed {
+            key: key.clone(),
+            prev_mark: self.tickets[i].review_mark().map(|m| m.0),
+            prev_phase,
+        };
+        let mark = ReviewMark(Self::latest_seq(&self.tickets[i]));
+        if let Err(e) = self.tickets[i].stage.mark_reviewed(mark) {
+            return refuse(e);
         }
-        if t.local == Some(Local::Claimed) {
-            t.local = Some(Local::Reviewing);
+        for p in &mut self.tickets[i].prs {
+            p.since = None;
         }
         self.start_th_wait(i, false);
         self.ok("review.mark_reviewed", Some(key), None, "");
         Outcome::ok().with_toast(format!("Marked {key} reviewed"), ToastKind::Ok, Some(prev))
     }
 
-    pub(crate) fn unmark_reviewed(&mut self, key: &str, prev_seq: Option<u32>, prev_status: &str) {
-        if let Some(i) = self.idx(key) {
-            let t = &mut self.tickets[i];
-            t.reviewed = false;
-            t.reviewed_seq = prev_seq;
-            t.local = Some(Local::parse(prev_status));
+    pub(crate) fn unmark_reviewed(
+        &mut self,
+        key: &TicketKey,
+        prev_mark: Option<u32>,
+        prev_phase: Phase,
+    ) {
+        if let Some(i) = self.idx(key)
+            && self.tickets[i]
+                .stage
+                .restore_review(prev_phase, prev_mark.map(ReviewMark))
+                .is_ok()
+        {
             self.ok("undo.mark_reviewed", Some(key), None, "");
         }
     }
 
-    pub(crate) fn reclaim(&mut self, key: &str) -> Outcome {
+    pub(crate) fn reclaim(&mut self, key: &TicketKey) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
         if let Some(b) = self.claim_block(key) {
-            return Outcome::blocked(b);
+            return Outcome::Blocked(b);
+        }
+        if let Err(e) = self.tickets[i].stage.reclaim() {
+            return refuse(e);
         }
         let t = &mut self.tickets[i];
-        t.local = Some(Local::Claimed);
-        t.reviewed = false;
-        t.reviewed_seq = None;
-        t.merges.clear();
-        t.deploy.clear();
-        t.drafts.clear();
         t.new_commits = false;
-        t.prep = None;
         t.pre.clear();
         t.pr_wait = None;
         t.th_wait = None;
@@ -132,7 +144,7 @@ impl Sim {
         Outcome::ok().with_toast(format!("Claimed {key} again"), ToastKind::Ok, None)
     }
 
-    pub(crate) fn toggle_checklist(&mut self, key: &str, index: usize) {
+    pub(crate) fn toggle_checklist(&mut self, key: &TicketKey, index: usize) {
         if let Some(i) = self.idx(key)
             && let Some(c) = self.tickets[i].checklist.get_mut(index)
         {
@@ -140,7 +152,7 @@ impl Sim {
         }
     }
 
-    pub(crate) fn add_checklist(&mut self, key: &str, text: &str) {
+    pub(crate) fn add_checklist(&mut self, key: &TicketKey, text: &str) {
         if let Some(i) = self.idx(key)
             && !text.trim().is_empty()
         {
@@ -150,16 +162,14 @@ impl Sim {
         }
     }
 
-    pub(crate) fn choose(&mut self, key: &str, repo: &str, branch: &str) {
+    pub(crate) fn choose(&mut self, key: &TicketKey, repo: &RepoName, branch: &Branch) {
         if let Some(i) = self.idx(key) {
-            self.tickets[i]
-                .link
-                .insert(repo.to_string(), branch.to_string());
+            self.tickets[i].link.insert(repo.clone(), branch.clone());
             self.ok("links.choose", Some(key), Some(repo), branch);
         }
     }
 
-    pub(crate) fn mark_seen(&mut self, key: &str) {
+    pub(crate) fn mark_seen(&mut self, key: &TicketKey) {
         if let Some(i) = self.idx(key) {
             self.tickets[i].seen_n = Self::max_n(&self.tickets[i]);
         }
@@ -188,7 +198,7 @@ impl Sim {
         }
     }
 
-    pub(crate) fn extend_wait(&mut self, key: &str, kind: WaitKind) -> Outcome {
+    pub(crate) fn extend_wait(&mut self, key: &TicketKey, kind: WaitKind) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
@@ -220,45 +230,35 @@ impl Sim {
 
     /* ---------------------------- activation ---------------------------- */
 
-    pub(crate) fn activate(&mut self, key: &str, choice: Option<Baseline>) -> Outcome {
+    pub(crate) fn activate(&mut self, key: &TicketKey, choice: Option<Baseline>) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
         let t = self.tickets[i].clone();
-        if t.local.is_none() {
+        let Some(local) = t.local() else {
             return Outcome::fail("Claim the ticket first.");
-        }
+        };
         if let Some(other) = self.active_key() {
             return Outcome::fail(format!(
                 "{other} is already active. Park or finish it first."
             ));
         }
         if !matches!(
-            t.local,
-            Some(Local::Claimed | Local::Reviewing | Local::Parked | Local::Integrated)
+            local,
+            Local::Claimed | Local::Reviewing | Local::Parked | Local::Integrated
         ) {
-            return Outcome::fail(format!(
-                "A {} ticket cannot be activated.",
-                t.local.map_or("", Local::word)
-            ));
+            return Outcome::fail(format!("A {} ticket cannot be activated.", local.word()));
         }
         if self.is_hotfix(&t) && choice.is_none() {
-            return Outcome {
-                need_baseline: true,
-                ..Outcome::default()
-            };
+            return Outcome::NeedsBaseline;
         }
         let plan = self.activation_plan(&t, choice);
         if !plan.errors.is_empty() {
-            return Outcome {
-                ok: false,
-                errors: plan.errors,
-                ..Outcome::default()
-            };
+            return Outcome::Refused(plan.errors);
         }
-        let repos: Vec<String> = plan.rows.iter().map(|r| r.repo.clone()).collect();
+        let repos: Vec<RepoName> = plan.rows.iter().map(|r| r.repo.clone()).collect();
         if let Some(b) = self.lock_busy(&repos, "activate", key) {
-            return Outcome::busy(b);
+            return Outcome::Busy(b);
         }
         self.ok("activation.start", Some(key), None, "");
         let mut records = Vec::new();
@@ -279,30 +279,22 @@ impl Sim {
                 stash,
                 label: label.clone(),
             });
+            let role = if r.ticket_role {
+                "ticket branch"
+            } else {
+                "baseline"
+            };
             self.ok(
                 "activation.repo_switched",
                 Some(key),
                 Some(&r.repo),
-                &format!(
-                    "{} {}",
-                    if r.ticket_role {
-                        "ticket branch"
-                    } else {
-                        "baseline"
-                    },
-                    r.branch
-                ),
+                &format!("{role} {}", r.branch),
             );
             report.push(ReportRow {
                 repo: r.repo.clone(),
                 detail: format!(
-                    "switched to {} ({}){}",
+                    "switched to {} ({role}){}",
                     r.branch,
-                    if r.ticket_role {
-                        "ticket branch"
-                    } else {
-                        "baseline"
-                    },
                     label.map_or(String::new(), |l| format!(", stashed as \"{l}\""))
                 ),
                 ok: true,
@@ -332,46 +324,42 @@ impl Sim {
                     .to_string(),
             );
         }
-        let ms = self.ms;
-        let t = &mut self.tickets[i];
-        t.act = Some(Activation {
-            started_ms: ms,
+        let act = Activation {
+            started_ms: self.ms,
             records,
             overlay: plan.overlay,
-        });
-        t.local = Some(Local::Active);
-        t.prep = None;
-        t.test_from_n = Some(Self::max_n(t));
+        };
+        if let Err(e) = self.tickets[i].stage.activate(act) {
+            return refuse(e);
+        }
+        self.tickets[i].test_from_n = Some(Self::max_n(&self.tickets[i]));
         self.ok("activation.complete", Some(key), None, "");
-        Outcome {
-            ok: true,
-            report: Some(ReportVm {
+        Outcome::ok()
+            .with_report(ReportVm {
                 title: format!("Activated {key}"),
                 rows: report,
                 notes,
-            }),
-            ..Outcome::default()
-        }
-        .with_toast(format!("{key} is active"), ToastKind::Ok, None)
+            })
+            .with_toast(format!("{key} is active"), ToastKind::Ok, None)
     }
 
-    /// Restore every repo. `finalize` is the integration path, which skips the lock check.
+    /// Restore every repo and move the ticket on. `finalize` is the integration path, which skips the lock check.
     pub(crate) fn deactivate(
         &mut self,
-        key: &str,
-        target: Local,
+        key: &TicketKey,
+        after: After,
         finalize: bool,
     ) -> Result<ReportVm, Outcome> {
         let Some(i) = self.idx(key) else {
             return Err(Outcome::fail("Unknown ticket."));
         };
-        let Some(act) = self.tickets[i].act.clone() else {
+        let Some(act) = self.tickets[i].act().cloned() else {
             return Err(Outcome::fail(format!("Nothing to restore for {key}.")));
         };
         if !finalize {
-            let repos: Vec<String> = act.records.iter().map(|r| r.repo.clone()).collect();
+            let repos: Vec<RepoName> = act.records.iter().map(|r| r.repo.clone()).collect();
             if let Some(b) = self.lock_busy(&repos, "park", key) {
-                return Err(Outcome::busy(b));
+                return Err(Outcome::Busy(b));
             }
         }
         let mut rows = Vec::new();
@@ -410,11 +398,8 @@ impl Sim {
                 ok: true,
             });
         }
-        let ms = self.ms;
-        let t = &mut self.tickets[i];
-        t.time_ms += ms - act.started_ms;
-        t.act = None;
-        t.local = Some(target);
+        let act = self.tickets[i].stage.finish_active(after).map_err(refuse)?;
+        self.tickets[i].time_ms += self.ms - act.started_ms;
         self.ok(
             if finalize {
                 "integration.finalize"
@@ -432,27 +417,26 @@ impl Sim {
         })
     }
 
-    pub(crate) fn park(&mut self, key: &str) -> Outcome {
-        match self.deactivate(key, Local::Parked, false) {
-            Ok(report) => Outcome {
-                ok: true,
-                report: Some(report),
-                ..Outcome::default()
-            }
-            .with_toast(format!("Parked {key}"), ToastKind::Ok, None),
+    pub(crate) fn park(&mut self, key: &TicketKey) -> Outcome {
+        match self.deactivate(key, After::Park, false) {
+            Ok(report) => Outcome::ok().with_report(report).with_toast(
+                format!("Parked {key}"),
+                ToastKind::Ok,
+                None,
+            ),
             Err(o) => o,
         }
     }
 
     /// Park whatever is in hand so another ticket can be taken.
-    pub(crate) fn park_in_hand(&mut self, key: &str) -> Result<(), Outcome> {
+    pub(crate) fn park_in_hand(&mut self, key: &TicketKey) -> Result<(), Outcome> {
         let Some(i) = self.idx(key) else {
             return Err(Outcome::fail("Unknown ticket."));
         };
-        if self.tickets[i].act.is_some() {
-            return self.deactivate(key, Local::Parked, false).map(|_| ());
+        if self.tickets[i].act().is_some() {
+            return self.deactivate(key, After::Park, false).map(|_| ());
         }
-        self.tickets[i].local = Some(Local::Parked);
+        self.tickets[i].stage.park_in_hand().map_err(refuse)?;
         self.ok(
             "ticket.park",
             Some(key),
@@ -464,72 +448,82 @@ impl Sim {
 
     pub(crate) fn park_and_continue(
         &mut self,
-        from: &str,
-        key: &str,
-        then: crate::vm::Then,
+        from: &TicketKey,
+        key: &TicketKey,
+        then: Then,
     ) -> Outcome {
         if let Err(o) = self.park_in_hand(from) {
             return o;
         }
         let out = match then {
-            crate::vm::Then::Reclaim => self.reclaim(key),
-            crate::vm::Then::Claim => self.claim(key),
-            crate::vm::Then::StartReview => {
+            Then::Reclaim => self.reclaim(key),
+            Then::Claim => self.claim(key),
+            Then::StartReview => {
                 let c = self.claim(key);
-                if c.ok { self.start_review(key) } else { c }
+                if c.is_done() {
+                    self.start_review(key)
+                } else {
+                    c
+                }
             }
         };
-        if !out.ok {
+        if !out.is_done() {
             return out;
         }
         Outcome::ok().with_toast(format!("{from} parked, {key} claimed"), ToastKind::Ok, None)
     }
 
-    pub(crate) fn claim_block(&self, key: &str) -> Option<crate::vm::ClaimBlock> {
+    pub(crate) fn claim_block(&self, key: &TicketKey) -> Option<ClaimBlock> {
         let b = self.in_hand(key)?;
-        Some(crate::vm::ClaimBlock {
+        Some(ClaimBlock {
             blocker: b.key.clone(),
             title: b.title.clone(),
-            what: match b.local {
+            what: match b.local() {
                 Some(Local::Active) => "active (your repos are on its branches)",
                 Some(Local::Reviewing) => "in review",
                 _ => "claimed",
             }
             .to_string(),
-            active: b.local == Some(Local::Active),
+            active: b.local() == Some(Local::Active),
         })
     }
 
     /* ---------------------------- integration ---------------------------- */
 
-    pub(crate) fn prepare(&mut self, key: &str) -> Outcome {
+    fn set_prep(&mut self, i: usize, value: Option<Prep>) {
+        if let Stage::Active { prep, .. } = &mut self.tickets[i].stage {
+            *prep = value;
+        }
+    }
+
+    pub(crate) fn prepare(&mut self, key: &TicketKey) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
         let t = self.tickets[i].clone();
-        if t.local != Some(Local::Active) {
+        if t.local() != Some(Local::Active) {
             return Outcome::fail(
                 "The ticket must be active (tested locally) before it can be integrated.",
             );
         }
         let touched = self.touched(&t);
-        let names: Vec<String> = touched.iter().map(|p| p.repo.clone()).collect();
+        let names: Vec<RepoName> = touched.iter().map(|p| p.repo.clone()).collect();
         if let Some(b) = self.lock_busy(&names, "prepare", key) {
-            return Outcome::busy(b);
+            return Outcome::Busy(b);
         }
         let mut rows = Vec::new();
         for p in &touched {
             let repo = p.repo.clone();
-            let outcome = if let Some(done) = t.merges.iter().find(|m| m.repo == repo) {
+            let outcome = if let Some(done) = t.landing(&repo) {
                 PrepOutcome::AlreadyPushed {
                     commit: done.commit.clone(),
                 }
-            } else if self.sims.conflict.as_deref() == Some(repo.as_str()) {
+            } else if self.sims.conflict.as_ref() == Some(&repo) {
                 PrepOutcome::Conflict {
                     files: vec!["src/session.rs".to_string()],
-                    with: "PROJ-127".to_string(),
+                    with: "PROJ-127".into(),
                 }
-            } else if self.sims.leak.as_deref() == Some(repo.as_str()) {
+            } else if self.sims.leak.as_ref() == Some(&repo) {
                 PrepOutcome::Blocked {
                     reason: format!(
                         "overlay leak: composer.json adds a path repository (commit {})",
@@ -577,10 +571,15 @@ impl Sim {
             "integration.prepare",
             Some(key),
             None,
-            if all_ok { "success" } else { "failure" },
+            if all_ok {
+                AuditOutcome::Success
+            } else {
+                AuditOutcome::Failure
+            },
             &summary,
         );
-        self.tickets[i].prep = Some(Prep { at: self.ms, rows });
+        let at = self.ms;
+        self.set_prep(i, Some(Prep { at, rows }));
         if all_ok {
             Outcome::ok().with_toast("Merges prepared. Nothing was pushed.", ToastKind::Ok, None)
         } else {
@@ -592,17 +591,17 @@ impl Sim {
         }
     }
 
-    pub(crate) fn push(&mut self, key: &str) -> Outcome {
+    pub(crate) fn push(&mut self, key: &TicketKey) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
         let t = self.tickets[i].clone();
-        let Some(prep) = t.prep.clone().filter(|_| self.prep_pushable(&t)) else {
+        let Some(prep) = t.prep().cloned().filter(|_| self.prep_pushable(&t)) else {
             return Outcome::fail("Nothing is ready to push. Prepare the integration again.");
         };
-        let names: Vec<String> = prep.rows.iter().map(|r| r.repo.clone()).collect();
+        let names: Vec<RepoName> = prep.rows.iter().map(|r| r.repo.clone()).collect();
         if let Some(b) = self.lock_busy(&names, "push", key) {
-            return Outcome::busy(b);
+            return Outcome::Busy(b);
         }
         let spec = prep
             .rows
@@ -612,11 +611,17 @@ impl Sim {
                 PrepOutcome::AlreadyPushed { commit } => {
                     format!("{} {commit}:refs/heads/uat", r.repo)
                 }
-                _ => r.repo.clone(),
+                _ => r.repo.to_string(),
             })
             .collect::<Vec<_>>()
             .join("; ");
-        self.audit("git.push_uat.attempted", Some(key), None, "skipped", &spec);
+        self.audit(
+            "git.push_uat.attempted",
+            Some(key),
+            None,
+            AuditOutcome::Skipped,
+            &spec,
+        );
         let mut rejected = false;
         for r in &prep.rows {
             let PrepOutcome::Ready {
@@ -630,35 +635,32 @@ impl Sim {
                     "git.push_uat.repo",
                     Some(key),
                     Some(&r.repo),
-                    "failure",
+                    AuditOutcome::Failure,
                     "rejected: uat moved",
                 );
                 self.sims.uat_moved = false;
-                self.tickets[i].prep = None;
+                self.set_prep(i, None);
                 rejected = true;
                 break;
             }
             let at = self.clock(None);
             self.run += 1;
-            let run = self.run;
-            let ms = self.ms;
-            let t = &mut self.tickets[i];
-            t.merges.push(Merge {
+            let landing = Landing {
                 repo: r.repo.clone(),
                 commit: merge.clone(),
                 at,
-            });
-            t.deploy.insert(
-                r.repo.clone(),
-                Deploy {
+                deploy: Deploy {
                     state: DeployState::Pending,
-                    run,
-                    since: ms,
+                    run: self.run,
+                    since: self.ms,
                     step: "Queued".to_string(),
                     log: None,
                     uat_moved: None,
                 },
-            );
+            };
+            if let Some(h) = self.tickets[i].stage.held_mut() {
+                h.shipped.landings.push(landing);
+            }
             self.ok(
                 "git.push_uat.repo",
                 Some(key),
@@ -671,7 +673,7 @@ impl Sim {
                 "git.push_uat",
                 Some(key),
                 None,
-                "failure",
+                AuditOutcome::Failure,
                 "not every repo was pushed",
             );
             return Outcome::fail(
@@ -686,8 +688,7 @@ impl Sim {
                 None,
                 &format!("{} repos", prep.rows.len()),
             );
-            let _ = self.deactivate(key, Local::Integrated, true);
-            self.tickets[i].prep = None;
+            let _ = self.deactivate(key, After::Integrate, true);
             Outcome::ok().with_toast(
                 format!("Pushed {key} to uat. Actions are running."),
                 ToastKind::Ok,
@@ -698,31 +699,31 @@ impl Sim {
                 "git.push_uat",
                 Some(key),
                 None,
-                "failure",
+                AuditOutcome::Failure,
                 "not every repo was pushed",
             );
             Outcome::fail("Not every repo was pushed.")
         }
     }
 
-    pub(crate) fn rerun(&mut self, key: &str, repo: &str) -> Outcome {
+    pub(crate) fn rerun(&mut self, key: &TicketKey, repo: &RepoName) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
-        if !self.tickets[i].deploy.contains_key(repo) {
+        if !self.tickets[i].has_landed(repo) {
             return Outcome::fail("No run to re-run.");
         }
         self.run += 1;
         let run = self.run;
         let ms = self.ms;
-        if let Some(d) = self.tickets[i].deploy.get_mut(repo) {
+        if let Some(d) = self.tickets[i].landing_mut(repo).map(|l| &mut l.deploy) {
             d.run = run;
             d.state = DeployState::Pending;
             d.since = ms;
             d.step = "Queued".to_string();
             d.log = None;
         }
-        if self.sims.fail_deploy.as_deref() == Some(repo) {
+        if self.sims.fail_deploy.as_ref() == Some(repo) {
             self.sims.fail_deploy = None;
         }
         self.ok(
@@ -743,7 +744,13 @@ impl Sim {
         let fail = self.sims.fail_deploy.clone();
         let mut raised: Vec<(String, ToastKind)> = Vec::new();
         for t in &mut self.tickets {
-            for (repo, d) in &mut t.deploy {
+            let key = t.key.clone();
+            let Some(held) = t.stage.held_mut() else {
+                continue;
+            };
+            for l in &mut held.shipped.landings {
+                let repo = l.repo.clone();
+                let d = &mut l.deploy;
                 if matches!(d.state, DeployState::Deployed | DeployState::Failed) {
                     continue;
                 }
@@ -762,7 +769,7 @@ impl Sim {
                     }
                     .to_string();
                 } else {
-                    let failed = fail.as_deref() == Some(repo.as_str());
+                    let failed = fail.as_ref() == Some(&repo);
                     d.state = if failed {
                         DeployState::Failed
                     } else {
@@ -786,8 +793,7 @@ impl Sim {
                     }
                     raised.push((
                         format!(
-                            "{} {repo} run #{} {}",
-                            t.key,
+                            "{key} {repo} run #{} {}",
                             d.run,
                             if failed {
                                 "failed"
@@ -817,7 +823,7 @@ impl Sim {
 
     /* ---------------------------- announce ---------------------------- */
 
-    pub(crate) fn compose_draft(&mut self, key: &str) -> Outcome {
+    pub(crate) fn compose_draft(&mut self, key: &TicketKey) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
@@ -826,18 +832,17 @@ impl Sim {
             return Outcome::fail("Every touched repo must be deployed first.");
         }
         let lines: Vec<String> = t
-            .merges
+            .landings()
             .iter()
-            .map(|m| {
-                let pr = t.prs.iter().find(|p| p.repo == m.repo);
-                let d = &t.deploy[&m.repo];
+            .map(|l| {
+                let pr = t.prs.iter().find(|p| p.repo == l.repo);
                 format!(
                     "• {}  PR #{} · run #{} · https://github.com/{}/actions/runs/{}",
-                    m.repo,
+                    l.repo,
                     pr.map_or("-".to_string(), |p| p.id.to_string()),
-                    d.run,
-                    self.repo(&m.repo).host,
-                    d.run
+                    l.deploy.run,
+                    self.repo(&l.repo).host,
+                    l.deploy.run
                 )
             })
             .collect();
@@ -885,19 +890,21 @@ impl Sim {
                 parts.push(format!("Comments while testing:\n{}", during.join("\n")));
             }
         }
-        let id = format!("d{}", self.next_seq());
-        self.tickets[i].drafts.push(Draft {
-            id,
-            body: parts.join("\n\n"),
-            posted: false,
-        });
+        let id = DraftId::new(format!("d{}", self.next_seq()));
+        if let Some(h) = self.tickets[i].stage.held_mut() {
+            h.shipped.drafts.push(Draft {
+                id,
+                body: parts.join("\n\n"),
+                posted: false,
+            });
+        }
         self.ok("draft.compose", Some(key), None, "");
         Outcome::ok()
     }
 
-    pub(crate) fn edit_draft(&mut self, key: &str, id: &str, text: &str) {
+    pub(crate) fn edit_draft(&mut self, key: &TicketKey, id: &DraftId, text: &str) {
         if let Some(i) = self.idx(key)
-            && let Some(d) = self.tickets[i].drafts.iter_mut().find(|d| d.id == id)
+            && let Some(d) = self.tickets[i].draft_mut(id)
             && !d.posted
         {
             d.body = text.to_string();
@@ -920,58 +927,60 @@ impl Sim {
         t.seen_n = n;
     }
 
-    pub(crate) fn post_comment(&mut self, key: &str, draft: &str) -> Outcome {
+    pub(crate) fn post_comment(&mut self, key: &TicketKey, draft: &DraftId) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
-        let Some(d) = self.tickets[i]
-            .drafts
-            .iter()
-            .find(|d| d.id == draft)
-            .cloned()
-        else {
+        let Some(d) = self.tickets[i].draft_mut(draft) else {
             return Outcome::fail("That draft was already posted.");
         };
         if d.posted {
             return Outcome::fail("That draft was already posted.");
         }
-        if let Some(x) = self.tickets[i].drafts.iter_mut().find(|x| x.id == draft) {
-            x.posted = true;
-        }
-        self.push_comment(i, &d.body);
+        d.posted = true;
+        let body = d.body.clone();
+        self.push_comment(i, &body);
         self.ok("jira.comment", Some(key), None, "deploy comment");
         Outcome::ok()
     }
 
-    pub(crate) fn transition(&mut self, key: &str) -> Outcome {
+    pub(crate) fn transition(&mut self, key: &TicketKey) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
         if !Self::draft(&self.tickets[i]).is_some_and(|d| d.posted) {
             return Outcome::fail("Post the deploy comment first.");
         }
-        self.tickets[i].jira = JIRA_ALPHA.to_string();
+        self.tickets[i].jira = JiraStatus::AlphaTesting;
         self.ok(
             "jira.transition",
             Some(key),
             None,
-            &format!("{JIRA_REVIEW} -> {JIRA_ALPHA}"),
+            &format!(
+                "{} -> {}",
+                JiraStatus::InReview.label(),
+                JiraStatus::AlphaTesting.label()
+            ),
         );
-        Outcome::ok().with_toast(format!("{key} moved to {JIRA_ALPHA}"), ToastKind::Ok, None)
+        Outcome::ok().with_toast(
+            format!("{key} moved to {}", JiraStatus::AlphaTesting.label()),
+            ToastKind::Ok,
+            None,
+        )
     }
 
-    pub(crate) fn post_and_move(&mut self, key: &str, draft: &str) -> Outcome {
+    pub(crate) fn post_and_move(&mut self, key: &TicketKey, draft: &DraftId) -> Outcome {
         let r = self.post_comment(key, draft);
-        if !r.ok {
+        if !r.is_done() {
             return r;
         }
-        if self.tk(key).is_some_and(|t| t.jira == JIRA_REVIEW) {
+        if self.tk(key).is_some_and(|t| t.jira == JiraStatus::InReview) {
             return self.transition(key);
         }
         Outcome::ok().with_toast("Comment posted to Jira", ToastKind::Ok, None)
     }
 
-    pub(crate) fn post_free_comment(&mut self, key: &str, text: &str) -> Outcome {
+    pub(crate) fn post_free_comment(&mut self, key: &TicketKey, text: &str) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
@@ -986,7 +995,7 @@ impl Sim {
         p.reviewers.iter().any(|r| r.name == ME && r.approved)
     }
 
-    pub(crate) fn approve(&mut self, key: &str, repo: &str, pr: u32) -> Outcome {
+    pub(crate) fn approve(&mut self, key: &TicketKey, repo: &RepoName, pr: PrNumber) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
@@ -996,7 +1005,7 @@ impl Sim {
         if let Some(p) = self.tickets[i]
             .prs
             .iter_mut()
-            .find(|p| p.repo == repo && p.id == pr)
+            .find(|p| p.repo == *repo && p.id == pr)
             && let Some(me) = p.reviewers.iter_mut().find(|r| r.name == ME)
         {
             me.approved = true;
@@ -1007,18 +1016,19 @@ impl Sim {
             Some(repo),
             &format!("#{pr}"),
         );
-        if self.tickets[i].prs.iter().all(Self::my_approved) {
-            self.tickets[i].local = Some(Local::Done);
+        if self.tickets[i].prs.iter().all(Self::my_approved)
+            && self.tickets[i].stage.approved().is_ok()
+        {
             self.ok("ticket.done", Some(key), None, "");
         }
         Outcome::ok().with_toast(format!("Approved {repo} #{pr}"), ToastKind::Ok, None)
     }
 
-    pub(crate) fn approve_all(&mut self, key: &str) -> Outcome {
+    pub(crate) fn approve_all(&mut self, key: &TicketKey) -> Outcome {
         let Some(t) = self.tk(key) else {
             return Outcome::fail("Unknown ticket.");
         };
-        let pend: Vec<(String, u32)> = t
+        let pend: Vec<(RepoName, PrNumber)> = t
             .prs
             .iter()
             .filter(|p| !Self::my_approved(p))
@@ -1034,15 +1044,19 @@ impl Sim {
         )
     }
 
-    pub(crate) fn request_changes(&mut self, key: &str, pr: u32, text: &str) -> Outcome {
+    fn new_thread_id(&mut self) -> ThreadId {
+        ThreadId(self.next_seq())
+    }
+
+    pub(crate) fn request_changes(&mut self, key: &TicketKey, pr: PrNumber, text: &str) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
         let had = !Self::blocking_threads(&self.tickets[i]).is_empty();
-        let id = format!("th{}", self.next_seq());
-        let mut repo = String::new();
+        let id = self.new_thread_id();
+        let mut repo = None;
         if let Some(p) = self.tickets[i].prs.iter_mut().find(|p| p.id == pr) {
-            repo = p.repo.clone();
+            repo = Some(p.repo.clone());
             let file = p.files.first().map(|f| f.path.clone()).unwrap_or_default();
             p.threads.push(Thread {
                 id,
@@ -1057,7 +1071,7 @@ impl Sim {
         self.ok(
             "github.pr_request_changes",
             Some(key),
-            Some(&repo),
+            repo.as_ref(),
             &format!("#{pr}"),
         );
         Outcome::ok().with_toast("Requested changes", ToastKind::Ok, None)
@@ -1065,24 +1079,24 @@ impl Sim {
 
     pub(crate) fn add_thread(
         &mut self,
-        key: &str,
-        pr: u32,
+        key: &TicketKey,
+        pr: PrNumber,
         file: &str,
-        line: &str,
+        line: crate::vm::LineAnchor,
         text: &str,
     ) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
         let had = !Self::blocking_threads(&self.tickets[i]).is_empty();
-        let id = format!("th{}", self.next_seq());
-        let mut repo = String::new();
+        let id = self.new_thread_id();
+        let mut repo = None;
         if let Some(p) = self.tickets[i].prs.iter_mut().find(|p| p.id == pr) {
-            repo = p.repo.clone();
+            repo = Some(p.repo.clone());
             p.threads.push(Thread {
                 id,
                 file: file.to_string(),
-                line: Some(line.to_string()),
+                line: Some(line),
                 author: ME.to_string(),
                 text: text.to_string(),
                 resolved: false,
@@ -1092,30 +1106,31 @@ impl Sim {
         self.ok(
             "github.pr_comment",
             Some(key),
-            Some(&repo),
-            &format!("{file}:{}", line.get(1..).unwrap_or("")),
+            repo.as_ref(),
+            &format!("{file}:{}", line.line()),
         );
         Outcome::ok().with_toast("Comment posted on the pull request", ToastKind::Ok, None)
     }
 
     /* ---------------------------- returns and conflicts ---------------------------- */
 
-    fn send_return(&mut self, key: &str, body: &str, note: &str) -> Outcome {
+    fn send_return(&mut self, key: &TicketKey, body: &str, note: &str) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
-        if self.tickets[i].act.is_some()
-            && let Err(o) = self.deactivate(key, Local::Parked, false)
+        if self.tickets[i].act().is_some()
+            && let Err(o) = self.deactivate(key, After::Park, false)
         {
             return o;
         }
+        if let Err(e) = self.tickets[i].stage.returned() {
+            return refuse(e);
+        }
         self.push_comment(i, body);
         let t = &mut self.tickets[i];
-        t.jira = JIRA_RETURNED.to_string();
-        t.local = None;
+        t.jira = JiraStatus::Returned;
         t.pr_wait = None;
         t.th_wait = None;
-        t.reviewed = false;
         self.ok(
             "jira.comment",
             Some(key),
@@ -1126,7 +1141,11 @@ impl Sim {
             "jira.transition",
             Some(key),
             None,
-            &format!("{JIRA_REVIEW} -> {JIRA_RETURNED}"),
+            &format!(
+                "{} -> {}",
+                JiraStatus::InReview.label(),
+                JiraStatus::Returned.label()
+            ),
         );
         Outcome::ok().with_toast(
             format!("Returned {key} with a comment"),
@@ -1135,7 +1154,7 @@ impl Sim {
         )
     }
 
-    pub(crate) fn return_missing_pr(&mut self, key: &str) -> Outcome {
+    pub(crate) fn return_missing_pr(&mut self, key: &TicketKey) -> Outcome {
         let Some(t) = self.tk(key) else {
             return Outcome::fail("Unknown ticket.");
         };
@@ -1146,7 +1165,7 @@ impl Sim {
         self.send_return(key, &body, "no pull request")
     }
 
-    pub(crate) fn return_threads(&mut self, key: &str) -> Outcome {
+    pub(crate) fn return_threads(&mut self, key: &TicketKey) -> Outcome {
         let Some(t) = self.tk(key) else {
             return Outcome::fail("Unknown ticket.");
         };
@@ -1157,11 +1176,11 @@ impl Sim {
         self.send_return(key, &body, "unresolved review comments")
     }
 
-    pub(crate) fn accept_threads(&mut self, key: &str) -> Outcome {
+    pub(crate) fn accept_threads(&mut self, key: &TicketKey) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
-        let ids: Vec<String> = Self::blocking_threads(&self.tickets[i])
+        let ids: Vec<ThreadId> = Self::blocking_threads(&self.tickets[i])
             .into_iter()
             .map(|x| x.id)
             .collect();
@@ -1179,7 +1198,7 @@ impl Sim {
         Outcome::ok().with_toast("Proceeding with the open comments", ToastKind::Warn, None)
     }
 
-    pub(crate) fn send_conflict(&mut self, key: &str, also_return: bool) -> Outcome {
+    pub(crate) fn send_conflict(&mut self, key: &TicketKey, also_return: bool) -> Outcome {
         let Some(i) = self.idx(key) else {
             return Outcome::fail("Unknown ticket.");
         };
@@ -1198,7 +1217,7 @@ impl Sim {
         Outcome::ok().with_toast("Comment sent to the developer", ToastKind::Ok, None)
     }
 
-    pub(crate) fn break_lock(&mut self, repo: &str) -> Outcome {
+    pub(crate) fn break_lock(&mut self, repo: &RepoName) -> Outcome {
         match self.locks.get(repo) {
             Some(l) if matches!(l.kind, LockKind::Stale) => {
                 self.locks.remove(repo);
@@ -1247,7 +1266,7 @@ impl Sim {
                     "network unreachable, cache kept".to_string(),
                 ),
             ];
-            self.audit("sync", None, None, "failure", "offline");
+            self.audit("sync", None, None, AuditOutcome::Failure, "offline");
             self.toast(
                 "Sync failed: network unreachable. The cache was kept.",
                 ToastKind::Warn,
@@ -1289,15 +1308,18 @@ impl Sim {
             "sync",
             None,
             None,
-            if failed { "failure" } else { "success" },
+            if failed {
+                AuditOutcome::Failure
+            } else {
+                AuditOutcome::Success
+            },
             &text,
         );
     }
 
     /// The scripted "things that happen in the outside world" on successive syncs.
     fn deliver_arrival(&mut self) -> Option<String> {
-        let step = self.sync.script;
-        let text = match step {
+        let text = match self.sync.script {
             0 => {
                 self.tickets.push(data::arriving_ticket());
                 "PROJ-155 appeared in the Review column"
@@ -1305,13 +1327,13 @@ impl Sim {
             1 => {
                 let repos = self.repos.clone();
                 let serial = self.seq as u32;
-                if let Some(i) = self.idx("PROJ-163") {
+                if let Some(i) = self.idx(&"PROJ-163".into()) {
                     data::open_fake_prs(&mut self.tickets[i], &repos, serial);
                 }
                 "PROJ-163: a pull request was opened in web"
             }
             2 => {
-                if let Some(i) = self.idx("PROJ-150") {
+                if let Some(i) = self.idx(&"PROJ-150".into()) {
                     self.tickets[i].comments.push(Comment {
                         n: 3,
                         who: "Marta Lind".to_string(),
@@ -1331,27 +1353,27 @@ impl Sim {
 
     /* ---------------------------- responses ---------------------------- */
 
-    pub(crate) fn dismiss(&mut self, id: &str) -> Outcome {
-        let sug = self.suggest().into_iter().find(|s| s.id == id);
+    pub(crate) fn dismiss(&mut self, id: &SuggestionId) -> Outcome {
+        let sug = self.suggest().into_iter().find(|s| s.id == *id);
         let hash = sug.as_ref().map(|s| s.hash.clone()).unwrap_or_default();
         self.responses
-            .insert(id.to_string(), Response::Dismissed { hash });
+            .insert(id.clone(), Response::Dismissed { hash });
         self.ok(
             "suggestion.dismiss",
-            sug.and_then(|s| s.ticket).as_deref(),
+            sug.and_then(|s| s.ticket).as_ref(),
             None,
             id,
         );
         Outcome::ok().with_toast(
             "Dismissed",
             ToastKind::Info,
-            Some(Undo::Response(id.to_string())),
+            Some(Undo::Response(id.clone())),
         )
     }
 
-    pub(crate) fn snooze(&mut self, id: &str, minutes: u32) -> Outcome {
+    pub(crate) fn snooze(&mut self, id: &SuggestionId, minutes: u32) -> Outcome {
         self.responses.insert(
-            id.to_string(),
+            id.clone(),
             Response::Snoozed {
                 until: self.ms + i64::from(minutes) * MS_PER_MIN,
             },
@@ -1360,7 +1382,7 @@ impl Sim {
         Outcome::ok().with_toast(
             format!("Snoozed for {minutes} min"),
             ToastKind::Info,
-            Some(Undo::Response(id.to_string())),
+            Some(Undo::Response(id.clone())),
         )
     }
 
@@ -1395,7 +1417,7 @@ impl Sim {
             }
             SimEvent::SignOff(key) => {
                 if let Some(i) = self.idx(key) {
-                    self.tickets[i].jira = "Done".to_string();
+                    self.tickets[i].jira = JiraStatus::Done;
                     self.toast(
                         format!("{key} moved to Done in Jira (signed off)"),
                         ToastKind::Ok,
@@ -1407,7 +1429,7 @@ impl Sim {
                     let n = Self::max_n(&self.tickets[i]) + 1;
                     let at = format!("today {}", self.clock(None));
                     let t = &mut self.tickets[i];
-                    t.jira = JIRA_RETURNED.to_string();
+                    t.jira = JiraStatus::Returned;
                     t.comments.push(Comment {
                         n,
                         who: "Jane Doe".to_string(),
@@ -1421,7 +1443,7 @@ impl Sim {
             }
             SimEvent::BackToReview(key) => {
                 if let Some(i) = self.idx(key) {
-                    self.tickets[i].jira = JIRA_REVIEW.to_string();
+                    self.tickets[i].jira = JiraStatus::InReview;
                     self.toast(
                         format!("{key} is back in the Review column"),
                         ToastKind::Info,
@@ -1523,18 +1545,13 @@ impl Sim {
             SimEvent::UatAfterPush(key) => {
                 let who = UatMoved {
                     by: "Priya Nair".to_string(),
-                    ticket: "PROJ-150".to_string(),
+                    ticket: "PROJ-150".into(),
                     at: self.clock(None),
                 };
                 if let Some(i) = self.idx(key) {
-                    let repos: Vec<String> = self.tickets[i]
-                        .merges
-                        .iter()
-                        .map(|m| m.repo.clone())
-                        .collect();
-                    for r in repos {
-                        if let Some(d) = self.tickets[i].deploy.get_mut(&r) {
-                            d.uat_moved = Some(who.clone());
+                    if let Some(h) = self.tickets[i].stage.held_mut() {
+                        for l in &mut h.shipped.landings {
+                            l.deploy.uat_moved = Some(who.clone());
                         }
                     }
                     self.toast(

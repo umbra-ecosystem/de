@@ -1,31 +1,31 @@
-//! Pure questions about the simulated world. Nothing here mutates.
+//! Pure questions about the simulated world. Nothing here mutates (except `lock_busy`, which audits a refusal).
 
 use super::Sim;
 use super::model::*;
-use crate::vm::{Block, Group};
+use crate::vm::{Baseline, Block, Busy, Group, LineAnchor, RepoName, TicketKey};
 
 #[derive(Clone, Debug)]
 pub struct PlanRow {
-    pub repo: String,
-    pub cands: Vec<String>,
+    pub repo: RepoName,
+    pub cands: Vec<crate::vm::Branch>,
     pub excluded: bool,
-    pub manual: Option<String>,
-    pub chosen: Option<String>,
+    pub manual: Option<crate::vm::Branch>,
+    pub chosen: Option<crate::vm::Branch>,
     pub ambiguous: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct Gap {
     pub none: bool,
-    pub repos: Vec<(String, String)>,
+    pub repos: Vec<(RepoName, crate::vm::Branch)>,
 }
 
 #[derive(Clone, Debug)]
 pub struct OpenThread {
-    pub repo: String,
-    pub id: String,
+    pub repo: RepoName,
+    pub id: ThreadId,
     pub file: String,
-    pub line: Option<String>,
+    pub line: Option<LineAnchor>,
     pub author: String,
     pub text: String,
 }
@@ -33,16 +33,16 @@ pub struct OpenThread {
 #[derive(Clone, Debug)]
 pub enum UatState {
     OnUat,
-    Conflict { with: String, files: Vec<String> },
-    Overlap(Vec<(String, String)>),
+    Conflict { with: TicketKey, files: Vec<String> },
+    Overlap(Vec<(TicketKey, String)>),
     Clean,
 }
 
 #[derive(Clone, Debug)]
 pub struct ActRow {
-    pub repo: String,
+    pub repo: RepoName,
     pub ticket_role: bool,
-    pub branch: String,
+    pub branch: crate::vm::Branch,
 }
 
 #[derive(Clone, Debug)]
@@ -76,6 +76,10 @@ pub fn mentions_me(c: &Comment) -> bool {
         .any(|b| matches!(b, Block::Para(x) if x.to_lowercase().contains("@[you]")))
 }
 
+fn plural(n: usize) -> &'static str {
+    if n > 1 { "s" } else { "" }
+}
+
 impl Sim {
     pub(crate) fn is_hotfix(&self, t: &Ticket) -> bool {
         t.prs.iter().any(|p| {
@@ -103,7 +107,7 @@ impl Sim {
     }
 
     pub(crate) fn duration_ms(&self, t: &Ticket) -> i64 {
-        t.time_ms + t.act.as_ref().map_or(0, |a| self.ms - a.started_ms)
+        t.time_ms + t.act().map_or(0, |a| self.ms - a.started_ms)
     }
 
     pub(crate) fn fmt_dur(ms: i64) -> String {
@@ -115,24 +119,20 @@ impl Sim {
         }
     }
 
-    pub(crate) fn is_signed_off(t: &Ticket) -> bool {
-        JIRA_SIGNED.contains(&t.jira.as_str())
-    }
-
     /* ---------------------------- groups ---------------------------- */
 
     pub(crate) fn in_group(t: &Ticket, g: Group) -> bool {
+        let returned = t.jira == JiraStatus::Returned;
         match g {
-            Group::Pool => t.local.is_none() && t.jira == JIRA_REVIEW,
+            Group::Pool => t.local().is_none() && t.jira == JiraStatus::InReview,
             Group::Mine => {
-                matches!(t.local, Some(Local::Claimed | Local::Reviewing))
-                    && t.jira != JIRA_RETURNED
+                matches!(t.local(), Some(Local::Claimed | Local::Reviewing)) && !returned
             }
-            Group::Active => t.local == Some(Local::Active),
-            Group::Parked => t.local == Some(Local::Parked),
-            Group::Awaiting => t.local == Some(Local::Integrated) && t.jira != JIRA_RETURNED,
-            Group::Returned => t.jira == JIRA_RETURNED,
-            Group::Done => t.local == Some(Local::Done),
+            Group::Active => t.local() == Some(Local::Active),
+            Group::Parked => t.local() == Some(Local::Parked),
+            Group::Awaiting => t.local() == Some(Local::Integrated) && !returned,
+            Group::Returned => returned,
+            Group::Done => t.local() == Some(Local::Done),
             Group::All => true,
         }
     }
@@ -143,9 +143,9 @@ impl Sim {
         self.repos
             .iter()
             .map(|r| {
-                let cands = t.cands.get(r.name).cloned().unwrap_or_default();
-                let excluded = t.excl.contains(r.name);
-                let manual = t.link.get(r.name).cloned();
+                let cands = t.cands.get(&r.name).cloned().unwrap_or_default();
+                let excluded = t.excl.contains(&r.name);
+                let manual = t.link.get(&r.name).cloned();
                 let chosen = if excluded {
                     None
                 } else {
@@ -155,7 +155,7 @@ impl Sim {
                 };
                 let ambiguous = !excluded && manual.is_none() && cands.len() > 1;
                 PlanRow {
-                    repo: r.name.to_string(),
+                    repo: r.name.clone(),
                     cands,
                     excluded,
                     manual,
@@ -177,10 +177,10 @@ impl Sim {
     /* ---------------------------- missing PRs ---------------------------- */
 
     fn pr_stage(t: &Ticket) -> bool {
-        t.jira == JIRA_REVIEW
-            && t.merges.is_empty()
+        t.jira == JiraStatus::InReview
+            && t.landings().is_empty()
             && matches!(
-                t.local,
+                t.local(),
                 None | Some(Local::Claimed | Local::Reviewing | Local::Parked)
             )
     }
@@ -189,11 +189,11 @@ impl Sim {
         if !Self::pr_stage(t) {
             return None;
         }
-        let miss: Vec<(String, String)> = self
+        let miss: Vec<_> = self
             .touched(t)
             .into_iter()
             .filter(|p| !t.prs.iter().any(|x| x.repo == p.repo))
-            .map(|p| (p.repo, p.chosen.unwrap_or_default()))
+            .filter_map(|p| Some((p.repo, p.chosen?)))
             .collect();
         if t.prs.is_empty() {
             return Some(Gap {
@@ -282,7 +282,8 @@ impl Sim {
             ));
         }
         lines.push(format!(
-            "Please open a pull request for each branch and move the ticket back to {JIRA_REVIEW}."
+            "Please open a pull request for each branch and move the ticket back to {}.",
+            JiraStatus::InReview.label()
         ));
         lines.join("\n")
     }
@@ -291,10 +292,10 @@ impl Sim {
 
     fn thread_stage(t: &Ticket) -> bool {
         matches!(
-            t.local,
+            t.local(),
             Some(Local::Claimed | Local::Reviewing | Local::Parked)
-        ) && t.jira == JIRA_REVIEW
-            && t.merges.is_empty()
+        ) && t.jira == JiraStatus::InReview
+            && t.landings().is_empty()
     }
 
     pub(crate) fn open_threads(t: &Ticket) -> Vec<OpenThread> {
@@ -306,9 +307,9 @@ impl Sim {
                     .filter(|th| !th.resolved)
                     .map(|th| OpenThread {
                         repo: p.repo.clone(),
-                        id: th.id.clone(),
+                        id: th.id,
                         file: th.file.clone(),
-                        line: th.line.clone(),
+                        line: th.line,
                         author: th.author.clone(),
                         text: th.text.clone(),
                     })
@@ -334,10 +335,7 @@ impl Sim {
     }
 
     pub(crate) fn thread_line(x: &OpenThread) -> String {
-        let line = x
-            .line
-            .as_ref()
-            .map_or(String::new(), |l| format!(":{}", &l[1..]));
+        let line = x.line.map_or(String::new(), |a| format!(":{}", a.line()));
         format!("{} {}{} ({}): {}", x.repo, x.file, line, x.author, x.text)
     }
 
@@ -347,11 +345,11 @@ impl Sim {
 
     pub(crate) fn return_threads_body(&self, t: &Ticket) -> String {
         let th = Self::blocking_threads(t);
-        let plural = th.len() > 1;
+        let many = th.len() > 1;
         let mut lines = vec![format!(
             "Returned to development: {} review comment{} still unresolved.",
             th.len(),
-            if plural { "s are" } else { " is" }
+            if many { "s are" } else { " is" }
         )];
         for x in &th {
             lines.push(format!("• {}", Self::thread_line(x)));
@@ -360,34 +358,35 @@ impl Sim {
             lines.push(format!(
                 "Waited {} min for {} to be resolved (since {}).",
                 w.mins,
-                if plural { "them" } else { "it" },
+                if many { "them" } else { "it" },
                 self.clock(Some(w.since))
             ));
         }
         lines.push(format!(
-            "Please resolve or answer them, then move the ticket back to {JIRA_REVIEW}."
+            "Please resolve or answer them, then move the ticket back to {}.",
+            JiraStatus::InReview.label()
         ));
         lines.join("\n")
     }
 
     /* ---------------------------- uat ---------------------------- */
 
-    pub(crate) fn overlaps_for(&self, t: &Ticket, repo: &str) -> Vec<(String, String)> {
+    pub(crate) fn overlaps_for(&self, t: &Ticket, repo: &RepoName) -> Vec<(TicketKey, String)> {
         let mine: Vec<&FileDiff> = t
             .prs
             .iter()
-            .filter(|x| x.repo == repo)
+            .filter(|x| x.repo == *repo)
             .flat_map(|x| x.files.iter())
             .collect();
         let mut out = Vec::new();
         for o in &self.tickets {
-            if o.key == t.key || !o.merges.iter().any(|m| m.repo == repo) {
+            if o.key == t.key || !o.has_landed(repo) {
                 continue;
             }
             for f in o
                 .prs
                 .iter()
-                .filter(|x| x.repo == repo)
+                .filter(|x| x.repo == *repo)
                 .flat_map(|x| x.files.iter())
             {
                 if mine.iter().any(|g| g.path == f.path) {
@@ -398,16 +397,16 @@ impl Sim {
         out
     }
 
-    pub(crate) fn uat_check(&self, t: &Ticket) -> Vec<(String, UatState)> {
+    pub(crate) fn uat_check(&self, t: &Ticket) -> Vec<(RepoName, UatState)> {
         self.touched(t)
             .into_iter()
             .map(|p| {
                 let repo = p.repo;
-                let state = if t.merges.iter().any(|m| m.repo == repo) {
+                let state = if t.has_landed(&repo) {
                     UatState::OnUat
-                } else if self.sims.conflict.as_deref() == Some(repo.as_str()) {
+                } else if self.sims.conflict.as_ref() == Some(&repo) {
                     UatState::Conflict {
-                        with: "PROJ-127".to_string(),
+                        with: "PROJ-127".into(),
                         files: vec!["src/session.rs".to_string()],
                     }
                 } else {
@@ -425,12 +424,12 @@ impl Sim {
 
     pub(crate) fn pre_merge_stage(t: &Ticket) -> bool {
         matches!(
-            t.local,
+            t.local(),
             Some(Local::Claimed | Local::Reviewing | Local::Parked | Local::Active)
         )
     }
 
-    pub(crate) fn uat_conflicts(&self, t: &Ticket) -> Vec<(String, String, Vec<String>)> {
+    pub(crate) fn uat_conflicts(&self, t: &Ticket) -> Vec<(RepoName, TicketKey, Vec<String>)> {
         if !Self::pre_merge_stage(t) {
             return Vec::new();
         }
@@ -491,27 +490,22 @@ impl Sim {
 
     pub(crate) fn baseline_for(
         &self,
-        repo: &str,
+        repo: &RepoName,
         hotfix: bool,
-        choice: Option<crate::vm::Baseline>,
-    ) -> String {
-        use crate::vm::Baseline;
+        choice: Option<Baseline>,
+    ) -> crate::vm::Branch {
         let r = self.repo(repo);
         if !hotfix {
-            return r.base.to_string();
+            return r.base.clone();
         }
         match choice {
-            Some(Baseline::Production) => r.prod.to_string(),
-            Some(Baseline::Uat) => "uat".to_string(),
-            _ => r.base.to_string(),
+            Some(Baseline::Production) => r.prod.clone(),
+            Some(Baseline::Uat) => "uat".into(),
+            _ => r.base.clone(),
         }
     }
 
-    pub(crate) fn activation_plan(
-        &self,
-        t: &Ticket,
-        choice: Option<crate::vm::Baseline>,
-    ) -> ActPlan {
+    pub(crate) fn activation_plan(&self, t: &Ticket, choice: Option<Baseline>) -> ActPlan {
         let mut errors = Vec::new();
         let mut rows = Vec::new();
         if let Some(e) = self.gap_error(t) {
@@ -532,7 +526,7 @@ impl Sim {
                 }
                 if let Some(b) = &p.chosen {
                     rows.push(ActRow {
-                        repo: r.name.to_string(),
+                        repo: r.name.clone(),
                         ticket_role: true,
                         branch: b.clone(),
                     });
@@ -540,18 +534,18 @@ impl Sim {
                 }
             }
             rows.push(ActRow {
-                repo: r.name.to_string(),
+                repo: r.name.clone(),
                 ticket_role: false,
-                branch: self.baseline_for(r.name, hot, choice),
+                branch: self.baseline_for(&r.name, hot, choice),
             });
         }
         let overlay = rows.iter().find_map(|r| {
             let cfg = self.repo(&r.repo);
-            let provider = cfg.consumes?;
+            let provider = cfg.consumes.clone()?;
             (cfg.overlay_consumer && rows.iter().any(|x| x.repo == provider && x.ticket_role)).then(
                 || Overlay {
                     repo: r.repo.clone(),
-                    provider: provider.to_string(),
+                    provider,
                 },
             )
         });
@@ -559,7 +553,7 @@ impl Sim {
         if bt > 0 {
             errors.push(format!(
                 "{bt} unresolved review comment{}. Wait for them to be resolved, return the ticket, or proceed anyway from the ticket page.",
-                if bt > 1 { "s" } else { "" }
+                plural(bt)
             ));
         }
         ActPlan {
@@ -571,7 +565,8 @@ impl Sim {
 
     /* ---------------------------- pre-push and integration ---------------------------- */
 
-    pub(crate) fn prepush_items(&self, t: &Ticket) -> Vec<(String, usize, String, bool)> {
+    /// `(repo, index, text, ticked)` for every check of every touched repo.
+    pub(crate) fn prepush_items(&self, t: &Ticket) -> Vec<(RepoName, usize, String, bool)> {
         self.touched(t)
             .into_iter()
             .flat_map(|p| {
@@ -584,7 +579,7 @@ impl Sim {
                             p.repo.clone(),
                             i,
                             (*text).to_string(),
-                            t.pre.contains(&format!("{}:{}", p.repo, i)),
+                            t.pre.contains(&(p.repo.clone(), i)),
                         )
                     })
                     .collect::<Vec<_>>()
@@ -592,7 +587,7 @@ impl Sim {
             .collect()
     }
 
-    pub(crate) fn prepush_missing(&self, t: &Ticket) -> Vec<(String, String)> {
+    pub(crate) fn prepush_missing(&self, t: &Ticket) -> Vec<(RepoName, String)> {
         self.prepush_items(t)
             .into_iter()
             .filter(|x| !x.3)
@@ -601,7 +596,7 @@ impl Sim {
     }
 
     pub(crate) fn prep_ready(t: &Ticket) -> bool {
-        t.prep.as_ref().is_some_and(|p| {
+        t.prep().is_some_and(|p| {
             p.rows
                 .iter()
                 .any(|r| matches!(r.outcome, PrepOutcome::Ready { .. }))
@@ -620,48 +615,43 @@ impl Sim {
 
     pub(crate) fn pushed_all(&self, t: &Ticket) -> bool {
         let touched = self.touched(t);
-        !touched.is_empty()
-            && touched
-                .iter()
-                .all(|p| t.merges.iter().any(|m| m.repo == p.repo))
+        !touched.is_empty() && touched.iter().all(|p| t.has_landed(&p.repo))
     }
 
     pub(crate) fn all_deployed(&self, t: &Ticket) -> bool {
-        !t.merges.is_empty()
+        !t.landings().is_empty()
             && self.pushed_all(t)
-            && t.merges.iter().all(|m| {
-                t.deploy
-                    .get(&m.repo)
-                    .is_some_and(|d| d.state == DeployState::Deployed)
-            })
+            && t.landings()
+                .iter()
+                .all(|l| l.deploy.state == DeployState::Deployed)
     }
 
-    pub(crate) fn failed_repos(t: &Ticket) -> Vec<String> {
-        t.merges
+    pub(crate) fn failed_repos(t: &Ticket) -> Vec<RepoName> {
+        t.landings()
             .iter()
-            .filter(|m| {
-                t.deploy
-                    .get(&m.repo)
-                    .is_some_and(|d| d.state == DeployState::Failed)
-            })
-            .map(|m| m.repo.clone())
+            .filter(|l| l.deploy.state == DeployState::Failed)
+            .map(|l| l.repo.clone())
             .collect()
     }
 
     pub(crate) fn any_running(t: &Ticket) -> bool {
-        t.merges.iter().any(|m| {
-            t.deploy
-                .get(&m.repo)
-                .is_some_and(|d| matches!(d.state, DeployState::Pending | DeployState::Running))
-        })
+        t.landings()
+            .iter()
+            .any(|l| matches!(l.deploy.state, DeployState::Pending | DeployState::Running))
     }
 
     pub(crate) fn draft(t: &Ticket) -> Option<&Draft> {
-        t.drafts.last()
+        t.drafts().last()
     }
 
     pub(crate) fn stale_review(t: &Ticket) -> bool {
-        t.reviewed && t.prs.iter().any(|p| Some(p.updated_seq) > t.reviewed_seq)
+        t.review_mark()
+            .is_some_and(|m| t.prs.iter().any(|p| p.updated_seq > m.0))
+    }
+
+    /// The highest PR update sequence: what a fresh review mark covers.
+    pub(crate) fn latest_seq(t: &Ticket) -> u32 {
+        t.prs.iter().map(|p| p.updated_seq).max().unwrap_or(0)
     }
 
     pub(crate) fn lock_text(l: &Lock) -> String {
@@ -672,14 +662,14 @@ impl Sim {
         }
     }
 
-    /// A repo is busy: return the message that refuses the operation and audit it. Reads take no lock.
+    /// A repo is busy: audit the refusal and describe it. Reads take no lock.
     pub(crate) fn lock_busy(
         &mut self,
-        repos: &[String],
+        repos: &[RepoName],
         op: &str,
-        ticket: &str,
-    ) -> Option<crate::vm::Busy> {
-        let mut names: Vec<String> = repos.to_vec();
+        ticket: &TicketKey,
+    ) -> Option<Busy> {
+        let mut names: Vec<RepoName> = repos.to_vec();
         names.sort();
         names.dedup();
         for r in names {
@@ -690,11 +680,11 @@ impl Sim {
                 "lock.denied",
                 Some(ticket),
                 Some(&r),
-                "failure",
+                AuditOutcome::Failure,
                 &format!("{op} refused: {}", Self::lock_text(&l)),
             );
             let stale = matches!(l.kind, LockKind::Stale);
-            return Some(crate::vm::Busy {
+            return Some(Busy {
                 message: if stale {
                     format!(
                         "{r} has a leftover .git/index.lock and no git process is running. Remove it to continue. Nothing was changed."

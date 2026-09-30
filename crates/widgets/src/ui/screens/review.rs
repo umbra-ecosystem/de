@@ -47,7 +47,7 @@ fn thread(ui: &Ui, t: &ThreadVm) -> Div {
         .child(div().text_sm().child(t.text.clone()))
 }
 
-fn composer(ui: &Ui, inputs: &Inputs, path: &str, anchor: &str) -> Div {
+fn composer(ui: &Ui, inputs: &Inputs, path: &str, anchor: LineAnchor) -> Div {
     let pal = &ui.pal;
     div()
         .flex()
@@ -59,10 +59,7 @@ fn composer(ui: &Ui, inputs: &Inputs, path: &str, anchor: &str) -> Div {
         .rounded_md()
         .border_1()
         .border_color(pal.accent.opacity(0.6))
-        .child(faint(
-            pal,
-            format!("Comment on {path} line {}", anchor.get(1..).unwrap_or("")),
-        ))
+        .child(faint(pal, format!("Comment on {path}, {anchor}")))
         .child(inputs.area(&Field::Inline))
         .child(
             div()
@@ -106,10 +103,10 @@ fn sign(k: LineKind) -> &'static str {
 #[allow(clippy::too_many_arguments)]
 fn plus(
     ui: &Ui,
-    key: &str,
-    pr: u32,
+    key: &TicketKey,
+    pr: PrNumber,
     path: &str,
-    anchor: &str,
+    anchor: LineAnchor,
     group: &SharedString,
 ) -> Stateful<Div> {
     div()
@@ -124,10 +121,10 @@ fn plus(
         .group_hover(group.clone(), |s| s.opacity(1.0))
         .hover(|s| s.bg(ui.pal.accent.opacity(0.2)))
         .on_click(ui.on_click(Intent::InlineOpen {
-            key: key.to_string(),
+            key: key.clone(),
             pr,
             file: path.to_string(),
-            line: anchor.to_string(),
+            line: anchor,
         }))
         .child("+")
 }
@@ -142,7 +139,7 @@ fn unified_row(ui: &Ui, inputs: &Inputs, r: &ReviewVm, hunk: usize, row: &DiffRo
     else {
         return div();
     };
-    let group = SharedString::from(format!("ln-{hunk}-{}", line.anchor));
+    let group = SharedString::from(format!("ln-{hunk}-{:?}", line.anchor));
     div()
         .flex()
         .flex_col()
@@ -170,18 +167,11 @@ fn unified_row(ui: &Ui, inputs: &Inputs, r: &ReviewVm, hunk: usize, row: &DiffRo
                         .whitespace_nowrap()
                         .child(line.text.clone()),
                 )
-                .child(plus(
-                    ui,
-                    &r.key,
-                    r.pr_id,
-                    &r.file_path,
-                    &line.anchor,
-                    &group,
-                )),
+                .child(plus(ui, &r.key, r.pr_id, &r.file_path, line.anchor, &group)),
         )
         .children(threads.iter().map(|t| thread(ui, t)))
         .when(*comp, |d| {
-            d.child(composer(ui, inputs, &r.file_path, &line.anchor))
+            d.child(composer(ui, inputs, &r.file_path, line.anchor))
         })
 }
 
@@ -222,9 +212,8 @@ fn split_row(ui: &Ui, inputs: &Inputs, r: &ReviewVm, hunk: usize, row: &DiffRow)
     let anchor = right
         .as_ref()
         .or(left.as_ref())
-        .map(|l| l.anchor.clone())
-        .unwrap_or_default();
-    let group = SharedString::from(format!("sp-{hunk}-{anchor}"));
+        .map_or(LineAnchor::New(0), |l| l.anchor);
+    let group = SharedString::from(format!("sp-{hunk}-{anchor:?}"));
     div()
         .flex()
         .flex_col()
@@ -235,11 +224,11 @@ fn split_row(ui: &Ui, inputs: &Inputs, r: &ReviewVm, hunk: usize, row: &DiffRow)
                 .child(split_cell(ui, left, true))
                 .child(div().w_px().bg(pal.border))
                 .child(split_cell(ui, right, false))
-                .child(plus(ui, &r.key, r.pr_id, &r.file_path, &anchor, &group)),
+                .child(plus(ui, &r.key, r.pr_id, &r.file_path, anchor, &group)),
         )
         .children(threads.iter().map(|t| thread(ui, t)))
         .when(*comp, |d| {
-            d.child(composer(ui, inputs, &r.file_path, &anchor))
+            d.child(composer(ui, inputs, &r.file_path, anchor))
         })
 }
 

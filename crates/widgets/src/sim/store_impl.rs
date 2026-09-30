@@ -3,7 +3,7 @@
 use super::Sim;
 use super::detail::{deploy_chip, jira_badge, local_badge, priority_tone};
 use super::model::*;
-use super::rules::{Sug, natural_key};
+use super::rules::Sug;
 use crate::store::{Outcome, ReviewSel, Store};
 use crate::vm::*;
 
@@ -45,14 +45,14 @@ fn audit_row(a: &AuditEntry) -> AuditRow {
     AuditRow {
         at: a.at.clone(),
         action: a.action.clone(),
-        repo: a.repo.clone().unwrap_or_default(),
+        repo: a.repo.as_ref().map_or(String::new(), |r| r.to_string()),
         ticket: a.ticket.clone(),
         outcome: Badge::new(
-            a.outcome,
+            a.outcome.word(),
             match a.outcome {
-                "success" => Tone::Ok,
-                "failure" => Tone::Bad,
-                _ => Tone::Neutral,
+                AuditOutcome::Success => Tone::Ok,
+                AuditOutcome::Failure => Tone::Bad,
+                AuditOutcome::Skipped => Tone::Neutral,
             },
         ),
         details: a.details.clone(),
@@ -98,19 +98,14 @@ impl Sim {
             .iter()
             .filter(|t| Self::in_group(t, g))
             .collect();
-        v.sort_by(|a, b| {
-            a.priority
-                .rank()
-                .cmp(&b.priority.rank())
-                .then_with(|| natural_key(&a.key).cmp(&natural_key(&b.key)))
-        });
+        v.sort_by(|a, b| a.priority.cmp(&b.priority).then_with(|| a.key.cmp(&b.key)));
         v
     }
 
     fn ticket_row(&self, t: &Ticket) -> TicketRowVm {
         let un = Self::unseen_count(t);
         let mut flags = Vec::new();
-        if !t.merges.is_empty() {
+        if !t.landings().is_empty() {
             flags.push(if self.all_deployed(t) {
                 Badge::new("deployed", Tone::Ok)
             } else if !Self::failed_repos(t).is_empty() {
@@ -155,8 +150,8 @@ impl Sim {
             title: t.title.clone(),
             hotfix: self.is_hotfix(t),
             sub: format!("{} · {}", t.kind, t.assignee),
-            jira: jira_badge(&t.jira),
-            local: local_badge(t.local),
+            jira: jira_badge(t.jira),
+            local: local_badge(t.local()),
             repos: t.prs.iter().map(|p| p.repo.clone()).collect(),
             flags,
         }
@@ -174,7 +169,7 @@ impl Sim {
                     Some(r) => format!("{} · {r}", a.action),
                     None => a.action.clone(),
                 },
-                failed: a.outcome == "failure",
+                failed: a.outcome == AuditOutcome::Failure,
             })
             .collect();
         if rows.is_empty() {
@@ -280,11 +275,11 @@ impl Sim {
         let mut out = vec![RightSection {
             title: "Status".to_string(),
             rows: vec![
-                RightRow::Kv(Kv::badges("Jira", vec![jira_badge(&t.jira)])),
+                RightRow::Kv(Kv::badges("Jira", vec![jira_badge(t.jira)])),
                 RightRow::Kv(Kv::badges(
                     "Local",
                     vec![
-                        local_badge(t.local)
+                        local_badge(t.local())
                             .unwrap_or_else(|| Badge::new("not claimed", Tone::Neutral)),
                     ],
                 )),
@@ -299,7 +294,7 @@ impl Sim {
                 RightRow::Kv(Kv::text("Time", Self::fmt_dur(self.duration_ms(t)))),
                 RightRow::Kv(Kv::badges(
                     "Reviewed",
-                    vec![if t.reviewed {
+                    vec![if t.reviewed() {
                         Badge::new("yes", Tone::Ok)
                     } else {
                         Badge::new("no", Tone::Neutral)
@@ -340,7 +335,7 @@ impl Sim {
             .map(|p| {
                 let cfg = self.repo(&p.repo);
                 let ap = p.reviewers.iter().filter(|r| r.approved).count();
-                let d = t.deploy.get(&p.repo);
+                let d = t.landing(&p.repo).map(|l| &l.deploy);
                 let mut sub = format!(
                     "{} → {} · {ap}/{} approvals",
                     p.src,
@@ -385,7 +380,7 @@ impl Sim {
                     .iter()
                     .map(|l| RightRow::Item {
                         head: vec![Badge::new(l.rel, Tone::Neutral), jira_badge(l.status)],
-                        key: self.tk(l.key).map(|_| l.key.to_string()),
+                        key: self.tk(&l.key).map(|_| l.key.clone()),
                         title: format!("{} {}", l.key, l.title),
                         sub: None,
                     })
@@ -397,10 +392,6 @@ impl Sim {
             rows: self.activity(Some(&t.key), 8),
         });
         out
-    }
-
-    fn stale_label(&self, who: &str) -> String {
-        format!("Cannot send: {who} is signed out.")
     }
 
     fn blocked_for(&self, c: &Command) -> Option<String> {
@@ -423,42 +414,47 @@ impl Sim {
                 | Command::InlineComment { .. }
         );
         if acli && !self.jira_ready {
-            return Some(format!(
-                "{} Run acli jira auth login, then re-check in Settings.",
-                self.stale_label("acli")
-            ));
+            return Some(
+                "Cannot send: acli is signed out. Run acli jira auth login, then re-check in Settings."
+                    .to_string(),
+            );
         }
         if gh && !self.gh_ready {
-            return Some(format!(
-                "{} Run gh auth login, then re-check in Settings.",
-                self.stale_label("gh")
-            ));
+            return Some(
+                "Cannot send: gh is signed out. Run gh auth login, then re-check in Settings."
+                    .to_string(),
+            );
         }
         None
     }
 
-    fn preview_for(&self, c: &Command) -> Option<Preview> {
-        let p = |title: &str,
-                 ticket: Option<&str>,
-                 risk: Risk,
-                 summary: &str,
-                 payload: Vec<String>,
-                 facts: Vec<String>,
-                 confirm: &str| Preview {
-            title: title.to_string(),
-            ticket: ticket.map(str::to_string),
-            risk,
-            summary: summary.to_string(),
-            payload,
-            facts,
-            type_key: None,
-            confirm_label: confirm.to_string(),
-            blocked: self.blocked_for(c),
-        };
+    /// A preview shell for `c`, with the signed-out check already applied.
+    fn pv(
+        &self,
+        c: &Command,
+        title: &str,
+        ticket: Option<&TicketKey>,
+        risk: Risk,
+        summary: &str,
+        confirm: &str,
+    ) -> Preview {
+        let mut p = Preview::new(c.clone(), title, risk, summary, confirm);
+        p.ticket = ticket.cloned();
+        p.blocked = self.blocked_for(c);
+        p
+    }
+
+    /// The preview of every remote write. The match is over the flat command; `is_remote` and the test
+    /// `every_remote_command_has_a_preview` keep the two in step.
+    fn remote_preview(&self, rc: &RemoteCommand) -> Result<Preview, String> {
+        let c = rc.command();
+        let gone = || "That ticket is no longer in the cache. Nothing was sent.".to_string();
         match c {
             Command::PushUat(key) => {
-                let t = self.tk(key)?;
-                let prep = t.prep.as_ref()?;
+                let t = self.tk(key).ok_or_else(gone)?;
+                let prep = t
+                    .prep()
+                    .ok_or("Prepare the integration first. Nothing was sent.")?;
                 let mut payload = Vec::new();
                 let mut facts = Vec::new();
                 for r in &prep.rows {
@@ -490,73 +486,100 @@ impl Sim {
                     "Checks passed: overlay guard ✓ (by SHA) · no overlay in worktree ✓"
                         .to_string(),
                 );
-                let mut pv = p(
+                let mut p = self.pv(
+                    c,
                     "Push to uat",
                     Some(key),
                     Risk::High,
                     "Pushing deploys to alpha. No force: a rejected push stops and tells you.",
-                    payload,
-                    facts,
                     "Push to uat",
                 );
-                pv.type_key = Some(key.clone());
-                Some(pv)
+                p.payload = payload;
+                p.facts = facts;
+                p.type_key = Some(key.to_string());
+                Ok(p)
             }
             Command::Rerun { key, repo } => {
-                let d = self.tk(key)?.deploy.get(repo)?;
-                Some(p(
+                let t = self.tk(key).ok_or_else(gone)?;
+                let l = t.landing(repo).ok_or("There is no run to re-run.")?;
+                let mut p = self.pv(
+                    c,
                     "Re-run failed workflow",
                     Some(key),
                     Risk::Medium,
                     "Starts a new Actions run for the same commit. The failed run stays in the history.",
-                    vec![format!(
-                        "gh run rerun {} --repo {}",
-                        d.run,
-                        self.repo(repo).host
-                    )],
-                    Vec::new(),
                     "Re-run",
-                ))
+                );
+                p.payload = vec![format!(
+                    "gh run rerun {} --repo {}",
+                    l.deploy.run,
+                    self.repo(repo).host
+                )];
+                Ok(p)
             }
             Command::PostAndMove { key, draft } => {
-                let t = self.tk(key)?;
-                let d = t.drafts.iter().find(|d| &d.id == draft)?;
+                let t = self.tk(key).ok_or_else(gone)?;
+                let d = t
+                    .drafts()
+                    .iter()
+                    .find(|d| d.id == *draft)
+                    .ok_or("That draft is gone.")?;
                 let mut payload = vec!["Comment body (verbatim):".to_string()];
                 payload.extend(d.body.lines().map(|l| format!("  {l}")));
-                payload.push(format!("Transition: {JIRA_REVIEW} → {JIRA_ALPHA}"));
-                Some(p(
-                    &format!("Post the deploy comment and move to {JIRA_ALPHA}"),
+                payload.push(format!(
+                    "Transition: {} → {}",
+                    JiraStatus::InReview.label(),
+                    JiraStatus::AlphaTesting.label()
+                ));
+                let mut p = self.pv(
+                    c,
+                    &format!(
+                        "Post the deploy comment and move to {}",
+                        JiraStatus::AlphaTesting.label()
+                    ),
                     Some(key),
                     Risk::Medium,
                     "One confirm sends the comment and moves the ticket.",
-                    payload,
-                    Vec::new(),
                     "Post and move",
-                ))
+                );
+                p.payload = payload;
+                Ok(p)
             }
-            Command::Transition(key) => Some(p(
-                &format!("Move to {JIRA_ALPHA}"),
-                Some(key),
-                Risk::Medium,
-                "Changes the Jira status. The comment was already posted.",
-                vec![format!("Transition: {JIRA_REVIEW} → {JIRA_ALPHA}")],
-                Vec::new(),
-                "Move ticket",
-            )),
-            Command::Approve { key, repo, pr } => Some(p(
-                &format!("Approve {} #{pr}", self.repo(repo).host),
-                Some(key),
-                Risk::Medium,
-                "Approval is the last gate. It cannot be withdrawn from here.",
-                vec![format!(
+            Command::Transition(key) => {
+                self.tk(key).ok_or_else(gone)?;
+                let mut p = self.pv(
+                    c,
+                    &format!("Move to {}", JiraStatus::AlphaTesting.label()),
+                    Some(key),
+                    Risk::Medium,
+                    "Changes the Jira status. The comment was already posted.",
+                    "Move ticket",
+                );
+                p.payload = vec![format!(
+                    "Transition: {} → {}",
+                    JiraStatus::InReview.label(),
+                    JiraStatus::AlphaTesting.label()
+                )];
+                Ok(p)
+            }
+            Command::Approve { key, repo, pr } => {
+                self.tk(key).ok_or_else(gone)?;
+                let mut p = self.pv(
+                    c,
+                    &format!("Approve {} #{pr}", self.repo(repo).host),
+                    Some(key),
+                    Risk::Medium,
+                    "Approval is the last gate. It cannot be withdrawn from here.",
+                    "Approve",
+                );
+                p.payload = vec![format!(
                     "gh pr review {pr} --approve --repo {}",
                     self.repo(repo).host
-                )],
-                Vec::new(),
-                "Approve",
-            )),
+                )];
+                Ok(p)
+            }
             Command::ApproveAll(key) => {
-                let t = self.tk(key)?;
+                let t = self.tk(key).ok_or_else(gone)?;
                 let payload = t
                     .prs
                     .iter()
@@ -569,124 +592,157 @@ impl Sim {
                         )
                     })
                     .collect();
-                Some(p(
+                let mut p = self.pv(
+                    c,
                     "Approve all pull requests",
                     Some(key),
                     Risk::Medium,
                     "Approval is the last gate. It cannot be withdrawn from here.",
-                    payload,
-                    Vec::new(),
                     "Approve all",
-                ))
+                );
+                p.payload = payload;
+                Ok(p)
             }
-            Command::RequestChanges { key, pr, text } => Some(p(
-                "Request changes",
-                Some(key),
-                Risk::Medium,
-                "Posts a review that blocks the merge until it is resolved.",
-                vec![format!("PR #{pr}"), format!("Body (verbatim): {text}")],
-                Vec::new(),
-                "Request changes",
-            )),
+            Command::RequestChanges { key, pr, text } => {
+                let mut p = self.pv(
+                    c,
+                    "Request changes",
+                    Some(key),
+                    Risk::Medium,
+                    "Posts a review that blocks the merge until it is resolved.",
+                    "Request changes",
+                );
+                p.payload = vec![format!("PR #{pr}"), format!("Body (verbatim): {text}")];
+                Ok(p)
+            }
             Command::InlineComment {
                 key,
                 pr,
                 file,
                 line,
                 text,
-            } => Some(p(
-                "Comment on a line",
-                Some(key),
-                Risk::Medium,
-                "Posts an inline comment. If GitHub cannot anchor it, nothing is posted instead of a general comment.",
-                vec![
-                    format!("PR #{pr} · {file} · line {}", line.get(1..).unwrap_or("")),
+            } => {
+                let mut p = self.pv(
+                    c,
+                    "Comment on a line",
+                    Some(key),
+                    Risk::Medium,
+                    "Posts an inline comment. If GitHub cannot anchor it, nothing is posted instead of a general comment.",
+                    "Post comment",
+                );
+                p.payload = vec![
+                    format!("PR #{pr} · {file} · {line}"),
                     format!("Body (verbatim): {text}"),
-                ],
-                Vec::new(),
-                "Post comment",
-            )),
-            Command::PostComment { key, text } => Some(p(
-                "Post a comment to Jira",
-                Some(key),
-                Risk::Low,
-                "Adds a comment to the ticket.",
-                vec!["Body (verbatim):".to_string(), format!("  {text}")],
-                Vec::new(),
-                "Post comment",
-            )),
+                ];
+                Ok(p)
+            }
+            Command::PostComment { key, text } => {
+                let mut p = self.pv(
+                    c,
+                    "Post a comment to Jira",
+                    Some(key),
+                    Risk::Low,
+                    "Adds a comment to the ticket.",
+                    "Post comment",
+                );
+                p.payload = vec!["Body (verbatim):".to_string(), format!("  {text}")];
+                Ok(p)
+            }
             Command::ReturnMissingPr(key) => {
-                let t = self.tk(key)?;
+                let t = self.tk(key).ok_or_else(gone)?;
                 let mut payload = vec!["Comment body (verbatim):".to_string()];
                 payload.extend(self.return_body(t).lines().map(|l| format!("  {l}")));
-                payload.push(format!("Transition: {JIRA_REVIEW} → {JIRA_RETURNED}"));
-                Some(p(
+                payload.push(format!(
+                    "Transition: {} → {}",
+                    JiraStatus::InReview.label(),
+                    JiraStatus::Returned.label()
+                ));
+                let mut p = self.pv(
+                    c,
                     &format!("Return {key}: no pull request"),
                     Some(key),
                     Risk::Medium,
                     "Comments on the ticket and sends it back to development.",
-                    payload,
-                    Vec::new(),
                     "Return ticket",
-                ))
+                );
+                p.payload = payload;
+                Ok(p)
             }
             Command::ReturnThreads(key) => {
-                let t = self.tk(key)?;
+                let t = self.tk(key).ok_or_else(gone)?;
                 let mut payload = vec!["Comment body (verbatim):".to_string()];
                 payload.extend(
                     self.return_threads_body(t)
                         .lines()
                         .map(|l| format!("  {l}")),
                 );
-                payload.push(format!("Transition: {JIRA_REVIEW} → {JIRA_RETURNED}"));
-                Some(p(
+                payload.push(format!(
+                    "Transition: {} → {}",
+                    JiraStatus::InReview.label(),
+                    JiraStatus::Returned.label()
+                ));
+                let mut p = self.pv(
+                    c,
                     &format!("Return {key}: unresolved review comments"),
                     Some(key),
                     Risk::Medium,
                     "Comments on the ticket and sends it back to development.",
-                    payload,
-                    Vec::new(),
                     "Return ticket",
-                ))
+                );
+                p.payload = payload;
+                Ok(p)
             }
             Command::ConflictComment { key, .. } => {
-                let t = self.tk(key)?;
+                let t = self.tk(key).ok_or_else(gone)?;
                 let mut payload = vec!["Comment body (verbatim):".to_string()];
                 payload.extend(self.conflict_body(t).lines().map(|l| format!("  {l}")));
-                Some(p(
+                let mut p = self.pv(
+                    c,
                     &format!("Tell the developer {key} conflicts with uat"),
                     Some(key),
                     Risk::Medium,
                     "Adds a comment to the ticket. The ticket stays where it is.",
-                    payload,
-                    Vec::new(),
                     "Post comment",
-                ))
+                );
+                p.payload = payload;
+                Ok(p)
             }
+            other => Err(format!("{other:?} is not a remote command")),
+        }
+    }
+
+    /// Local commands that still ask first.
+    fn guard_for(&self, lc: &LocalCommand) -> Option<Preview> {
+        let c = lc.command();
+        match c {
             Command::AcceptThreads(key) => {
                 let t = self.tk(key)?;
-                let payload = Self::blocking_threads(t)
-                    .iter()
-                    .map(Self::thread_line)
-                    .collect();
-                Some(p(
+                let mut p = self.pv(
+                    c,
                     "Proceed with unresolved comments",
                     Some(key),
                     Risk::Low,
                     "Local only. Nothing is sent. The deploy comment will list these comments.",
-                    payload,
-                    Vec::new(),
                     "Proceed anyway",
-                ))
+                );
+                p.payload = Self::blocking_threads(t)
+                    .iter()
+                    .map(Self::thread_line)
+                    .collect();
+                Some(p)
             }
-            Command::Park(key) => Some(p(
-                &format!("Park {key}"),
-                Some(key),
-                Risk::Low,
-                "Local only. Repos go back to where they were, stashes are restored and the overlay is reverted.",
-                self.tk(key)?
-                    .act
-                    .as_ref()
+            Command::Park(key) => {
+                let t = self.tk(key)?;
+                let mut p = self.pv(
+                    c,
+                    &format!("Park {key}"),
+                    Some(key),
+                    Risk::Low,
+                    "Local only. Repos go back to where they were, stashes are restored and the overlay is reverted.",
+                    "Park",
+                );
+                p.payload = t
+                    .act()
                     .map(|a| {
                         a.records
                             .iter()
@@ -700,37 +756,39 @@ impl Sim {
                             })
                             .collect()
                     })
-                    .unwrap_or_default(),
-                Vec::new(),
-                "Park",
-            )),
-            Command::BreakLock(repo) => Some(p(
-                &format!("Remove the stale lock in {repo}"),
-                None,
-                Risk::Low,
-                "Local only. Checks that no git process runs first.",
-                vec![format!("rm {repo}/.git/index.lock")],
-                Vec::new(),
-                "Remove lock",
-            )),
+                    .unwrap_or_default();
+                Some(p)
+            }
+            Command::BreakLock(repo) => {
+                let mut p = self.pv(
+                    c,
+                    &format!("Remove the stale lock in {repo}"),
+                    None,
+                    Risk::Low,
+                    "Local only. Checks that no git process runs first.",
+                    "Remove lock",
+                );
+                p.payload = vec![format!("rm {repo}/.git/index.lock")];
+                Some(p)
+            }
             Command::StopWorkspace => {
-                let payload =
+                let mut p = self.pv(
+                    c,
+                    "Stop the workspace",
+                    None,
+                    Risk::Medium,
+                    "Stops every service. Uncommitted work stays on disk.",
+                    "Stop",
+                );
+                p.payload =
                     vec!["docker compose stop (dependency order: web → api → db)".to_string()];
-                let facts = self
+                p.facts = self
                     .ws
                     .dirty
                     .iter()
                     .map(|r| format!("{r} has uncommitted changes"))
                     .collect();
-                Some(p(
-                    "Stop the workspace",
-                    None,
-                    Risk::Medium,
-                    "Stops every service. Uncommitted work stays on disk.",
-                    payload,
-                    facts,
-                    "Stop",
-                ))
+                Some(p)
             }
             _ => None,
         }
@@ -788,7 +846,7 @@ impl Store for Sim {
                 elapsed: Self::fmt_dur(self.duration_ms(t)),
             }),
             overlay: active
-                .and_then(|t| t.act.as_ref())
+                .and_then(|t| t.act())
                 .and_then(|a| a.overlay.as_ref())
                 .map(|o| o.repo.clone()),
             chips,
@@ -800,7 +858,7 @@ impl Store for Sim {
         }
     }
 
-    fn tab_info(&self, key: &str) -> Option<TabInfo> {
+    fn tab_info(&self, key: &TicketKey) -> Option<TabInfo> {
         let t = self.tk(key)?;
         Some(TabInfo {
             title: t.title.clone(),
@@ -809,7 +867,7 @@ impl Store for Sim {
                 || self.pr_wait_expired(t)
                 || self.th_wait_expired(t),
             unseen: Self::unseen_count(t) > 0,
-            active: t.local == Some(Local::Active),
+            active: t.local() == Some(Local::Active),
         })
     }
 
@@ -953,35 +1011,31 @@ impl Store for Sim {
         }
     }
 
-    fn ticket_exists(&self, key: &str) -> bool {
+    fn ticket_exists(&self, key: &TicketKey) -> bool {
         self.tk(key).is_some()
     }
 
-    fn ticket_title(&self, key: &str) -> String {
-        self.tk(key).map(|t| t.title.clone()).unwrap_or_default()
-    }
-
-    fn ticket_head(&self, key: &str, _tab: TicketTab) -> Option<TicketHeadVm> {
+    fn ticket_head(&self, key: &TicketKey, _tab: TicketTab) -> Option<TicketHeadVm> {
         self.vm_head(key)
     }
 
-    fn overview(&self, key: &str, seen: Option<u32>) -> Option<OverviewVm> {
+    fn overview(&self, key: &TicketKey, seen: Option<u32>) -> Option<OverviewVm> {
         self.vm_overview(key, seen)
     }
 
-    fn review(&self, key: &str, sel: &ReviewSel) -> Option<ReviewVm> {
+    fn review(&self, key: &TicketKey, sel: &ReviewSel) -> Option<ReviewVm> {
         self.vm_review(key, sel)
     }
 
-    fn test(&self, key: &str) -> Option<TestVm> {
+    fn test(&self, key: &TicketKey) -> Option<TestVm> {
         self.vm_test(key)
     }
 
-    fn ship(&self, key: &str) -> Option<ShipVm> {
+    fn ship(&self, key: &TicketKey) -> Option<ShipVm> {
         self.vm_ship(key)
     }
 
-    fn timeline(&self, key: &str) -> Vec<AuditRow> {
+    fn timeline(&self, key: &TicketKey) -> Vec<AuditRow> {
         self.audit
             .iter()
             .filter(|a| a.ticket.as_deref() == Some(key))
@@ -993,7 +1047,7 @@ impl Store for Sim {
         let show_docs = self
             .tickets
             .iter()
-            .any(|t| t.merges.iter().any(|m| m.repo == "docs"));
+            .any(|t| t.has_landed(&RepoName::from("docs")));
         let cols: Vec<&RepoCfg> = self
             .repos
             .iter()
@@ -1006,7 +1060,7 @@ impl Store for Sim {
                 let list: Vec<&Ticket> = self
                     .tickets
                     .iter()
-                    .filter(|t| t.merges.iter().any(|m| m.repo == r.name))
+                    .filter(|t| t.has_landed(&r.name))
                     .collect();
                 for i in 0..list.len() {
                     for j in (i + 1)..list.len() {
@@ -1027,18 +1081,18 @@ impl Store for Sim {
                     }
                 }
                 UatColumn {
-                    repo: r.name.to_string(),
+                    repo: r.name.clone(),
                     host: r.host.to_string(),
                     items: list
                         .iter()
                         .filter_map(|t| {
-                            let m = t.merges.iter().find(|m| m.repo == r.name)?;
+                            let l = t.landing(&r.name)?;
                             Some(UatItem {
                                 key: t.key.clone(),
                                 title: t.title.clone(),
-                                commit: m.commit.clone(),
-                                chip: t.deploy.get(r.name).map(deploy_chip),
-                                jira: jira_badge(&t.jira),
+                                commit: l.commit.clone(),
+                                chip: Some(deploy_chip(&l.deploy)),
+                                jira: jira_badge(t.jira),
                             })
                         })
                         .collect(),
@@ -1059,26 +1113,26 @@ impl Store for Sim {
                 } else {
                     Badge::new("down", Tone::Neutral)
                 }];
-                badges.push(if self.ws.dirty.contains(r.name) {
+                badges.push(if self.ws.dirty.contains(&r.name) {
                     Badge::new("uncommitted changes", Tone::Warn)
                 } else {
                     Badge::new("clean", Tone::Neutral)
                 });
                 if active
-                    .and_then(|t| t.act.as_ref())
+                    .and_then(|t| t.act())
                     .and_then(|a| a.overlay.as_ref())
                     .is_some_and(|o| o.repo == r.name)
                 {
                     badges.push(Badge::new("⚡ overlay", Tone::Warn));
                 }
                 let mut break_lock = None;
-                if let Some(l) = self.locks.get(r.name) {
+                if let Some(l) = self.locks.get(&r.name) {
                     match l.kind {
                         LockKind::Stale => {
                             badges.push(Badge::new("stale index.lock", Tone::Bad));
                             break_lock = Some(Btn::new(
                                 "Remove lock…",
-                                cmd(Command::BreakLock(r.name.to_string())),
+                                cmd(Command::BreakLock(r.name.clone())),
                             ));
                         }
                         _ => badges.push(Badge::new(
@@ -1088,9 +1142,9 @@ impl Store for Sim {
                     }
                 }
                 WsRow {
-                    repo: r.name.to_string(),
+                    repo: r.name.clone(),
                     services: r.services,
-                    branch: self.ws.branches.get(r.name).cloned().unwrap_or_default(),
+                    branch: self.ws.branches.get(&r.name).cloned().unwrap_or_default(),
                     badges,
                     break_lock,
                 }
@@ -1171,10 +1225,13 @@ impl Store for Sim {
                 })
                 .collect(),
             mapping: vec![
-                ("Review status".into(), JIRA_REVIEW.into()),
-                ("Alpha status".into(), JIRA_ALPHA.into()),
-                ("Returned".into(), JIRA_RETURNED.into()),
-                ("Signed off".into(), JIRA_SIGNED.join(", ")),
+                ("Review status".into(), JiraStatus::InReview.label().into()),
+                (
+                    "Alpha status".into(),
+                    JiraStatus::AlphaTesting.label().into(),
+                ),
+                ("Returned".into(), JiraStatus::Returned.label().into()),
+                ("Signed off".into(), JiraStatus::Done.label().into()),
                 (
                     "Review JQL".into(),
                     "project = PROJ AND status = \"In Review\"".into(),
@@ -1190,6 +1247,7 @@ impl Store for Sim {
                         r.base.to_string(),
                         r.prod.to_string(),
                         r.consumes
+                            .as_ref()
                             .map_or("–".to_string(), |c| format!("consumes {c}")),
                     ]
                 })
@@ -1208,7 +1266,7 @@ impl Store for Sim {
             on,
             intent: cmd(Command::Sim(ev)),
         };
-        let web = Some("web".to_string());
+        let web = Some(RepoName::from("web"));
         vec![
             SimGroup {
                 title: "World".to_string(),
@@ -1311,7 +1369,7 @@ impl Store for Sim {
         ]
     }
 
-    fn comments_seen(&self, key: &str) -> u32 {
+    fn comments_seen(&self, key: &TicketKey) -> u32 {
         self.tk(key).map_or(0, |t| t.seen_n)
     }
 
@@ -1331,15 +1389,15 @@ impl Store for Sim {
         )
     }
 
-    fn baseline_choices(&self, key: &str) -> BaselineVm {
+    fn baseline_choices(&self, key: &TicketKey) -> BaselineVm {
         let prod: Vec<&str> = {
-            let mut v: Vec<&str> = self.repos.iter().map(|r| r.prod).collect();
+            let mut v: Vec<&str> = self.repos.iter().map(|r| r.prod.as_str()).collect();
             v.sort_unstable();
             v.dedup();
             v
         };
         BaselineVm {
-            key: key.to_string(),
+            key: key.clone(),
             choices: vec![
                 (
                     Baseline::Production,
@@ -1351,11 +1409,31 @@ impl Store for Sim {
         }
     }
 
-    fn preview(&self, command: &Command) -> Option<Preview> {
-        self.preview_for(command)
+    fn preview(&self, command: &RemoteCommand) -> Result<Preview, String> {
+        self.remote_preview(command)
     }
 
-    fn dispatch(&mut self, command: &Command) -> Outcome {
+    fn local_guard(&self, command: &LocalCommand) -> Option<Preview> {
+        self.guard_for(command)
+    }
+
+    fn dispatch(&mut self, command: LocalCommand) -> Outcome {
+        self.run(command.command())
+    }
+
+    fn execute(&mut self, confirmed: Confirmed) -> Outcome {
+        self.run(confirmed.command())
+    }
+
+    fn tick(&mut self, millis: i64) -> Vec<(String, ToastKind)> {
+        self.advance(millis);
+        std::mem::take(&mut self.toasts)
+    }
+}
+
+impl Sim {
+    /// Every command, local or confirmed remote, ends up here. The type-level split happens at the `Store` boundary.
+    fn run(&mut self, command: &Command) -> Outcome {
         match command {
             Command::Sync => self.sync_start(),
             Command::Claim(k) => self.claim(k),
@@ -1390,7 +1468,7 @@ impl Store for Sim {
             Command::Prepare(k) => self.prepare(k),
             Command::TogglePrePush { key, repo, index } => {
                 if let Some(i) = self.idx(key) {
-                    let id = format!("{repo}:{index}");
+                    let id = (repo.clone(), *index);
                     if !self.tickets[i].pre.remove(&id) {
                         self.tickets[i].pre.insert(id);
                     }
@@ -1415,7 +1493,7 @@ impl Store for Sim {
                 file,
                 line,
                 text,
-            } => self.add_thread(key, *pr, file, line, text),
+            } => self.add_thread(key, *pr, file, *line, text),
             Command::PostComment { key, text } => self.post_free_comment(key, text),
             Command::ReturnMissingPr(k) => self.return_missing_pr(k),
             Command::ReturnThreads(k) => self.return_threads(k),
@@ -1431,10 +1509,10 @@ impl Store for Sim {
                     Undo::Claim(k) => self.unclaim(k),
                     Undo::Reviewed {
                         key,
-                        prev_seq,
-                        prev_status,
+                        prev_mark,
+                        prev_phase,
                     } => {
-                        self.unmark_reviewed(key, *prev_seq, prev_status);
+                        self.unmark_reviewed(key, *prev_mark, *prev_phase);
                     }
                     Undo::Response(id) => {
                         self.responses.remove(id);
@@ -1473,10 +1551,5 @@ impl Store for Sim {
             }
             Command::Sim(ev) => self.simulate(ev),
         }
-    }
-
-    fn tick(&mut self, millis: i64) -> Vec<(String, ToastKind)> {
-        self.advance(millis);
-        std::mem::take(&mut self.toasts)
     }
 }

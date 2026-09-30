@@ -753,7 +753,7 @@ pub fn sheet(ui: &Ui, cx: &App, inputs: &Inputs, sheet: &SheetVm) -> Div {
                         .gap_3()
                         .text_sm()
                         .child(div().text_color(if row.ok { pal.ok } else { pal.bad }).child(if row.ok { "✓" } else { "✕" }))
-                        .child(div().w(px(100.0)).flex_none().font_family(ui.mono.clone()).child(row.repo.clone()))
+                        .child(div().w(px(100.0)).flex_none().font_family(ui.mono.clone()).child(row.repo.to_string()))
                         .child(div().child(row.detail.clone()))
                 }))
                 .children(r.notes.iter().map(|n| faint(pal, n.clone()))),

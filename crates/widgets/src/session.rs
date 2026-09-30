@@ -6,12 +6,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::sim::Sim;
-use crate::store::{Outcome, ReviewSel, Store, hunk_key};
+use crate::store::{Outcome, ReviewSel, Store};
 use crate::vm::*;
 
 #[derive(Clone, Debug)]
 struct TabEntry {
-    key: String,
+    key: TicketKey,
     pinned: bool,
     tab: TicketTab,
 }
@@ -19,17 +19,16 @@ struct TabEntry {
 #[derive(Clone, Debug)]
 enum Sheet {
     Confirm {
-        command: Command,
         preview: Preview,
     },
     Baseline {
-        key: String,
+        key: TicketKey,
     },
     Report(ReportVm),
     Compose(ComposeKind),
     Palette,
     ClaimBlocked {
-        key: String,
+        key: TicketKey,
         block: ClaimBlock,
         then: Then,
     },
@@ -38,7 +37,7 @@ enum Sheet {
         retry: Command,
     },
     Diagnose,
-    CloseTab(String),
+    CloseTab(TicketKey),
 }
 
 const TOAST_SECS: f32 = 6.0;
@@ -58,13 +57,13 @@ pub struct Session {
     simulate_open: bool,
     right_open: bool,
     diff_mode: DiffMode,
-    since: BTreeMap<String, SinceMode>,
-    pr_sel: BTreeMap<String, u32>,
-    file_sel: BTreeMap<(String, u32), usize>,
-    viewed: BTreeSet<String>,
-    composer: Option<(String, u32, String, String)>,
+    since: BTreeMap<TicketKey, SinceMode>,
+    pr_sel: BTreeMap<TicketKey, PrNumber>,
+    file_sel: BTreeMap<(TicketKey, PrNumber), usize>,
+    viewed: BTreeSet<HunkId>,
+    composer: Option<(TicketKey, PrNumber, String, LineAnchor)>,
     texts: BTreeMap<Field, String>,
-    seen_snap: BTreeMap<String, u32>,
+    seen_snap: BTreeMap<TicketKey, u32>,
 }
 
 impl Session {
@@ -187,18 +186,15 @@ impl Session {
                 if !matches!(self.sheet, Some(Sheet::Confirm { .. })) {
                     self.sheet = None;
                 }
-                self.run(cmd, false);
+                self.run(cmd);
             }
             Intent::ConfirmSheet => self.confirm(),
             Intent::PickBaseline(b) => {
                 if let Some(Sheet::Baseline { key }) = self.sheet.take() {
-                    self.run(
-                        Command::Activate {
-                            key,
-                            baseline: Some(b),
-                        },
-                        false,
-                    );
+                    self.run(Command::Activate {
+                        key,
+                        baseline: Some(b),
+                    });
                 }
             }
             Intent::SetDiffMode(m) => self.diff_mode = m,
@@ -243,13 +239,13 @@ impl Session {
     fn set_text(&mut self, field: Field, text: String) {
         match &field {
             Field::Notes(key) => {
-                self.store.dispatch(&Command::SetNotes {
+                self.local(Command::SetNotes {
                     key: key.clone(),
                     text: text.clone(),
                 });
             }
             Field::Draft { key, id } => {
-                self.store.dispatch(&Command::EditDraft {
+                self.local(Command::EditDraft {
                     key: key.clone(),
                     id: id.clone(),
                     text: text.clone(),
@@ -269,7 +265,7 @@ impl Session {
         match field {
             Field::Checklist(key) => {
                 if !text.trim().is_empty() {
-                    self.store.dispatch(&Command::AddChecklist {
+                    self.local(Command::AddChecklist {
                         key: key.clone(),
                         text,
                     });
@@ -278,7 +274,7 @@ impl Session {
             }
             Field::Comment(key) => {
                 if !text.trim().is_empty() {
-                    self.run(Command::PostComment { key, text }, false);
+                    self.run(Command::PostComment { key, text });
                 }
             }
             Field::Inline => {
@@ -286,16 +282,13 @@ impl Session {
                     return;
                 }
                 if let Some((key, pr, file, line)) = self.composer.clone() {
-                    self.run(
-                        Command::InlineComment {
-                            key,
-                            pr,
-                            file,
-                            line,
-                            text,
-                        },
-                        false,
-                    );
+                    self.run(Command::InlineComment {
+                        key,
+                        pr,
+                        file,
+                        line,
+                        text,
+                    });
                 }
             }
             Field::Compose => {
@@ -306,7 +299,7 @@ impl Session {
                     self.sheet.take()
                 {
                     self.texts.remove(&Field::Compose);
-                    self.run(Command::RequestChanges { key, pr, text }, false);
+                    self.run(Command::RequestChanges { key, pr, text });
                 }
             }
             _ => {}
@@ -326,7 +319,7 @@ impl Session {
             if entering {
                 let seen = self.store.comments_seen(key);
                 self.seen_snap.insert(key.clone(), seen);
-                self.store.dispatch(&Command::MarkSeen(key.clone()));
+                self.local(Command::MarkSeen(key.clone()));
             }
             match self.tabs.iter_mut().find(|t| &t.key == key) {
                 Some(t) => t.tab = *tab,
@@ -348,8 +341,8 @@ impl Session {
         self.route = route;
     }
 
-    fn close_tab(&mut self, key: &str) {
-        self.tabs.retain(|t| t.key != key);
+    fn close_tab(&mut self, key: &TicketKey) {
+        self.tabs.retain(|t| t.key != *key);
         if matches!(&self.route, Route::Ticket { key: k, .. } if k == key) {
             self.route = self.screen.clone();
         }
@@ -357,74 +350,98 @@ impl Session {
 
     /* ---------------------------- commands and sheets ---------------------------- */
 
-    fn run(&mut self, cmd: Command, confirmed: bool) {
-        if !confirmed && let Some(preview) = self.store.preview(&cmd) {
-            self.texts.remove(&Field::TypedKey);
-            self.sheet = Some(Sheet::Confirm {
-                command: cmd,
-                preview,
-            });
-            return;
+    /// Dispatch a command that is known to be local (internal bookkeeping such as saving notes).
+    fn local(&mut self, cmd: Command) -> Outcome {
+        match cmd.classify() {
+            Classified::Local(l) => self.store.dispatch(l),
+            Classified::Remote(r) => Outcome::fail(format!(
+                "{:?} writes to a remote and cannot be sent without a confirmation",
+                r.command()
+            )),
         }
-        let out = self.store.dispatch(&cmd);
-        self.apply(&cmd, out);
     }
 
-    fn confirm(&mut self) {
-        let Some(Sheet::Confirm { command, preview }) = self.sheet.clone() else {
-            // A report sheet is dismissed with the same button.
-            if matches!(self.sheet, Some(Sheet::Report(_))) {
-                self.sheet = None;
-            }
-            return;
-        };
-        if preview.blocked.is_some() {
-            return;
+    /// The one entry point for a command. A remote write always opens its preview; a guarded local
+    /// one does too; everything else is dispatched.
+    fn run(&mut self, cmd: Command) {
+        match cmd.clone().classify() {
+            Classified::Remote(r) => match self.store.preview(&r) {
+                Ok(preview) => self.open_confirm(preview),
+                Err(why) => self.push_toast(why, ToastKind::Bad, None),
+            },
+            Classified::Local(l) => match self.store.local_guard(&l) {
+                Some(preview) => self.open_confirm(preview),
+                None => {
+                    let out = self.store.dispatch(l);
+                    self.apply(&cmd, out);
+                }
+            },
         }
-        if let Some(k) = &preview.type_key
-            && self.text(&Field::TypedKey).trim() != k
-        {
-            return;
-        }
-        self.sheet = None;
+    }
+
+    fn open_confirm(&mut self, preview: Preview) {
         self.texts.remove(&Field::TypedKey);
-        self.run(command, true);
+        self.sheet = Some(Sheet::Confirm { preview });
+    }
+
+    /// The confirm button of the open sheet (and the dismiss button of a report).
+    fn confirm(&mut self) {
+        match self.sheet.take() {
+            Some(Sheet::Confirm { preview }) => {
+                let typed = self.text(&Field::TypedKey);
+                let command = preview.command().clone();
+                match preview.clone().confirm(&typed) {
+                    Ok(confirmed) => {
+                        self.texts.remove(&Field::TypedKey);
+                        let out = self.store.execute(confirmed);
+                        self.apply(&command, out);
+                    }
+                    // Blocked, or the key was not typed: the sheet stays as it was.
+                    Err(_) => self.sheet = Some(Sheet::Confirm { preview }),
+                }
+            }
+            Some(Sheet::Report(_)) | None => {}
+            other => self.sheet = other,
+        }
     }
 
     fn apply(&mut self, cmd: &Command, out: Outcome) {
-        if out.need_baseline
-            && let Command::Activate { key, .. } = cmd
-        {
-            self.sheet = Some(Sheet::Baseline { key: key.clone() });
-            return;
-        }
-        if let Some(block) = out.blocker {
-            let (key, then) = match cmd {
-                Command::Claim(k) => (k.clone(), Then::Claim),
-                Command::StartReview(k) => (k.clone(), Then::StartReview),
-                Command::Reclaim(k) => (k.clone(), Then::Reclaim),
-                _ => return,
-            };
-            self.sheet = Some(Sheet::ClaimBlocked { key, block, then });
-            return;
-        }
-        if let Some(busy) = out.busy {
-            self.sheet = Some(Sheet::Busy {
-                busy,
-                retry: cmd.clone(),
-            });
-            return;
-        }
-        if !out.ok {
-            let text = out.errors.join(" ");
-            self.push_toast(text, ToastKind::Bad, None);
-            return;
-        }
-        if let Some(report) = out.report {
-            self.sheet = Some(Sheet::Report(report));
-        }
-        if let Some((text, kind, undo)) = out.toast {
-            self.push_toast(text, kind, undo.map(|u| Intent::Do(Command::Undo(u))));
+        match out {
+            Outcome::NeedsBaseline => {
+                if let Command::Activate { key, .. } = cmd {
+                    self.sheet = Some(Sheet::Baseline { key: key.clone() });
+                }
+                return;
+            }
+            Outcome::Blocked(block) => {
+                let (key, then) = match cmd {
+                    Command::Claim(k) => (k.clone(), Then::Claim),
+                    Command::StartReview(k) => (k.clone(), Then::StartReview),
+                    Command::Reclaim(k) => (k.clone(), Then::Reclaim),
+                    _ => return,
+                };
+                self.sheet = Some(Sheet::ClaimBlocked { key, block, then });
+                return;
+            }
+            Outcome::Busy(busy) => {
+                self.sheet = Some(Sheet::Busy {
+                    busy,
+                    retry: cmd.clone(),
+                });
+                return;
+            }
+            Outcome::Refused(errors) => {
+                self.push_toast(errors.join(" "), ToastKind::Bad, None);
+                return;
+            }
+            Outcome::Done { toast, report } => {
+                if let Some(report) = report {
+                    self.sheet = Some(Sheet::Report(report));
+                }
+                if let Some(t) = toast {
+                    self.push_toast(t.text, t.kind, t.undo.map(|u| Intent::Do(Command::Undo(u))));
+                }
+            }
         }
         match cmd {
             Command::StartReview(key) => {
@@ -463,22 +480,22 @@ impl Session {
 
     /* ---------------------------- the view model ---------------------------- */
 
-    fn review_sel(&self, key: &str) -> ReviewSel {
+    fn review_sel(&self, key: &TicketKey) -> ReviewSel {
         let pr = self.pr_sel.get(key).copied();
         let file = pr
-            .and_then(|p| self.file_sel.get(&(key.to_string(), p)).copied())
+            .and_then(|p| self.file_sel.get(&(key.clone(), p)).copied())
             .unwrap_or(0);
         ReviewSel {
             pr,
             file,
             mode: self.diff_mode,
             since: self.since.get(key).copied().unwrap_or(SinceMode::Since),
-            viewed: self.viewed.iter().cloned().collect(),
+            viewed: self.viewed.clone(),
             composer: self
                 .composer
                 .as_ref()
                 .filter(|(k, ..)| k == key)
-                .map(|(_, pr, f, l)| (*pr, f.clone(), l.clone())),
+                .map(|(_, pr, f, l)| (*pr, f.clone(), *l)),
         }
     }
 
@@ -525,7 +542,7 @@ impl Session {
             Route::Workspace => "Workspace".to_string(),
             Route::Audit => "Audit log".to_string(),
             Route::Settings => "Settings".to_string(),
-            Route::Ticket { key, .. } => key.clone(),
+            Route::Ticket { key, .. } => key.to_string(),
         };
         let mut out = vec![ShellTab {
             route: self.screen.clone(),
@@ -546,7 +563,7 @@ impl Session {
             out.push(ShellTab {
                 route: Route::ticket(t.key.clone(), t.tab),
                 key: Some(t.key.clone()),
-                label: t.key.clone(),
+                label: t.key.to_string(),
                 title: info.title,
                 selected: here,
                 pinned: t.pinned,
@@ -560,10 +577,9 @@ impl Session {
 
     fn sheet_vm(&self) -> Option<SheetVm> {
         Some(match self.sheet.as_ref()? {
-            Sheet::Confirm { preview, .. } => {
+            Sheet::Confirm { preview } => {
                 let typed = self.text(&Field::TypedKey);
-                let can = preview.blocked.is_none()
-                    && preview.type_key.as_ref().is_none_or(|k| typed.trim() == k);
+                let can = preview.can_confirm(&typed);
                 SheetVm::Confirm {
                     preview: preview.clone(),
                     typed,
@@ -662,16 +678,15 @@ impl Session {
     pub fn field_texts(&self) -> &BTreeMap<Field, String> {
         &self.texts
     }
-
-    /// The hunk key used by the viewed set (exposed for tests and the review screen).
-    pub fn viewed_key(ticket: &str, pr: u32, since: bool, path: &str, hunk: usize) -> String {
-        hunk_key(ticket, pr, since, path, hunk)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn k(s: &str) -> TicketKey {
+        TicketKey::from(s)
+    }
 
     fn go_ticket(s: &mut Session, key: &str, tab: TicketTab) {
         s.handle(Intent::Go(Route::ticket(key, tab)));
@@ -803,7 +818,7 @@ mod tests {
         assert!(o.comments.iter().any(|c| c.is_new));
         // seen now: the tab strip no longer flags it after leaving
         s.handle(Intent::Go(Route::Next));
-        assert!(!s.store().tab_info("PROJ-131").unwrap().unseen);
+        assert!(!s.store().tab_info(&k("PROJ-131")).unwrap().unseen);
     }
 
     #[test]
@@ -815,7 +830,7 @@ mod tests {
         assert!(s.toasts.iter().any(|t| t.text.contains("No pull request")));
         let head = s
             .store()
-            .ticket_head("PROJ-163", TicketTab::Overview)
+            .ticket_head(&k("PROJ-163"), TicketTab::Overview)
             .unwrap();
         assert!(
             head.banners
@@ -849,7 +864,7 @@ mod tests {
     #[test]
     fn a_ticket_from_claim_to_approved() {
         let mut s = Session::demo();
-        let key = "PROJ-142";
+        let key = &k("PROJ-142");
         for c in [
             Command::StartReview(key.into()),
             Command::MarkReviewed(key.into()),
@@ -970,7 +985,7 @@ mod tests {
     #[test]
     fn a_failed_deploy_offers_a_rerun_through_the_confirm_sheet() {
         let mut s = Session::demo();
-        let key = "PROJ-142";
+        let key = &k("PROJ-142");
         for c in [
             Command::StartReview(key.into()),
             Command::MarkReviewed(key.into()),
@@ -1055,7 +1070,7 @@ mod tests {
     #[test]
     fn a_conflict_with_uat_blocks_the_push_and_offers_a_comment() {
         let mut s = Session::demo();
-        let key = "PROJ-142";
+        let key = &k("PROJ-142");
         for c in [
             Command::StartReview(key.into()),
             Command::MarkReviewed(key.into()),
@@ -1106,11 +1121,11 @@ mod tests {
     #[test]
     fn sync_brings_scripted_arrivals() {
         let mut s = Session::demo();
-        assert!(!s.store().ticket_exists("PROJ-155"));
+        assert!(!s.store().ticket_exists(&k("PROJ-155")));
         s.handle(Intent::Do(Command::Sync));
         assert!(s.store().status().sync_running);
         s.tick(2000);
-        assert!(s.store().ticket_exists("PROJ-155"));
+        assert!(s.store().ticket_exists(&k("PROJ-155")));
         assert!(!s.store().status().sync_running);
     }
 
@@ -1120,14 +1135,14 @@ mod tests {
         s.handle(Intent::Do(Command::Sim(SimEvent::Offline(true))));
         s.handle(Intent::Do(Command::Sync));
         s.tick(2000);
-        assert!(!s.store().ticket_exists("PROJ-155"));
+        assert!(!s.store().ticket_exists(&k("PROJ-155")));
         assert_eq!(s.store().status().sync_tone, Tone::Warn);
     }
 
     #[test]
     fn a_stale_lock_refuses_activation_and_can_be_removed() {
         let mut s = Session::demo();
-        let key = "PROJ-142";
+        let key = &k("PROJ-142");
         for c in [
             Command::StartReview(key.into()),
             Command::MarkReviewed(key.into()),
@@ -1159,7 +1174,7 @@ mod tests {
         let mut s = Session::demo();
         s.handle(Intent::RequestChangesFrom {
             key: "PROJ-150".into(),
-            pr: 490,
+            pr: PrNumber(490),
         });
         assert_eq!(sheet_kind(&s), "compose");
         s.handle(Intent::SetText(Field::Compose, "Keep the logo row".into()));
@@ -1168,7 +1183,7 @@ mod tests {
         confirm_with(&mut s, None);
         let t = s
             .store()
-            .review("PROJ-150", &s.review_sel("PROJ-150"))
+            .review(&k("PROJ-150"), &s.review_sel(&k("PROJ-150")))
             .unwrap();
         assert!(t.thread_count >= 2);
     }
@@ -1178,13 +1193,13 @@ mod tests {
         let mut s = Session::demo();
         s.handle(Intent::InlineOpen {
             key: "PROJ-142".into(),
-            pr: 212,
+            pr: PrNumber(212),
             file: "src/redirect.rs".into(),
-            line: "n41".into(),
+            line: LineAnchor::New(41),
         });
         let r = s
             .store()
-            .review("PROJ-142", &s.review_sel("PROJ-142"))
+            .review(&k("PROJ-142"), &s.review_sel(&k("PROJ-142")))
             .unwrap();
         assert!(r.composer.is_some());
         s.handle(Intent::SetText(
@@ -1196,7 +1211,7 @@ mod tests {
         confirm_with(&mut s, None);
         let r = s
             .store()
-            .review("PROJ-142", &s.review_sel("PROJ-142"))
+            .review(&k("PROJ-142"), &s.review_sel(&k("PROJ-142")))
             .unwrap();
         assert!(r.composer.is_none());
         assert!(r.thread_count >= 2);
@@ -1207,14 +1222,14 @@ mod tests {
         let mut s = Session::demo();
         let r = s
             .store()
-            .review("PROJ-142", &s.review_sel("PROJ-142"))
+            .review(&k("PROJ-142"), &s.review_sel(&k("PROJ-142")))
             .unwrap();
         let before = r.hunks[0].rows.len();
         assert!(before > 0);
         s.handle(r.hunks[0].toggle.clone());
         let r = s
             .store()
-            .review("PROJ-142", &s.review_sel("PROJ-142"))
+            .review(&k("PROJ-142"), &s.review_sel(&k("PROJ-142")))
             .unwrap();
         assert!(r.hunks[0].viewed);
         assert!(r.hunks[0].rows.is_empty());
@@ -1232,7 +1247,7 @@ mod tests {
         }
         let r = s
             .store()
-            .review("PROJ-142", &s.review_sel("PROJ-142"))
+            .review(&k("PROJ-142"), &s.review_sel(&k("PROJ-142")))
             .unwrap();
         assert!(r.stale.is_some());
         assert!(r.since_toggle.is_some());
@@ -1243,7 +1258,7 @@ mod tests {
         });
         let r = s
             .store()
-            .review("PROJ-142", &s.review_sel("PROJ-142"))
+            .review(&k("PROJ-142"), &s.review_sel(&k("PROJ-142")))
             .unwrap();
         assert_eq!(r.since_toggle.map(|t| t.2), Some(false));
     }
@@ -1254,7 +1269,7 @@ mod tests {
         s.handle(Intent::SetDiffMode(DiffMode::Split));
         let r = s
             .store()
-            .review("PROJ-142", &s.review_sel("PROJ-142"))
+            .review(&k("PROJ-142"), &s.review_sel(&k("PROJ-142")))
             .unwrap();
         assert!(r.hunks[0].rows.iter().any(|row| matches!(
             row,
@@ -1354,5 +1369,56 @@ mod tests {
             panic!()
         };
         assert!(text.contains("not logged into any GitHub hosts"));
+    }
+
+    #[test]
+    fn every_remote_command_has_a_literal_preview() {
+        let s = Session::demo();
+        let key = k("PROJ-127");
+        let cases = [
+            Command::PostComment {
+                key: key.clone(),
+                text: "hi".into(),
+            },
+            Command::Approve {
+                key: key.clone(),
+                repo: "web".into(),
+                pr: PrNumber(469),
+            },
+            Command::ApproveAll(key.clone()),
+            Command::Rerun {
+                key: key.clone(),
+                repo: "web".into(),
+            },
+            Command::Transition(key.clone()),
+            Command::RequestChanges {
+                key: key.clone(),
+                pr: PrNumber(469),
+                text: "x".into(),
+            },
+            Command::InlineComment {
+                key: key.clone(),
+                pr: PrNumber(469),
+                file: "src/session.rs".into(),
+                line: LineAnchor::New(31),
+                text: "x".into(),
+            },
+        ];
+        for c in cases {
+            let Classified::Remote(r) = c.clone().classify() else {
+                panic!("{c:?} should be remote")
+            };
+            let p = s
+                .store()
+                .preview(&r)
+                .unwrap_or_else(|e| panic!("{c:?}: {e}"));
+            assert!(!p.payload.is_empty(), "{c:?} shows its literal payload");
+            assert_eq!(p.command(), &c);
+        }
+        // a vanished ticket is an error, never a silent preview
+        let Classified::Remote(r) = Command::ApproveAll(k("PROJ-999")).classify() else {
+            panic!()
+        };
+        assert!(s.store().preview(&r).is_err());
     }
 }

@@ -1,5 +1,6 @@
 //! Types shared by every view model. Plain data: no GPUI, no engine.
 
+use super::ids::*;
 use super::intent::Intent;
 
 /// Colour intent. The views map it to theme colours; the view models never name a colour.
@@ -157,7 +158,7 @@ impl TicketTab {
 pub enum Route {
     Next,
     Tickets(Group),
-    Ticket { key: String, tab: TicketTab },
+    Ticket { key: TicketKey, tab: TicketTab },
     OnUat,
     Workspace,
     Audit,
@@ -165,7 +166,7 @@ pub enum Route {
 }
 
 impl Route {
-    pub fn ticket(key: impl Into<String>, tab: TicketTab) -> Self {
+    pub fn ticket(key: impl Into<TicketKey>, tab: TicketTab) -> Self {
         Route::Ticket {
             key: key.into(),
             tab,
@@ -195,7 +196,7 @@ pub struct AuditRow {
     pub at: String,
     pub action: String,
     pub repo: String,
-    pub ticket: Option<String>,
+    pub ticket: Option<TicketKey>,
     pub outcome: Badge,
     pub details: String,
 }
@@ -221,4 +222,12 @@ impl Kv {
             value,
         }
     }
+}
+
+/// The part of a ticket's life in which it is in your hands but not active.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    Claimed,
+    Reviewing,
+    Parked,
 }

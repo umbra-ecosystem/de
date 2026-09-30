@@ -36,7 +36,7 @@ fn repos_table(ui: &Ui, rows: &[RepoRowVm]) -> Div {
                         div()
                             .font_family(ui.mono.clone())
                             .text_sm()
-                            .child(name.clone()),
+                            .child(name.to_string()),
                     )
                     .when(*manual, |d| {
                         d.child(pill(pal, &Badge::new("chosen", Tone::Neutral)))
@@ -69,7 +69,7 @@ fn repos_table(ui: &Ui, rows: &[RepoRowVm]) -> Div {
                     col(110.0)
                         .font_family(ui.mono.clone())
                         .text_sm()
-                        .child(r.repo.clone()),
+                        .child(r.repo.to_string()),
                 )
                 .child(div().flex_1().px_2().child(branch))
                 .child(

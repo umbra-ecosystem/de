@@ -3,7 +3,7 @@
 use super::Sim;
 use super::model::*;
 use super::queries::{UatState, initials};
-use crate::store::{ReviewSel, hunk_key};
+use crate::store::ReviewSel;
 use crate::vm::*;
 
 pub fn priority_tone(p: Priority) -> Tone {
@@ -14,15 +14,12 @@ pub fn priority_tone(p: Priority) -> Tone {
     }
 }
 
-pub fn jira_tone(s: &str) -> Tone {
-    if s == JIRA_RETURNED {
-        Tone::Warn
-    } else if s == JIRA_ALPHA {
-        Tone::Accent
-    } else if JIRA_SIGNED.contains(&s) {
-        Tone::Ok
-    } else {
-        Tone::Neutral
+pub fn jira_tone(s: JiraStatus) -> Tone {
+    match s {
+        JiraStatus::Returned => Tone::Warn,
+        JiraStatus::AlphaTesting => Tone::Accent,
+        JiraStatus::Done => Tone::Ok,
+        JiraStatus::InReview => Tone::Neutral,
     }
 }
 
@@ -35,8 +32,8 @@ pub fn local_tone(l: Local) -> Tone {
     }
 }
 
-pub fn jira_badge(s: &str) -> Badge {
-    Badge::new(s, jira_tone(s))
+pub fn jira_badge(s: JiraStatus) -> Badge {
+    Badge::new(s.label(), jira_tone(s))
 }
 
 pub fn local_badge(l: Option<Local>) -> Option<Badge> {
@@ -114,11 +111,11 @@ fn split_rows(lines: &[Line]) -> Vec<(Option<&Line>, Option<&Line>)> {
     rows
 }
 
-fn anchor_of(l: &Line) -> String {
+fn anchor_of(l: &Line) -> LineAnchor {
     match (l.n, l.o) {
-        (Some(n), _) => format!("n{n}"),
-        (None, Some(o)) => format!("o{o}"),
-        _ => String::new(),
+        (Some(n), _) => LineAnchor::New(n),
+        (None, Some(o)) => LineAnchor::Old(o),
+        (None, None) => LineAnchor::New(0),
     }
 }
 
@@ -164,16 +161,16 @@ pub fn deploy_chip(d: &Deploy) -> DeployChip {
 impl Sim {
     fn progress_index(&self, t: &Ticket) -> f32 {
         let d = Self::draft(t);
-        if t.local == Some(Local::Done) {
+        if t.local() == Some(Local::Done) {
             return 9.0;
         }
-        if t.local == Some(Local::Integrated)
-            || (!t.merges.is_empty() && t.local != Some(Local::Active))
+        if t.local() == Some(Local::Integrated)
+            || (!t.landings().is_empty() && t.local() != Some(Local::Active))
         {
-            if Self::is_signed_off(t) {
+            if t.jira.is_signed_off() {
                 return 7.0;
             }
-            if t.jira == JIRA_ALPHA {
+            if t.jira == JiraStatus::AlphaTesting {
                 return 6.0;
             }
             if d.is_some_and(|d| d.posted) {
@@ -184,13 +181,13 @@ impl Sim {
             }
             return 3.0;
         }
-        if t.local == Some(Local::Active) {
+        if t.local() == Some(Local::Active) {
             return 2.0;
         }
-        if t.reviewed {
+        if t.reviewed() {
             return 1.5;
         }
-        if t.local.is_some() {
+        if t.local().is_some() {
             return 1.0;
         }
         0.0
@@ -343,31 +340,31 @@ impl Sim {
         }
     }
 
-    pub(crate) fn vm_head(&self, key: &str) -> Option<TicketHeadVm> {
+    pub(crate) fn vm_head(&self, key: &TicketKey) -> Option<TicketHeadVm> {
         let t = self.tk(key)?;
-        let st = t.local;
+        let st = t.local();
         let gap = self.pr_gap(t).is_some();
         let gap_hint = gap.then(|| "No pull request yet".to_string());
         let mut actions = Vec::new();
         if st.is_none() {
-            actions.push(Btn::new("Claim", Intent::Do(Command::Claim(key.to_string()))).primary());
+            actions.push(Btn::new("Claim", Intent::Do(Command::Claim(key.clone()))).primary());
         }
         if st == Some(Local::Claimed) {
             actions.push(
                 Btn::new(
                     "Start review",
-                    Intent::Do(Command::StartReview(key.to_string())),
+                    Intent::Do(Command::StartReview(key.clone())),
                 )
                 .primary()
                 .disabled(gap_hint.clone()),
             );
         }
-        if matches!(st, Some(Local::Claimed | Local::Reviewing | Local::Parked)) && t.reviewed {
+        if matches!(st, Some(Local::Claimed | Local::Reviewing | Local::Parked)) && t.reviewed() {
             actions.push(
                 Btn::new(
                     "Activate…",
                     Intent::Do(Command::Activate {
-                        key: key.to_string(),
+                        key: key.clone(),
                         baseline: None,
                     }),
                 )
@@ -375,30 +372,27 @@ impl Sim {
                 .disabled(gap_hint.clone()),
             );
         }
-        if st == Some(Local::Reviewing) && !t.reviewed {
+        if st == Some(Local::Reviewing) && !t.reviewed() {
             actions.push(
                 Btn::new(
                     "Mark reviewed",
-                    Intent::Do(Command::MarkReviewed(key.to_string())),
+                    Intent::Do(Command::MarkReviewed(key.clone())),
                 )
                 .primary()
                 .disabled(gap_hint),
             );
         }
         if st == Some(Local::Active) {
-            actions.push(Btn::new(
-                "Park…",
-                Intent::Do(Command::Park(key.to_string())),
-            ));
+            actions.push(Btn::new("Park…", Intent::Do(Command::Park(key.clone()))));
         }
         let banners = [self.pr_gap_banner(t), self.threads_banner(t)]
             .into_iter()
             .flatten()
             .collect();
         Some(TicketHeadVm {
-            key: key.to_string(),
+            key: key.clone(),
             title: t.title.clone(),
-            jira: jira_badge(&t.jira),
+            jira: jira_badge(t.jira),
             local: local_badge(st),
             hotfix: self.is_hotfix(t),
             uat_flag: self.uat_flag(t),
@@ -414,7 +408,7 @@ impl Sim {
 
     /* ---------------------------- overview ---------------------------- */
 
-    pub(crate) fn vm_overview(&self, key: &str, seen: Option<u32>) -> Option<OverviewVm> {
+    pub(crate) fn vm_overview(&self, key: &TicketKey, seen: Option<u32>) -> Option<OverviewVm> {
         let t = self.tk(key)?;
         let snap = seen.unwrap_or(t.seen_n);
         let plan = self.repo_plan(t);
@@ -428,9 +422,9 @@ impl Sim {
                             .iter()
                             .map(|c| {
                                 Btn::new(
-                                    c.clone(),
+                                    c.as_str(),
                                     Intent::Do(Command::Choose {
-                                        key: key.to_string(),
+                                        key: key.clone(),
                                         repo: p.repo.clone(),
                                         branch: c.clone(),
                                     }),
@@ -450,7 +444,7 @@ impl Sim {
                     repo: p.repo.clone(),
                     branch,
                     pr: pr.map(|x| format!("#{} → {}", x.id, x.dst)),
-                    deploy: t.deploy.get(&p.repo).map(deploy_chip),
+                    deploy: t.landing(&p.repo).map(|l| deploy_chip(&l.deploy)),
                     touched: true,
                 }
             })
@@ -458,8 +452,8 @@ impl Sim {
         for r in &self.repos {
             if !plan.iter().any(|p| p.repo == r.name) {
                 repos.push(RepoRowVm {
-                    repo: r.name.to_string(),
-                    branch: BranchCell::Baseline(r.base.to_string()),
+                    repo: r.name.clone(),
+                    branch: BranchCell::Baseline(r.base.clone()),
                     pr: None,
                     deploy: None,
                     touched: false,
@@ -467,7 +461,7 @@ impl Sim {
             }
         }
         Some(OverviewVm {
-            key: key.to_string(),
+            key: key.clone(),
             description: t.desc.clone(),
             acceptance: t.ac.clone(),
             subtasks: t
@@ -566,12 +560,12 @@ impl Sim {
         })
     }
 
-    pub(crate) fn vm_review(&self, key: &str, sel: &ReviewSel) -> Option<ReviewVm> {
+    pub(crate) fn vm_review(&self, key: &TicketKey, sel: &ReviewSel) -> Option<ReviewVm> {
         let t = self.tk(key)?;
         let uat = self.uat_banner(t);
         let empty_vm = |uat: Option<BannerVm>| ReviewVm {
-            key: key.to_string(),
-            pr_id: 0,
+            key: key.clone(),
+            pr_id: PrNumber(0),
             uat,
             stale: None,
             since_toggle: None,
@@ -634,8 +628,13 @@ impl Sim {
                                 .iter()
                                 .enumerate()
                                 .filter(|(hi, _)| {
-                                    sel.viewed
-                                        .contains(&hunk_key(key, p.id, false, &f.path, *hi))
+                                    sel.viewed.contains(&HunkId {
+                                        ticket: key.clone(),
+                                        pr: p.id,
+                                        since: false,
+                                        path: f.path.clone(),
+                                        hunk: *hi,
+                                    })
                                 })
                                 .count();
                             FileRowVm {
@@ -645,7 +644,7 @@ impl Sim {
                                 progress: (!since).then(|| format!("{nv}/{}", hunks.len())),
                                 selected: p.id == pr.id && i == fi,
                                 select: Intent::SelectFile {
-                                    key: key.to_string(),
+                                    key: key.clone(),
                                     pr: p.id,
                                     index: i,
                                 },
@@ -668,12 +667,12 @@ impl Sim {
             .composer
             .as_ref()
             .filter(|(id, path, _)| !since && *id == pr.id && *path == file.path)
-            .map(|(_, path, anchor)| (path.clone(), anchor.clone()));
-        let is_composer = |anchor: &str| composer.as_ref().is_some_and(|(_, a)| a == anchor);
-        let threads_at = |anchor: &str| -> Vec<ThreadVm> {
+            .map(|(_, path, anchor)| (path.clone(), *anchor));
+        let is_composer = |anchor: LineAnchor| composer.as_ref().is_some_and(|(_, a)| *a == anchor);
+        let threads_at = |anchor: LineAnchor| -> Vec<ThreadVm> {
             threads
                 .iter()
-                .filter(|th| th.line.as_deref() == Some(anchor))
+                .filter(|th| th.line == Some(anchor))
                 .map(|th| thread_vm(th))
                 .collect()
         };
@@ -685,7 +684,13 @@ impl Sim {
             .enumerate()
             .map(|(hi, (a, b))| {
                 let ls = &file.lines[*a..*b];
-                let id = hunk_key(key, pr.id, since, &file.path, hi);
+                let id = HunkId {
+                    ticket: key.clone(),
+                    pr: pr.id,
+                    since,
+                    path: file.path.clone(),
+                    hunk: hi,
+                };
                 let viewed = sel.viewed.contains(&id);
                 let rows = if viewed {
                     Vec::new()
@@ -693,12 +698,12 @@ impl Sim {
                     split_rows(ls)
                         .into_iter()
                         .map(|(l, r)| {
-                            let anchor = r.or(l).map(anchor_of).unwrap_or_default();
+                            let anchor = r.or(l).map_or(LineAnchor::New(0), anchor_of);
                             DiffRow::Pair {
                                 left: l.map(line_vm),
                                 right: r.map(line_vm),
-                                threads: threads_at(&anchor),
-                                composer: is_composer(&anchor),
+                                threads: threads_at(anchor),
+                                composer: is_composer(anchor),
                             }
                         })
                         .collect()
@@ -708,8 +713,8 @@ impl Sim {
                             let anchor = anchor_of(l);
                             DiffRow::Line {
                                 line: line_vm(l),
-                                threads: threads_at(&anchor),
-                                composer: is_composer(&anchor),
+                                threads: threads_at(anchor),
+                                composer: is_composer(anchor),
                             }
                         })
                         .collect()
@@ -737,7 +742,7 @@ impl Sim {
             lines: Vec::new(),
             actions: vec![Btn::new(
                 "Start review again",
-                Intent::Do(Command::StartReview(key.to_string())),
+                Intent::Do(Command::StartReview(key.clone())),
             )],
         });
         let since_toggle = (stale && pr.since.is_some()).then(|| {
@@ -745,14 +750,14 @@ impl Sim {
                 Btn::new(
                     "Since your review",
                     Intent::SetSinceMode {
-                        key: key.to_string(),
+                        key: key.clone(),
                         mode: SinceMode::Since,
                     },
                 ),
                 Btn::new(
                     "Full PR",
                     Intent::SetSinceMode {
-                        key: key.to_string(),
+                        key: key.clone(),
                         mode: SinceMode::Full,
                     },
                 ),
@@ -761,22 +766,22 @@ impl Sim {
         });
 
         let me_approved = pr.reviewers.iter().any(|r| r.name == ME && r.approved);
-        let signed = Self::is_signed_off(t);
+        let signed = t.jira.is_signed_off();
         let approve_why = if me_approved {
             Some("You approved this PR.".to_string())
         } else if !signed {
             Some(format!(
                 "Approval unlocks when the ticket reaches a signed-off status (now: {}).",
-                t.jira
+                t.jira.label()
             ))
         } else if !self.gh_ready {
             Some("gh is signed out.".to_string())
         } else {
             None
         };
-        let reviewed_now = t.reviewed && !stale;
+        let reviewed_now = t.reviewed() && !stale;
         Some(ReviewVm {
-            key: key.to_string(),
+            key: key.clone(),
             pr_id: pr.id,
             uat,
             stale: stale_banner,
@@ -789,7 +794,7 @@ impl Sim {
                         format!("{} #{}", p.repo, p.id),
                         p.id == pr.id,
                         Intent::SelectPr {
-                            key: key.to_string(),
+                            key: key.clone(),
                             pr: p.id,
                         },
                     )
@@ -798,11 +803,11 @@ impl Sim {
             diff_mode: sel.mode,
             pr: Some(PrHeadVm {
                 title: pr.title.clone(),
-                source: pr.src.clone(),
+                source: pr.src.to_string(),
                 dest: {
                     let cfg = self.repo(&pr.repo);
                     Badge::new(
-                        pr.dst.clone(),
+                        pr.dst.as_str(),
                         if pr.dst == cfg.prod && cfg.prod != cfg.base {
                             Tone::Hot
                         } else {
@@ -831,21 +836,21 @@ impl Sim {
                 } else {
                     "Mark reviewed"
                 },
-                Intent::Do(Command::MarkReviewed(key.to_string())),
+                Intent::Do(Command::MarkReviewed(key.clone())),
             )
             .primary_if(!reviewed_now)
             .disabled(reviewed_now.then(|| "Already reviewed".to_string())),
             request_changes: Btn::new(
                 "Request changes…",
                 Intent::RequestChangesFrom {
-                    key: key.to_string(),
+                    key: key.clone(),
                     pr: pr.id,
                 },
             ),
             approve: Btn::new(
                 "Approve…",
                 Intent::Do(Command::Approve {
-                    key: key.to_string(),
+                    key: key.clone(),
                     repo: pr.repo.clone(),
                     pr: pr.id,
                 }),
@@ -860,16 +865,16 @@ impl Sim {
 
     /* ---------------------------- test ---------------------------- */
 
-    pub(crate) fn vm_test(&self, key: &str) -> Option<TestVm> {
+    pub(crate) fn vm_test(&self, key: &TicketKey) -> Option<TestVm> {
         let t = self.tk(key)?;
-        let st = t.local;
+        let st = t.local();
         if st != Some(Local::Active) {
             let why = match st {
                 None => "Claim and review this ticket first.",
                 Some(Local::Integrated) => {
                     "This ticket is already on uat. Activate it again only for a fix after alpha."
                 }
-                _ if !t.reviewed => "Finish the review, then activate to test locally.",
+                _ if !t.reviewed() => "Finish the review, then activate to test locally.",
                 _ => {
                     "Activating switches the touched repos to the ticket branches, stashes local changes, and applies the test overlay where needed."
                 }
@@ -917,7 +922,7 @@ impl Sim {
                     Btn::new(
                         "Activate…",
                         Intent::Do(Command::Activate {
-                            key: key.to_string(),
+                            key: key.clone(),
                             baseline: None,
                         }),
                     )
@@ -925,7 +930,7 @@ impl Sim {
                 }),
             });
         }
-        let act = t.act.as_ref()?;
+        let act = t.act()?;
         let mut env = Vec::new();
         for r in &act.records {
             env.push(EnvRow {
@@ -955,16 +960,16 @@ impl Sim {
             }),
             actions: vec![
                 Btn::new("Prepare integration →", Intent::go_ticket(key, TicketTab::Ship)).primary(),
-                Btn::new("Park…", Intent::Do(Command::Park(key.to_string()))),
+                Btn::new("Park…", Intent::Do(Command::Park(key.clone()))),
             ],
         })
     }
 
     /* ---------------------------- ship ---------------------------- */
 
-    pub(crate) fn vm_ship(&self, key: &str) -> Option<ShipVm> {
+    pub(crate) fn vm_ship(&self, key: &TicketKey) -> Option<ShipVm> {
         let t = self.tk(key)?;
-        let st = t.local;
+        let st = t.local();
         let pushed_all = self.pushed_all(t);
         let integrate_state = if st == Some(Local::Active) {
             StepState::Now
@@ -974,7 +979,7 @@ impl Sim {
             StepState::Todo
         };
         let integrate = if st == Some(Local::Active) {
-            let prep = t.prep.as_ref().map(|p| {
+            let prep = t.prep().as_ref().map(|p| {
                 p.rows
                     .iter()
                     .map(|r| match &r.outcome {
@@ -1007,7 +1012,7 @@ impl Sim {
                                     Btn::new(
                                         "Comment on ticket…",
                                         Intent::Do(Command::ConflictComment {
-                                            key: key.to_string(),
+                                            key: key.clone(),
                                             also_return: false,
                                         }),
                                     )
@@ -1027,7 +1032,7 @@ impl Sim {
             let mut groups: Vec<PrePushGroup> = Vec::new();
             for (repo, i, text, done) in items {
                 let intent = Intent::Do(Command::TogglePrePush {
-                    key: key.to_string(),
+                    key: key.clone(),
                     repo: repo.clone(),
                     index: i,
                 });
@@ -1047,12 +1052,12 @@ impl Sim {
                     } else {
                         "Prepare integration"
                     },
-                    Intent::Do(Command::Prepare(key.to_string())),
+                    Intent::Do(Command::Prepare(key.clone())),
                 )
                 .primary_if(prep.is_none()),
                 push: Btn::new(
                     "Review & push to uat…",
-                    Intent::Do(Command::PushUat(key.to_string())),
+                    Intent::Do(Command::PushUat(key.clone())),
                 )
                 .primary()
                 .disabled((!self.prep_pushable(t)).then(|| {
@@ -1068,9 +1073,9 @@ impl Sim {
         } else if pushed_all {
             IntegrateBody::Pushed {
                 rows: t
-                    .merges
+                    .landings()
                     .iter()
-                    .map(|m| (m.repo.clone(), m.commit.clone(), m.at.clone()))
+                    .map(|l| (l.repo.clone(), l.commit.clone(), l.at.clone()))
                     .collect(),
                 new_commits: t.new_commits,
             }
@@ -1083,19 +1088,19 @@ impl Sim {
 
         let fails = Self::failed_repos(t);
         let runs: Vec<RunRow> = t
-            .merges
+            .landings()
             .iter()
-            .filter_map(|m| {
-                let d = t.deploy.get(&m.repo)?;
-                Some(RunRow {
-                    repo: m.repo.clone(),
+            .map(|l| {
+                let d = &l.deploy;
+                RunRow {
+                    repo: l.repo.clone(),
                     chip: deploy_chip(d),
                     rerun: (d.state == DeployState::Failed).then(|| {
                         Btn::new(
                             "Re-run…",
                             Intent::Do(Command::Rerun {
-                                key: key.to_string(),
-                                repo: m.repo.clone(),
+                                key: key.clone(),
+                                repo: l.repo.clone(),
                             }),
                         )
                     }),
@@ -1107,11 +1112,11 @@ impl Sim {
                         )),
                         _ => None,
                     },
-                })
+                }
             })
             .collect();
         let dep = self.all_deployed(t);
-        let runs_state = if t.merges.is_empty() {
+        let runs_state = if t.landings().is_empty() {
             StepState::Todo
         } else if !fails.is_empty() {
             StepState::Bad
@@ -1121,9 +1126,9 @@ impl Sim {
             StepState::Now
         };
         let uat_moved = t
-            .merges
+            .landings()
             .iter()
-            .find_map(|m| t.deploy.get(&m.repo).and_then(|d| d.uat_moved.clone()))
+            .find_map(|l| l.deploy.uat_moved.clone())
             .map(|u| {
                 format!(
                     "uat moved after your push: {} ({}) was pushed at {}. Alpha now contains both, so check the combined behaviour.",
@@ -1133,15 +1138,15 @@ impl Sim {
 
         let d = Self::draft(t);
         let posted = d.is_some_and(|d| d.posted);
-        let moved = t.jira == JIRA_ALPHA || Self::is_signed_off(t);
+        let moved = t.jira == JiraStatus::AlphaTesting || t.jira.is_signed_off();
         let announce = match d {
             Some(d) if d.posted => AnnounceBody::Posted {
                 text: d.body.clone(),
-                moved: moved.then(|| jira_badge(&t.jira)),
+                moved: moved.then(|| jira_badge(t.jira)),
                 transition: (!moved).then(|| {
                     Btn::new(
-                        format!("Move to {JIRA_ALPHA}…"),
-                        Intent::Do(Command::Transition(key.to_string())),
+                        format!("Move to {}…", JiraStatus::AlphaTesting.label()),
+                        Intent::Do(Command::Transition(key.clone())),
                     )
                     .primary()
                 }),
@@ -1150,9 +1155,9 @@ impl Sim {
                 id: d.id.clone(),
                 text: d.body.clone(),
                 post: Btn::new(
-                    format!("Post and move to {JIRA_ALPHA}…"),
+                    format!("Post and move to {}…", JiraStatus::AlphaTesting.label()),
                     Intent::Do(Command::PostAndMove {
-                        key: key.to_string(),
+                        key: key.clone(),
                         draft: d.id.clone(),
                     }),
                 )
@@ -1161,7 +1166,7 @@ impl Sim {
             None if dep => AnnounceBody::Compose(
                 Btn::new(
                     "Draft the comment",
-                    Intent::Do(Command::ComposeDraft(key.to_string())),
+                    Intent::Do(Command::ComposeDraft(key.clone())),
                 )
                 .primary(),
             ),
@@ -1175,21 +1180,21 @@ impl Sim {
             StepState::Todo
         };
 
-        let signed = Self::is_signed_off(t);
+        let signed = t.jira.is_signed_off();
         let pending: Vec<&Pr> = t
             .prs
             .iter()
             .filter(|p| !p.reviewers.iter().any(|r| r.name == ME && r.approved))
             .collect();
-        let after_text = if t.merges.is_empty() {
+        let after_text = if t.landings().is_empty() {
             "Later.".to_string()
         } else {
             format!(
                 "Alpha and UAT are done by others. When Jira reaches a signed-off status ({}), approval unlocks. New commits suggest a re-merge; a returned ticket only matters if you are mentioned.",
-                JIRA_SIGNED.join(", ")
+                JiraStatus::Done.label()
             )
         };
-        let after = if !t.merges.is_empty() && signed {
+        let after = if !t.landings().is_empty() && signed {
             t.prs
                 .iter()
                 .map(|p| {
@@ -1205,7 +1210,7 @@ impl Sim {
                             Btn::new(
                                 "Approve…",
                                 Intent::Do(Command::Approve {
-                                    key: key.to_string(),
+                                    key: key.clone(),
                                     repo: p.repo.clone(),
                                     pr: p.id,
                                 }),
@@ -1219,7 +1224,7 @@ impl Sim {
             Vec::new()
         };
         Some(ShipVm {
-            key: key.to_string(),
+            key: key.clone(),
             integrate_state,
             integrate,
             runs_state,
@@ -1227,16 +1232,16 @@ impl Sim {
             uat_moved,
             announce_state,
             announce,
-            after_state: if signed && !t.merges.is_empty() {
+            after_state: if signed && !t.landings().is_empty() {
                 StepState::Now
             } else {
                 StepState::Todo
             },
             after_text,
-            approve_all: (signed && !t.merges.is_empty() && pending.len() > 1).then(|| {
+            approve_all: (signed && !t.landings().is_empty() && pending.len() > 1).then(|| {
                 Btn::new(
                     format!("Approve all {}…", pending.len()),
-                    Intent::Do(Command::ApproveAll(key.to_string())),
+                    Intent::Do(Command::ApproveAll(key.clone())),
                 )
                 .primary()
             }),

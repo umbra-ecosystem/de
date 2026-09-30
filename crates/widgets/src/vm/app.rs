@@ -1,13 +1,14 @@
 //! The whole window as one view model: what the shell, the screen, the sheet and the toasts show right now.
 
 use super::common::*;
+use super::ids::*;
 use super::intent::{Command, ComposeKind, Field, Then};
 use super::screens::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShellTab {
     pub route: Route,
-    pub key: Option<String>,
+    pub key: Option<TicketKey>,
     pub label: String,
     pub title: String,
     pub selected: bool,
@@ -80,7 +81,7 @@ pub enum SheetVm {
         items: Vec<PaletteItem>,
     },
     ClaimBlocked {
-        key: String,
+        key: TicketKey,
         block: ClaimBlock,
         then: Then,
     },
@@ -89,7 +90,7 @@ pub enum SheetVm {
         retry: Command,
     },
     Diagnose(String),
-    CloseTab(String),
+    CloseTab(TicketKey),
 }
 
 #[derive(Clone, Debug, PartialEq)]

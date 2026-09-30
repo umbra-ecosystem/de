@@ -11,13 +11,13 @@ mod queries;
 mod rules;
 mod store_impl;
 
-pub use rules::Sug;
+pub use rules::{Rule, Sug};
 
 use std::collections::BTreeMap;
 
 use model::*;
 
-use crate::vm::ToastKind;
+use crate::vm::{Branch, RepoName, TicketKey, ToastKind};
 
 pub struct Sim {
     pub(crate) ms: i64,
@@ -26,13 +26,13 @@ pub struct Sim {
     pub(crate) sync: SyncState,
     pub(crate) jira_ready: bool,
     pub(crate) gh_ready: bool,
-    pub(crate) locks: BTreeMap<String, Lock>,
+    pub(crate) locks: BTreeMap<RepoName, Lock>,
     pub(crate) sims: Sims,
     pub(crate) ws: Workspace,
     pub(crate) wait_min: u32,
     pub(crate) tickets: Vec<Ticket>,
     pub(crate) audit: Vec<AuditEntry>,
-    pub(crate) responses: BTreeMap<String, Response>,
+    pub(crate) responses: Responses,
     pub(crate) repos: Vec<RepoCfg>,
     pub(crate) toasts: Vec<(String, ToastKind)>,
 }
@@ -52,7 +52,7 @@ impl Sim {
             ("docs", "master"),
         ]
         .into_iter()
-        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .map(|(a, b)| (RepoName::from(a), Branch::from(b)))
         .collect();
         Self {
             ms: 0,
@@ -69,13 +69,13 @@ impl Sim {
             sims: Sims::default(),
             ws: Workspace {
                 branches,
-                dirty: ["web".to_string()].into_iter().collect(),
+                dirty: [RepoName::from("web")].into_iter().collect(),
                 up: true,
             },
             wait_min: 30,
             tickets: data::seed_tickets(),
             audit: Vec::new(),
-            responses: BTreeMap::new(),
+            responses: Responses::new(),
             repos: repos(),
             toasts: Vec::new(),
         }
@@ -83,18 +83,18 @@ impl Sim {
 
     /* ---------------------------- small helpers ---------------------------- */
 
-    pub(crate) fn idx(&self, key: &str) -> Option<usize> {
-        self.tickets.iter().position(|t| t.key == key)
+    pub(crate) fn idx(&self, key: &TicketKey) -> Option<usize> {
+        self.tickets.iter().position(|t| t.key == *key)
     }
 
-    pub(crate) fn tk(&self, key: &str) -> Option<&Ticket> {
-        self.tickets.iter().find(|t| t.key == key)
+    pub(crate) fn tk(&self, key: &TicketKey) -> Option<&Ticket> {
+        self.tickets.iter().find(|t| t.key == *key)
     }
 
-    pub(crate) fn repo(&self, name: &str) -> &RepoCfg {
+    pub(crate) fn repo(&self, name: &RepoName) -> &RepoCfg {
         self.repos
             .iter()
-            .find(|r| r.name == name)
+            .find(|r| r.name == *name)
             .unwrap_or(&self.repos[0])
     }
 
@@ -116,9 +116,9 @@ impl Sim {
     pub(crate) fn audit(
         &mut self,
         action: &str,
-        ticket: Option<&str>,
-        repo: Option<&str>,
-        outcome: &'static str,
+        ticket: Option<&TicketKey>,
+        repo: Option<&RepoName>,
+        outcome: AuditOutcome,
         details: &str,
     ) {
         let id = self.next_seq();
@@ -129,8 +129,8 @@ impl Sim {
                 id,
                 at,
                 action: action.to_string(),
-                ticket: ticket.map(str::to_string),
-                repo: repo.map(str::to_string),
+                ticket: ticket.cloned(),
+                repo: repo.cloned(),
                 outcome,
                 details: details.to_string(),
             },
@@ -140,11 +140,11 @@ impl Sim {
     pub(crate) fn ok(
         &mut self,
         action: &str,
-        ticket: Option<&str>,
-        repo: Option<&str>,
+        ticket: Option<&TicketKey>,
+        repo: Option<&RepoName>,
         details: &str,
     ) {
-        self.audit(action, ticket, repo, "success", details);
+        self.audit(action, ticket, repo, AuditOutcome::Success, details);
     }
 
     pub(crate) fn toast(&mut self, text: impl Into<String>, kind: ToastKind) {
@@ -159,19 +159,19 @@ impl Sim {
         format!("{h:08x}")[..7].to_string()
     }
 
-    pub(crate) fn active_key(&self) -> Option<String> {
+    pub(crate) fn active_key(&self) -> Option<TicketKey> {
         self.tickets
             .iter()
-            .find(|t| t.local == Some(Local::Active))
+            .find(|t| t.local() == Some(Local::Active))
             .map(|t| t.key.clone())
     }
 
     /// The first ticket in hand: claimed, in review or active. Parked and awaiting-alpha tickets do not count.
-    pub(crate) fn in_hand(&self, except: &str) -> Option<&Ticket> {
+    pub(crate) fn in_hand(&self, except: &TicketKey) -> Option<&Ticket> {
         self.tickets.iter().find(|x| {
-            x.key != except
+            x.key != *except
                 && matches!(
-                    x.local,
+                    x.local(),
                     Some(Local::Claimed | Local::Reviewing | Local::Active)
                 )
         })

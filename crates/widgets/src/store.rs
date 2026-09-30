@@ -2,82 +2,90 @@
 //!
 //! The showcase implements [`Store`] with an in-memory simulation ([`crate::sim::Sim`]). The `de-app` crate will
 //! implement it over `de-core` and `de next --json`. The views and [`crate::session::Session`] only know this trait.
+//!
+//! Writes are split by type. A [`LocalCommand`] is dispatched directly. A [`RemoteCommand`] can only be previewed;
+//! it runs only as a [`Confirmed`], which only [`Preview::confirm`] produces. There is no other way in.
+
+use std::collections::BTreeSet;
 
 use crate::vm::*;
 
 /// Which diff the review screen is showing; UI state the session owns and passes down.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReviewSel {
-    pub pr: Option<u32>,
+    pub pr: Option<PrNumber>,
     pub file: usize,
     pub mode: DiffMode,
     pub since: SinceMode,
-    pub viewed: Vec<String>,
+    pub viewed: BTreeSet<HunkId>,
     /// `(pr, file path, anchor)` of the open inline composer.
-    pub composer: Option<(u32, String, String)>,
+    pub composer: Option<(PrNumber, String, LineAnchor)>,
 }
 
-/// The key under which a hunk's "viewed" state is remembered.
-pub fn hunk_key(ticket: &str, pr: u32, since: bool, path: &str, hunk: usize) -> String {
-    format!(
-        "{ticket}:{pr}{}:{path}:{hunk}",
-        if since { "s" } else { "" }
-    )
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToastSpec {
+    pub text: String,
+    pub kind: ToastKind,
+    pub undo: Option<Undo>,
 }
 
-/// What a command did. The session turns it into toasts and sheets.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Outcome {
-    pub ok: bool,
-    pub errors: Vec<String>,
-    pub toast: Option<(String, ToastKind, Option<Undo>)>,
+/// What a command did. Exactly one of these; there is no "ok with errors".
+#[derive(Clone, Debug, PartialEq)]
+pub enum Outcome {
+    Done {
+        toast: Option<ToastSpec>,
+        /// Shown as a progress list (activation, park).
+        report: Option<ReportVm>,
+    },
+    /// Nothing was changed; these are the reasons.
+    Refused(Vec<String>),
     /// A hotfix needs a baseline choice before it can be activated.
-    pub need_baseline: bool,
-    pub report: Option<ReportVm>,
+    NeedsBaseline,
     /// Refused because another ticket is in hand.
-    pub blocker: Option<ClaimBlock>,
+    Blocked(ClaimBlock),
     /// Refused because a repo is locked.
-    pub busy: Option<Busy>,
+    Busy(Busy),
 }
 
 impl Outcome {
     pub fn ok() -> Self {
-        Self {
-            ok: true,
-            ..Self::default()
+        Outcome::Done {
+            toast: None,
+            report: None,
         }
     }
 
     pub fn fail(error: impl Into<String>) -> Self {
-        Self {
-            ok: false,
-            errors: vec![error.into()],
-            ..Self::default()
+        Outcome::Refused(vec![error.into()])
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(self, Outcome::Done { .. })
+    }
+
+    /// Attach a toast to a successful outcome; other outcomes are returned unchanged.
+    pub fn with_toast(self, text: impl Into<String>, kind: ToastKind, undo: Option<Undo>) -> Self {
+        match self {
+            Outcome::Done { report, .. } => Outcome::Done {
+                toast: Some(ToastSpec {
+                    text: text.into(),
+                    kind,
+                    undo,
+                }),
+                report,
+            },
+            other => other,
         }
     }
 
-    pub fn blocked(block: ClaimBlock) -> Self {
-        Self {
-            blocker: Some(block),
-            ..Self::default()
+    pub fn with_report(self, report: ReportVm) -> Self {
+        match self {
+            Outcome::Done { toast, .. } => Outcome::Done {
+                toast,
+                report: Some(report),
+            },
+            other => other,
         }
-    }
-
-    pub fn busy(busy: Busy) -> Self {
-        Self {
-            busy: Some(busy),
-            ..Self::default()
-        }
-    }
-
-    pub fn with_toast(
-        mut self,
-        text: impl Into<String>,
-        kind: ToastKind,
-        undo: Option<Undo>,
-    ) -> Self {
-        self.toast = Some((text.into(), kind, undo));
-        self
     }
 }
 
@@ -85,7 +93,7 @@ pub trait Store {
     /* ---- shell ---- */
     fn counts(&self) -> Counts;
     fn status(&self) -> StatusVm;
-    fn tab_info(&self, key: &str) -> Option<TabInfo>;
+    fn tab_info(&self, key: &TicketKey) -> Option<TabInfo>;
     fn right_panel(&self, route: &Route) -> Vec<RightSection>;
     fn palette(&self, query: &str) -> Vec<PaletteItem>;
 
@@ -93,32 +101,35 @@ pub trait Store {
     fn next(&self, show_all: bool) -> NextVm;
     fn attention(&self) -> AttentionVm;
     fn tickets(&self, group: Group) -> TicketListVm;
-    fn ticket_exists(&self, key: &str) -> bool;
-    fn ticket_title(&self, key: &str) -> String;
-    fn ticket_head(&self, key: &str, tab: TicketTab) -> Option<TicketHeadVm>;
+    fn ticket_exists(&self, key: &TicketKey) -> bool;
+    fn ticket_head(&self, key: &TicketKey, tab: TicketTab) -> Option<TicketHeadVm>;
     /// `seen` is the number of comments already seen when the tab was opened.
-    fn overview(&self, key: &str, seen: Option<u32>) -> Option<OverviewVm>;
-    fn review(&self, key: &str, sel: &ReviewSel) -> Option<ReviewVm>;
-    fn test(&self, key: &str) -> Option<TestVm>;
-    fn ship(&self, key: &str) -> Option<ShipVm>;
-    fn timeline(&self, key: &str) -> Vec<AuditRow>;
+    fn overview(&self, key: &TicketKey, seen: Option<u32>) -> Option<OverviewVm>;
+    fn review(&self, key: &TicketKey, sel: &ReviewSel) -> Option<ReviewVm>;
+    fn test(&self, key: &TicketKey) -> Option<TestVm>;
+    fn ship(&self, key: &TicketKey) -> Option<ShipVm>;
+    fn timeline(&self, key: &TicketKey) -> Vec<AuditRow>;
     fn on_uat(&self) -> OnUatVm;
     fn workspace(&self) -> WorkspaceVm;
     fn audit(&self) -> Vec<AuditRow>;
     fn settings(&self) -> SettingsVm;
     fn simulate(&self) -> Vec<SimGroup>;
     /// The comment count at which a ticket was last marked seen (for "new" markers).
-    fn comments_seen(&self, key: &str) -> u32;
+    fn comments_seen(&self, key: &TicketKey) -> u32;
     /// The raw output `de providers probe` would print (fake here).
     fn diagnose(&self) -> String;
 
     /* ---- sheets ---- */
-    fn baseline_choices(&self, key: &str) -> BaselineVm;
-    /// `Some` for every command that writes to a remote: the session shows it before calling `dispatch`.
-    fn preview(&self, command: &Command) -> Option<Preview>;
+    fn baseline_choices(&self, key: &TicketKey) -> BaselineVm;
+    /// The preview of a remote write. Total by type: every remote command has one. `Err` only when its target is gone.
+    fn preview(&self, command: &RemoteCommand) -> Result<Preview, String>;
+    /// A local command that still asks first (park, remove a lock, stop the workspace).
+    fn local_guard(&self, command: &LocalCommand) -> Option<Preview>;
 
     /* ---- effects ---- */
-    fn dispatch(&mut self, command: &Command) -> Outcome;
+    fn dispatch(&mut self, command: LocalCommand) -> Outcome;
+    /// Run a command the user confirmed against its preview. The only path for a remote write.
+    fn execute(&mut self, confirmed: Confirmed) -> Outcome;
     /// Advance simulated time and deliver background events; returns toasts raised meanwhile.
     fn tick(&mut self, millis: i64) -> Vec<(String, ToastKind)>;
 }

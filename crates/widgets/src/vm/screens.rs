@@ -1,7 +1,8 @@
 //! One view-model type per screen area. The store builds them; the views draw them.
 
 use super::common::*;
-use super::intent::{DiffMode, Intent};
+use super::ids::*;
+use super::intent::{Command, DiffMode, Intent};
 
 /* ------------------------------ shell ------------------------------ */
 
@@ -32,14 +33,14 @@ pub struct TabInfo {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ActiveChip {
-    pub key: String,
+    pub key: TicketKey,
     pub elapsed: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct StatusVm {
     pub active: Option<ActiveChip>,
-    pub overlay: Option<String>,
+    pub overlay: Option<RepoName>,
     pub chips: Vec<Badge>,
     pub jira_ready: bool,
     pub gh_ready: bool,
@@ -55,7 +56,7 @@ pub enum RightRow {
     Muted(String),
     Item {
         head: Vec<Badge>,
-        key: Option<String>,
+        key: Option<TicketKey>,
         title: String,
         sub: Option<String>,
     },
@@ -104,11 +105,11 @@ pub enum SugState {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SuggestionCard {
-    pub id: String,
+    pub id: SuggestionId,
     pub rank: usize,
     pub hotfix: bool,
     pub info: bool,
-    pub ticket: Option<String>,
+    pub ticket: Option<TicketKey>,
     pub title: String,
     pub reason: String,
     pub level: Level,
@@ -136,14 +137,14 @@ pub struct AttentionVm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TicketRowVm {
-    pub key: String,
+    pub key: TicketKey,
     pub priority: Badge,
     pub title: String,
     pub hotfix: bool,
     pub sub: String,
     pub jira: Badge,
     pub local: Option<Badge>,
-    pub repos: Vec<String>,
+    pub repos: Vec<RepoName>,
     pub flags: Vec<Badge>,
 }
 
@@ -177,7 +178,7 @@ pub struct StepperVm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TicketHeadVm {
-    pub key: String,
+    pub key: TicketKey,
     pub title: String,
     pub jira: Badge,
     pub local: Option<Badge>,
@@ -200,15 +201,15 @@ pub struct DeployChip {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BranchCell {
-    Chosen { name: String, manual: bool },
+    Chosen { name: Branch, manual: bool },
     Ambiguous(Vec<Btn>),
-    Baseline(String),
+    Baseline(Branch),
     None,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RepoRowVm {
-    pub repo: String,
+    pub repo: RepoName,
     pub branch: BranchCell,
     pub pr: Option<String>,
     pub deploy: Option<DeployChip>,
@@ -226,7 +227,7 @@ pub struct CommentVm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct OverviewVm {
-    pub key: String,
+    pub key: TicketKey,
     pub description: Vec<Block>,
     pub acceptance: Vec<String>,
     pub subtasks: Vec<(bool, String)>,
@@ -259,7 +260,7 @@ pub struct DiffLineVm {
     pub new: Option<u32>,
     pub text: String,
     /// `n<new>` or `o<old>`: where an inline comment attaches.
-    pub anchor: String,
+    pub anchor: LineAnchor,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -314,9 +315,9 @@ pub struct PrHeadVm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReviewVm {
-    pub key: String,
+    pub key: TicketKey,
     /// The pull request being read (0 when there is none).
-    pub pr_id: u32,
+    pub pr_id: PrNumber,
     pub uat: Option<BannerVm>,
     pub stale: Option<BannerVm>,
     pub since_toggle: Option<(Btn, Btn, bool)>,
@@ -332,15 +333,15 @@ pub struct ReviewVm {
     pub approve: Btn,
     pub note: String,
     /// The inline comment being written: `(path, anchor)`.
-    pub composer: Option<(String, String)>,
+    pub composer: Option<(String, LineAnchor)>,
     pub empty: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnvRow {
-    pub repo: String,
+    pub repo: RepoName,
     pub role: Badge,
-    pub branch: String,
+    pub branch: Branch,
     pub note: String,
 }
 
@@ -366,7 +367,7 @@ pub enum TestVm {
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrepRow {
     Ready {
-        repo: String,
+        repo: RepoName,
         commits: u32,
         files: u32,
         uat_before: String,
@@ -374,25 +375,25 @@ pub enum PrepRow {
         overlaps: Vec<String>,
     },
     AlreadyPushed {
-        repo: String,
+        repo: RepoName,
         commit: String,
     },
     Conflict {
-        repo: String,
-        with: String,
+        repo: RepoName,
+        with: TicketKey,
         files: String,
         comment: Option<Btn>,
         sent: Option<String>,
     },
     Blocked {
-        repo: String,
+        repo: RepoName,
         reason: String,
     },
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PrePushGroup {
-    pub repo: String,
+    pub repo: RepoName,
     pub items: Vec<(String, bool, Intent)>,
 }
 
@@ -405,7 +406,7 @@ pub enum IntegrateBody {
         push: Btn,
     },
     Pushed {
-        rows: Vec<(String, String, String)>,
+        rows: Vec<(RepoName, String, String)>,
         new_commits: bool,
     },
     Inactive(String),
@@ -413,7 +414,7 @@ pub enum IntegrateBody {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RunRow {
-    pub repo: String,
+    pub repo: RepoName,
     pub chip: DeployChip,
     pub rerun: Option<Btn>,
     pub failure: Option<(String, u32, String)>,
@@ -424,7 +425,7 @@ pub enum AnnounceBody {
     Unavailable,
     Compose(Btn),
     Draft {
-        id: String,
+        id: DraftId,
         text: String,
         post: Btn,
     },
@@ -444,7 +445,7 @@ pub struct AfterRow {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShipVm {
-    pub key: String,
+    pub key: TicketKey,
     pub integrate_state: StepState,
     pub integrate: IntegrateBody,
     pub runs_state: StepState,
@@ -462,7 +463,7 @@ pub struct ShipVm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UatItem {
-    pub key: String,
+    pub key: TicketKey,
     pub title: String,
     pub commit: String,
     pub chip: Option<DeployChip>,
@@ -471,7 +472,7 @@ pub struct UatItem {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UatColumn {
-    pub repo: String,
+    pub repo: RepoName,
     pub host: String,
     pub items: Vec<UatItem>,
 }
@@ -484,9 +485,9 @@ pub struct OnUatVm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct WsRow {
-    pub repo: String,
+    pub repo: RepoName,
     pub services: u32,
-    pub branch: String,
+    pub branch: Branch,
     pub badges: Vec<Badge>,
     pub break_lock: Option<Btn>,
 }
@@ -535,25 +536,89 @@ pub struct SimGroup {
 
 /* ------------------------------ sheets ------------------------------ */
 
-/// The exact preview of an external write, as the gateway will show it.
+/// The exact preview of a guarded command, as the gateway will show it.
+///
+/// A preview is the only way to get a [`Confirmed`]: [`Preview::confirm`] checks that the writer's tool is
+/// available and that the ticket key was typed when the risk requires it. The store executes only a `Confirmed`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Preview {
+    command: Command,
     pub title: String,
-    pub ticket: Option<String>,
+    pub ticket: Option<TicketKey>,
     pub risk: Risk,
     pub summary: String,
     /// Literal payload: refspecs, comment body, transition target.
     pub payload: Vec<String>,
     pub facts: Vec<String>,
+    /// The text that must be typed to confirm (the ticket key for the uat push).
     pub type_key: Option<String>,
     pub confirm_label: String,
     /// Set when the writer's tool is missing or signed out: the sheet shows this instead.
     pub blocked: Option<String>,
 }
 
+impl Preview {
+    pub fn new(
+        command: Command,
+        title: impl Into<String>,
+        risk: Risk,
+        summary: impl Into<String>,
+        confirm_label: impl Into<String>,
+    ) -> Self {
+        Self {
+            command,
+            title: title.into(),
+            ticket: None,
+            risk,
+            summary: summary.into(),
+            payload: Vec::new(),
+            facts: Vec::new(),
+            type_key: None,
+            confirm_label: confirm_label.into(),
+            blocked: None,
+        }
+    }
+
+    pub fn command(&self) -> &Command {
+        &self.command
+    }
+
+    /// Whether `typed` satisfies the preview's requirements right now.
+    pub fn can_confirm(&self, typed: &str) -> bool {
+        self.blocked.is_none() && self.type_key.as_ref().is_none_or(|k| typed.trim() == k)
+    }
+
+    /// The only constructor of [`Confirmed`].
+    pub fn confirm(self, typed: &str) -> Result<Confirmed, Unconfirmed> {
+        if let Some(why) = self.blocked {
+            return Err(Unconfirmed::Blocked(why));
+        }
+        if self.type_key.as_ref().is_some_and(|k| typed.trim() != k) {
+            return Err(Unconfirmed::WrongKey);
+        }
+        Ok(Confirmed(self.command))
+    }
+}
+
+/// A command the user has confirmed against its preview. Only [`Preview::confirm`] makes one.
+#[derive(Debug)]
+pub struct Confirmed(Command);
+
+impl Confirmed {
+    pub fn command(&self) -> &Command {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Unconfirmed {
+    Blocked(String),
+    WrongKey,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReportRow {
-    pub repo: String,
+    pub repo: RepoName,
     pub detail: String,
     pub ok: bool,
 }
@@ -568,7 +633,7 @@ pub struct ReportVm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BaselineVm {
-    pub key: String,
+    pub key: TicketKey,
     pub choices: Vec<(super::intent::Baseline, String)>,
 }
 
@@ -593,7 +658,7 @@ pub struct Toast {
 /// Why a claim was refused: one ticket in hand at a time.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClaimBlock {
-    pub blocker: String,
+    pub blocker: TicketKey,
     pub title: String,
     pub what: String,
     pub active: bool,
@@ -602,7 +667,7 @@ pub struct ClaimBlock {
 /// A repo that is locked: by another operation, or by a leftover `index.lock`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Busy {
-    pub repo: String,
+    pub repo: RepoName,
     pub stale: bool,
     pub message: String,
 }

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use super::model::*;
-use crate::vm::Block;
+use crate::vm::{Block, Branch, LineAnchor, Phase, PrNumber, RepoName};
 
 fn p(x: &str) -> Block {
     Block::Para(x.to_string())
@@ -97,11 +97,11 @@ fn pr(
     files: Vec<FileDiff>,
 ) -> Pr {
     Pr {
-        repo: repo.to_string(),
-        id,
+        repo: repo.into(),
+        id: PrNumber(id),
         title: title.to_string(),
-        src: src.to_string(),
-        dst: dst.to_string(),
+        src: src.into(),
+        dst: dst.into(),
         updated_seq: 1,
         reviewers: rev,
         files,
@@ -111,31 +111,52 @@ fn pr(
 }
 
 fn thread(
-    id: &str,
+    id: u64,
     file: &str,
-    line: Option<&str>,
+    line: Option<LineAnchor>,
     author: &str,
     text: &str,
     resolved: bool,
 ) -> Thread {
     Thread {
-        id: id.to_string(),
+        id: ThreadId(id),
         file: file.to_string(),
-        line: line.map(str::to_string),
+        line,
         author: author.to_string(),
         text: text.to_string(),
         resolved,
     }
 }
 
-fn cands(list: &[(&str, &[&str])]) -> BTreeMap<String, Vec<String>> {
+fn cands(list: &[(&str, &[&str])]) -> BTreeMap<RepoName, Vec<Branch>> {
     list.iter()
-        .map(|(r, b)| (r.to_string(), b.iter().map(|s| s.to_string()).collect()))
+        .map(|(r, b)| ((*r).into(), b.iter().map(|s| Branch::from(*s)).collect()))
         .collect()
 }
 
 fn checklist(items: &[&str]) -> Vec<(String, bool)> {
     items.iter().map(|s| (s.to_string(), false)).collect()
+}
+
+fn landing(repo: &str, commit: &str, at: &str, run: u32) -> Landing {
+    Landing {
+        repo: repo.into(),
+        commit: commit.to_string(),
+        at: at.to_string(),
+        deploy: deployed(run),
+    }
+}
+
+fn integrated(landings: Vec<Landing>, draft: Draft) -> Stage {
+    Stage::Integrated {
+        held: Held {
+            review: Some(ReviewMark(1)),
+            shipped: Shipped {
+                landings,
+                drafts: vec![draft],
+            },
+        },
+    }
 }
 
 fn deployed(run: u32) -> Deploy {
@@ -214,15 +235,15 @@ pub fn seed_tickets() -> Vec<Ticket> {
     t.links = vec![
         IssueLink {
             rel: "relates to",
-            key: "PROJ-127",
+            key: "PROJ-127".into(),
             title: "Session cookie SameSite",
-            status: JIRA_ALPHA,
+            status: JiraStatus::AlphaTesting,
         },
         IssueLink {
             rel: "is blocked by",
-            key: "PROJ-098",
+            key: "PROJ-098".into(),
             title: "Refactor login module",
-            status: "Done",
+            status: JiraStatus::Done,
         },
     ];
     t.subtasks = vec![(true, "Add regression test"), (false, "Update the runbook")];
@@ -230,7 +251,10 @@ pub fn seed_tickets() -> Vec<Ticket> {
         ("api-client", &["feature/PROJ-142-redirect"]),
         ("web", &["feature/PROJ-142-web"]),
     ]);
-    t.local = Some(Local::Claimed);
+    t.stage = Stage::InHand {
+        phase: Phase::Claimed,
+        held: Held::default(),
+    };
     t.seen_n = 1;
     t.checklist = checklist(&[
         "Deep link survives login",
@@ -297,9 +321,9 @@ pub fn seed_tickets() -> Vec<Ticket> {
         ],
     );
     api.threads.push(thread(
-        "th1",
+        1,
         "src/redirect.rs",
-        Some("n42"),
+        Some(LineAnchor::New(42)),
         "Jane Doe",
         "Should we log when we reject a next value? Security asked for that.",
         true,
@@ -424,9 +448,9 @@ pub fn seed_tickets() -> Vec<Ticket> {
         ],
     );
     w.threads.push(thread(
-        "th2",
+        2,
         "src/header.css",
-        Some("n12"),
+        Some(LineAnchor::New(12)),
         "Marta Lind",
         "flex-wrap breaks the logo alignment on tablets. Can we keep the logo on its own row?",
         false,
@@ -483,9 +507,9 @@ pub fn seed_tickets() -> Vec<Ticket> {
     t.attachments = vec![("double-charge-report.csv", "18 KB")];
     t.links = vec![IssueLink {
         rel: "is caused by",
-        key: "PROJ-071",
+        key: "PROJ-071".into(),
         title: "Client retry policy",
-        status: "Done",
+        status: JiraStatus::Done,
     }];
     t.cands = cands(&[
         ("api-client", &["hotfix/PROJ-139-idempotency"]),
@@ -546,7 +570,7 @@ pub fn seed_tickets() -> Vec<Ticket> {
     let mut t = Ticket::blank("PROJ-131", "Staging redirect loop");
     t.kind = "Task";
     t.priority = Priority::Low;
-    t.jira = JIRA_RETURNED.to_string();
+    t.jira = JiraStatus::Returned;
     t.assignee = "Sam Ortiz";
     t.reporter = "Jane Doe";
     t.sprint = "Sprint 40";
@@ -582,26 +606,20 @@ pub fn seed_tickets() -> Vec<Ticket> {
     ];
     t.links = vec![IssueLink {
         rel: "relates to",
-        key: "PROJ-142",
+        key: "PROJ-142".into(),
         title: "Fix login redirect after session expiry",
-        status: JIRA_REVIEW,
+        status: JiraStatus::InReview,
     }];
     t.cands = cands(&[("web", &["feature/PROJ-131-cookie"])]);
-    t.local = Some(Local::Integrated);
-    t.reviewed = true;
-    t.reviewed_seq = Some(1);
     t.seen_n = 1;
-    t.merges = vec![Merge {
-        repo: "web".into(),
-        commit: "2b90cd3".into(),
-        at: "6 days ago".into(),
-    }];
-    t.deploy.insert("web".into(), deployed(401));
-    t.drafts = vec![Draft {
-        id: "d1".into(),
-        body: "Deployed to alpha.".into(),
-        posted: true,
-    }];
+    t.stage = integrated(
+        vec![landing("web", "2b90cd3", "6 days ago", 401)],
+        Draft {
+            id: "d1".into(),
+            body: "Deployed to alpha.".into(),
+            posted: true,
+        },
+    );
     t.prs = vec![pr(
         "web",
         470,
@@ -625,7 +643,7 @@ pub fn seed_tickets() -> Vec<Ticket> {
 
     let mut t = Ticket::blank("PROJ-127", "Session cookie SameSite");
     t.kind = "Story";
-    t.jira = JIRA_ALPHA.to_string();
+    t.jira = JiraStatus::AlphaTesting;
     t.assignee = "Priya Nair";
     t.reporter = "Omar Haddad";
     t.sprint = "Sprint 40";
@@ -661,37 +679,26 @@ pub fn seed_tickets() -> Vec<Ticket> {
     )];
     t.links = vec![IssueLink {
         rel: "relates to",
-        key: "PROJ-142",
+        key: "PROJ-142".into(),
         title: "Fix login redirect after session expiry",
-        status: JIRA_REVIEW,
+        status: JiraStatus::InReview,
     }];
     t.cands = cands(&[
         ("api-client", &["feature/PROJ-127-samesite"]),
         ("web", &["feature/PROJ-127-samesite"]),
     ]);
-    t.local = Some(Local::Integrated);
-    t.reviewed = true;
-    t.reviewed_seq = Some(1);
     t.seen_n = 1;
-    t.merges = vec![
-        Merge {
-            repo: "api-client".into(),
-            commit: "8c01d22".into(),
-            at: "yesterday".into(),
+    t.stage = integrated(
+        vec![
+            landing("api-client", "8c01d22", "yesterday", 311),
+            landing("web", "44ab0f9", "yesterday", 398),
+        ],
+        Draft {
+            id: "d0".into(),
+            body: "Deployed to alpha.".into(),
+            posted: true,
         },
-        Merge {
-            repo: "web".into(),
-            commit: "44ab0f9".into(),
-            at: "yesterday".into(),
-        },
-    ];
-    t.deploy.insert("api-client".into(), deployed(311));
-    t.deploy.insert("web".into(), deployed(398));
-    t.drafts = vec![Draft {
-        id: "d0".into(),
-        body: "Deployed to alpha.".into(),
-        posted: true,
-    }];
+    );
     t.prs = vec![
         pr(
             "api-client",
@@ -860,7 +867,7 @@ pub fn open_fake_prs(t: &mut Ticket, repos: &[RepoCfg], serial: u32) {
         let base = repos
             .iter()
             .find(|r| r.name == repo)
-            .map_or("develop", |r| r.base);
+            .map_or("develop", |r| r.base.as_str());
         let id = 500 + t.prs.len() as u32 + serial % 40;
         t.prs.push(pr(
             &repo,

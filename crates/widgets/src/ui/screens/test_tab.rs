@@ -23,14 +23,14 @@ fn env_table(ui: &Ui, rows: &[EnvRow]) -> Div {
                     .flex_none()
                     .font_family(ui.mono.clone())
                     .text_sm()
-                    .child(r.repo.clone()),
+                    .child(r.repo.to_string()),
             )
             .child(div().w(px(110.0)).flex_none().child(pill(pal, &r.role)))
             .child(
                 div()
                     .font_family(ui.mono.clone())
                     .text_sm()
-                    .child(r.branch.clone()),
+                    .child(r.branch.to_string()),
             )
             .child(faint(pal, r.note.clone()))
     }))
@@ -45,7 +45,7 @@ fn overlay_note(ui: &Ui, text: &str) -> Div {
     )
 }
 
-pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &str, t: &TestVm) -> Div {
+pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &TicketKey, t: &TestVm) -> Div {
     let pal = &ui.pal;
     match t {
         TestVm::Inactive {
@@ -114,7 +114,7 @@ pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &str, t: &TestVm) -> Div {
                                         text,
                                         *d,
                                         Intent::Do(Command::ToggleChecklist {
-                                            key: key.to_string(),
+                                            key: key.clone(),
                                             index: i,
                                         }),
                                     )
@@ -125,22 +125,21 @@ pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &str, t: &TestVm) -> Div {
                                         .gap_2()
                                         .items_center()
                                         .child(
-                                            div().flex_1().child(
-                                                inputs.line(&Field::Checklist(key.to_string())),
-                                            ),
+                                            div()
+                                                .flex_1()
+                                                .child(inputs.line(&Field::Checklist(key.clone()))),
                                         )
                                         .child(button(
                                             ui,
                                             &Btn::new(
                                                 "Add",
-                                                Intent::Submit(Field::Checklist(key.to_string())),
+                                                Intent::Submit(Field::Checklist(key.clone())),
                                             ),
                                         )),
                                 ),
                         )
                         .child(
-                            section(pal, "Notes")
-                                .child(inputs.area(&Field::Notes(key.to_string()))),
+                            section(pal, "Notes").child(inputs.area(&Field::Notes(key.clone()))),
                         ),
                 )
                 .child(

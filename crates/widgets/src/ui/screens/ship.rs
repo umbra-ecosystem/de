@@ -226,7 +226,7 @@ fn runs(ui: &Ui, cx: &App, s: &ShipVm) -> Div {
         })
 }
 
-fn announce(ui: &Ui, cx: &App, inputs: &Inputs, key: &str, b: &AnnounceBody) -> Div {
+fn announce(ui: &Ui, cx: &App, inputs: &Inputs, key: &TicketKey, b: &AnnounceBody) -> Div {
     let pal = &ui.pal;
     match b {
         AnnounceBody::Unavailable => muted(pal, "Available when every touched repo is deployed."),
@@ -236,7 +236,7 @@ fn announce(ui: &Ui, cx: &App, inputs: &Inputs, key: &str, b: &AnnounceBody) -> 
             .flex_col()
             .gap_2()
             .child(inputs.area(&Field::Draft {
-                key: key.to_string(),
+                key: key.clone(),
                 id: id.clone(),
             }))
             .child(div().child(button(ui, post))),

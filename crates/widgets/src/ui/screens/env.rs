@@ -36,7 +36,7 @@ pub fn on_uat(ui: &Ui, v: &OnUatVm) -> Div {
                                     div()
                                         .font_family(ui.mono.clone())
                                         .font_weight(FontWeight::SEMIBOLD)
-                                        .child(c.repo.clone()),
+                                        .child(c.repo.to_string()),
                                 )
                                 .child(pill(pal, &Badge::new(c.host.clone(), Tone::Neutral))),
                         )
@@ -160,14 +160,14 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                             col(120.0)
                                 .font_family(ui.mono.clone())
                                 .text_sm()
-                                .child(r.repo.clone()),
+                                .child(r.repo.to_string()),
                         )
                         .child(col(80.0).text_sm().child(r.services.to_string()))
                         .child(
                             col(220.0)
                                 .font_family(ui.mono.clone())
                                 .text_sm()
-                                .child(r.branch.clone()),
+                                .child(r.branch.to_string()),
                         )
                         .child(
                             div()
