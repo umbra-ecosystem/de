@@ -8,7 +8,17 @@
 //! - **`cache.db`** mirrors remote systems (Jira, PRs, pipelines). It can be deleted at any
 //!   time and is rebuilt by the next sync.
 
+pub mod audit;
+pub mod jira_cache;
+pub mod links;
 mod migrations;
+pub mod notes;
+mod sql;
+pub mod tickets;
+pub mod time;
+
+#[cfg(test)]
+mod domain_tests;
 
 use std::path::{Path, PathBuf};
 
@@ -156,7 +166,10 @@ mod tests {
         let first = Store::open_in(dir.path(), Kind::State).unwrap();
         first
             .conn()
-            .execute("INSERT INTO app_meta (key, value) VALUES ('probe', '1')", [])
+            .execute(
+                "INSERT INTO app_meta (key, value) VALUES ('probe', '1')",
+                [],
+            )
             .unwrap();
         let version = first.schema_version().unwrap();
         drop(first);
