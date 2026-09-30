@@ -55,6 +55,8 @@ pub struct Session {
     show_all: bool,
     uat_repos: Vec<RepoName>,
     uat_problems: bool,
+    ticket_filters: TicketFilters,
+    ticket_sort: Option<(TicketSort, bool)>,
     attention_open: bool,
     simulate_open: bool,
     right_open: bool,
@@ -82,6 +84,8 @@ impl Session {
             show_all: false,
             uat_repos: Vec::new(),
             uat_problems: false,
+            ticket_filters: TicketFilters::default(),
+            ticket_sort: None,
             attention_open: false,
             simulate_open: false,
             right_open: true,
@@ -180,6 +184,15 @@ impl Session {
             Intent::TogglePanel => self.right_open = !self.right_open,
             Intent::SetTheme(t) => self.theme = t,
             Intent::ToggleShowAll => self.show_all = !self.show_all,
+            Intent::ToggleTicketFilter(f) => self.ticket_filters.toggle(f),
+            Intent::ClearTicketFilters => self.ticket_filters = TicketFilters::default(),
+            Intent::SortTickets(col) => {
+                self.ticket_sort = match self.ticket_sort {
+                    Some((c, true)) if c == col => Some((col, false)),
+                    Some((c, false)) if c == col => None,
+                    _ => Some((col, true)),
+                }
+            }
             Intent::ToggleUatProblems => self.uat_problems = !self.uat_problems,
             Intent::ClearUatFilters => {
                 self.uat_repos.clear();
@@ -524,13 +537,21 @@ impl Session {
             route,
             count,
         };
-        let mut tickets = vec![item("Next", Route::Next, counts.suggestions)];
+        let mut tickets = vec![item(
+            Group::All.label(),
+            Route::Tickets(Group::All),
+            counts.group(Group::All),
+        )];
         tickets.extend(
             Group::NAV
                 .iter()
                 .map(|g| item(g.label(), Route::Tickets(*g), counts.group(*g))),
         );
         vec![
+            NavSection {
+                title: String::new(),
+                items: vec![item("Next", Route::Next, counts.suggestions)],
+            },
             NavSection {
                 title: "Tickets".to_string(),
                 items: tickets,
@@ -652,7 +673,57 @@ impl Session {
                 }
                 ScreenVm::Next(n)
             }
-            Route::Tickets(g) => ScreenVm::Tickets(self.store.tickets(*g)),
+            Route::Tickets(g) => {
+                let mut v = self.store.tickets(*g);
+                let q = self.text(&Field::TicketFilter).trim().to_lowercase();
+                let rows = || v.sections.iter().flat_map(|s| &s.rows);
+                let mut options = TicketFilterOptions::default();
+                for r in rows() {
+                    options.repos.extend(r.repos.iter().cloned());
+                    options.jira.push(r.jira.text.clone());
+                    options.priority.push(r.priority.text.clone());
+                }
+                for f in [&mut options.jira, &mut options.priority] {
+                    f.sort();
+                    f.dedup();
+                }
+                options.repos.sort();
+                options.repos.dedup();
+                // What is chosen stays listed even if nothing is left to pick it from.
+                for r in &self.ticket_filters.repos {
+                    if !options.repos.contains(r) {
+                        options.repos.push(r.clone());
+                    }
+                }
+                let filters = self.ticket_filters.clone();
+                let sort = self.ticket_sort;
+                for s in &mut v.sections {
+                    s.rows.retain(|r| {
+                        filters.keeps(r)
+                            && (q.is_empty()
+                                || r.title.to_lowercase().contains(&q)
+                                || r.key.to_lowercase().contains(&q)
+                                || r.sub.to_lowercase().contains(&q))
+                    });
+                    if let Some((col, asc)) = sort {
+                        s.rows.sort_by(|a, b| {
+                            let o = match col {
+                                TicketSort::Key => a.key.cmp(&b.key),
+                                TicketSort::Title => {
+                                    a.title.to_lowercase().cmp(&b.title.to_lowercase())
+                                }
+                                TicketSort::Jira => a.jira.text.cmp(&b.jira.text),
+                            };
+                            if asc { o } else { o.reverse() }
+                        });
+                    }
+                }
+                v.sections.retain(|s| !s.rows.is_empty());
+                v.options = options;
+                v.filters = filters;
+                v.sort = sort;
+                ScreenVm::Tickets(v)
+            }
             Route::OnUat => {
                 let mut v = self.store.on_uat();
                 let q = self.text(&Field::UatFilter).trim().to_lowercase();
@@ -1519,6 +1590,59 @@ mod tests {
             panic!()
         };
         assert!(s.store().preview(&r).is_err());
+    }
+
+    #[test]
+    fn the_ticket_table_searches_filters_and_sorts() {
+        let mut s = Session::demo();
+        s.handle(Intent::go_tickets(Group::All));
+        let list = |s: &Session| match s.view().screen {
+            ScreenVm::Tickets(v) => v,
+            _ => panic!("not the ticket list"),
+        };
+        let keys = |s: &Session| -> Vec<String> {
+            list(s)
+                .sections
+                .iter()
+                .flat_map(|x| x.rows.iter().map(|r| r.key.to_string()))
+                .collect()
+        };
+        let all = keys(&s);
+        assert!(all.len() >= 5);
+        // search
+        s.handle(Intent::SetText(Field::TicketFilter, "zzz-no-such".into()));
+        assert!(keys(&s).is_empty());
+        assert!(
+            list(&s).total > 0,
+            "an empty result is told apart from an empty group"
+        );
+        s.handle(Intent::SetText(Field::TicketFilter, String::new()));
+        // filters combine: a repo and hotfix
+        s.handle(Intent::ToggleTicketFilter(TicketFilter::Hotfix));
+        let hot = keys(&s);
+        assert!(!hot.is_empty() && hot.len() < all.len());
+        s.handle(Intent::ClearTicketFilters);
+        assert_eq!(keys(&s), all);
+        // sort: ascending, descending, then back to the default order
+        s.handle(Intent::SortTickets(TicketSort::Key));
+        let mut asc = all.clone();
+        asc.sort();
+        assert_eq!(keys(&s), asc);
+        s.handle(Intent::SortTickets(TicketSort::Key));
+        asc.reverse();
+        assert_eq!(keys(&s), asc);
+        s.handle(Intent::SortTickets(TicketSort::Key));
+        assert_eq!(keys(&s), all);
+    }
+
+    #[test]
+    fn the_sidebar_lists_the_ticket_groups_under_their_own_title() {
+        let s = Session::demo();
+        let nav = s.view().nav;
+        assert_eq!(nav[0].items.len(), 1, "Next stands alone");
+        assert_eq!(nav[1].title, "Tickets");
+        assert_eq!(nav[1].items[0].label, "All tickets");
+        assert_eq!(nav[1].items.len(), Group::NAV.len() + 1);
     }
 
     #[test]

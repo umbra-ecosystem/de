@@ -153,8 +153,15 @@ impl Sim {
             sub: format!("{} · {}", t.kind, t.assignee),
             jira: jira_badge(t.jira),
             local: local_badge(t.local()),
-            repos: t.prs.iter().map(|p| p.repo.clone()).collect(),
+            repos: {
+                let mut r: Vec<RepoName> = t.prs.iter().map(|p| p.repo.clone()).collect();
+                r.sort();
+                r.dedup();
+                r
+            },
             flags,
+            urgent: matches!(t.priority, Priority::High | Priority::Highest),
+            new_comments: un > 0,
         }
     }
 
@@ -986,21 +993,28 @@ impl Store for Sim {
                 rows: rows.iter().map(|t| self.ticket_row(t)).collect(),
             }]
         };
+        let total = sections.iter().map(|s| s.rows.len()).sum();
+        let elsewhere = Group::NAV
+            .iter()
+            .filter(|g| **g != group)
+            .map(|g| {
+                (
+                    *g,
+                    self.tickets
+                        .iter()
+                        .filter(|t| Self::in_group(t, *g))
+                        .count(),
+                )
+            })
+            .find(|(_, n)| *n > 0);
         TicketListVm {
             group,
-            tabs: Group::LIST
-                .iter()
-                .map(|g| {
-                    (
-                        *g,
-                        self.tickets
-                            .iter()
-                            .filter(|t| Self::in_group(t, *g))
-                            .count(),
-                    )
-                })
-                .collect(),
             sections,
+            options: TicketFilterOptions::default(),
+            filters: TicketFilters::default(),
+            sort: None,
+            total,
+            elsewhere,
         }
     }
 

@@ -78,6 +78,9 @@ fn needs(vm: &AppVm) -> Vec<Need> {
     if matches!(vm.screen, ScreenVm::Next(_)) {
         add(Field::NextFilter, false, "Search suggestions…");
     }
+    if matches!(vm.screen, ScreenVm::Tickets(_)) {
+        add(Field::TicketFilter, false, "Search tickets…");
+    }
     if matches!(vm.screen, ScreenVm::OnUat(_)) {
         add(Field::UatFilter, false, "Filter tickets on uat…");
     }
@@ -335,7 +338,7 @@ impl AppView {
     fn screen(&self, ui: &Ui, cx: &App, vm: &ScreenVm) -> AnyElement {
         match vm {
             ScreenVm::Next(n) => next::next(ui, &self.inputs, n).into_any_element(),
-            ScreenVm::Tickets(t) => tickets::tickets(ui, t).into_any_element(),
+            ScreenVm::Tickets(t) => tickets::tickets(ui, &self.inputs, t).into_any_element(),
             ScreenVm::Ticket {
                 head,
                 tab,

@@ -5,6 +5,7 @@
 
 use super::common::{Group, Phase, Route, ThemeChoice, TicketTab};
 use super::ids::*;
+use super::screens::{TicketFilter, TicketSort};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Baseline {
@@ -220,6 +221,8 @@ pub enum Field {
     Checklist(TicketKey),
     /// The filter box of the Next list.
     NextFilter,
+    /// The search box of the ticket table.
+    TicketFilter,
     /// The filter box of On uat.
     UatFilter,
 }
@@ -241,6 +244,10 @@ pub enum Intent {
     ToggleUatRepo(RepoName),
     /// Show only tickets whose deploy is not healthy.
     ToggleUatProblems,
+    ToggleTicketFilter(TicketFilter),
+    ClearTicketFilters,
+    /// Sort the ticket table by a column; again to flip the direction, a third time to clear.
+    SortTickets(TicketSort),
     ClearUatFilters,
     OpenPalette,
     ClosePalette,

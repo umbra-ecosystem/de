@@ -107,7 +107,7 @@ pub fn panel_header(ui: &Ui, title: String) -> Div {
 
 pub fn nav(ui: &Ui, vm: &AppVm) -> Div {
     let pal = &ui.pal;
-    let title = vm.nav.first().map_or("Tickets", |s| s.title.as_str());
+    let title = "Navigate";
     div()
         .flex()
         .flex_col()
@@ -122,12 +122,12 @@ pub fn nav(ui: &Ui, vm: &AppVm) -> Div {
                 .flex_col()
                 .gap_4()
                 .p_2()
-                .children(vm.nav.iter().enumerate().map(|(n, s)| {
+                .children(vm.nav.iter().map(|s| {
                     div()
                         .flex()
                         .flex_col()
                         .gap_0p5()
-                        .when(n > 0, |d| {
+                        .when(!s.title.is_empty(), |d| {
                             d.child(
                                 div()
                                     .px_2()

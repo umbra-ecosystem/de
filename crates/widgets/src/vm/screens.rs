@@ -150,6 +150,83 @@ pub struct TicketRowVm {
     pub local: Option<Badge>,
     pub repos: Vec<RepoName>,
     pub flags: Vec<Badge>,
+    /// Priority is shown only when it is an exception (High, Highest).
+    pub urgent: bool,
+    pub new_comments: bool,
+}
+
+/// One thing the ticket table can be narrowed by.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TicketFilter {
+    Repo(RepoName),
+    Jira(String),
+    Priority(String),
+    Hotfix,
+    NewComments,
+}
+
+/// What is narrowing the table. Rows must pass every kind that has something chosen (any one of its choices).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TicketFilters {
+    pub repos: Vec<RepoName>,
+    pub jira: Vec<String>,
+    pub priority: Vec<String>,
+    pub hotfix: bool,
+    pub new_comments: bool,
+}
+
+impl TicketFilters {
+    pub fn is_on(&self, f: &TicketFilter) -> bool {
+        match f {
+            TicketFilter::Repo(r) => self.repos.contains(r),
+            TicketFilter::Jira(j) => self.jira.contains(j),
+            TicketFilter::Priority(p) => self.priority.contains(p),
+            TicketFilter::Hotfix => self.hotfix,
+            TicketFilter::NewComments => self.new_comments,
+        }
+    }
+
+    pub fn toggle(&mut self, f: TicketFilter) {
+        fn flip<T: PartialEq>(v: &mut Vec<T>, x: T) {
+            match v.iter().position(|y| *y == x) {
+                Some(i) => {
+                    v.remove(i);
+                }
+                None => v.push(x),
+            }
+        }
+        match f {
+            TicketFilter::Repo(r) => flip(&mut self.repos, r),
+            TicketFilter::Jira(j) => flip(&mut self.jira, j),
+            TicketFilter::Priority(p) => flip(&mut self.priority, p),
+            TicketFilter::Hotfix => self.hotfix = !self.hotfix,
+            TicketFilter::NewComments => self.new_comments = !self.new_comments,
+        }
+    }
+
+    pub fn keeps(&self, r: &TicketRowVm) -> bool {
+        (self.repos.is_empty() || r.repos.iter().any(|x| self.repos.contains(x)))
+            && (self.jira.is_empty() || self.jira.contains(&r.jira.text))
+            && (self.priority.is_empty() || self.priority.contains(&r.priority.text))
+            && (!self.hotfix || r.hotfix)
+            && (!self.new_comments || r.new_comments)
+    }
+}
+
+/// Which column the table is sorted by, and which way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TicketSort {
+    Key,
+    Title,
+    Jira,
+}
+
+/// The choices the filter menu offers (from the unfiltered list, so a chosen one never vanishes).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TicketFilterOptions {
+    pub repos: Vec<RepoName>,
+    pub jira: Vec<String>,
+    pub priority: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -161,8 +238,15 @@ pub struct TicketSection {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TicketListVm {
     pub group: Group,
-    pub tabs: Vec<(Group, usize)>,
     pub sections: Vec<TicketSection>,
+    /// Filled in by the session, which owns the search text, filters and sort.
+    pub options: TicketFilterOptions,
+    pub filters: TicketFilters,
+    pub sort: Option<(TicketSort, bool)>,
+    /// Rows in this group before filtering, to tell "empty" from "nothing matches".
+    pub total: usize,
+    /// Another group that has tickets, to point at when this one is empty.
+    pub elsewhere: Option<(Group, usize)>,
 }
 
 /* ------------------------------ ticket ------------------------------ */
