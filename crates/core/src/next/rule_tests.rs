@@ -851,19 +851,28 @@ fn approval_skips_approved_own_closed_and_untested_prs() {
 }
 
 #[test]
-fn testing_complete_needs_alpha_and_a_uat_or_done_status() {
+fn testing_complete_needs_alpha_and_a_signed_off_status() {
     let st = StatusNames::default();
-    assert!(is_testing_complete(&st, Some("UAT"), true));
+    // The uat status is still testing, not sign-off.
+    assert!(!is_testing_complete(&st, Some("UAT"), true));
     assert!(is_testing_complete(&st, Some("done"), true));
     assert!(!is_testing_complete(&st, Some("UAT"), false));
     assert!(!is_testing_complete(&st, Some("Alpha Testing"), true));
     assert!(!is_testing_complete(&st, None, true));
     let custom = StatusNames {
         done: vec!["Closed".into()],
+        signed_off: vec!["Closed".into()],
         ..StatusNames::default()
     };
     assert!(is_testing_complete(&custom, Some("Closed"), true));
     assert!(!is_testing_complete(&custom, Some("Done"), true));
+    let uat_passed = StatusNames::from(&crate::config::JiraStatuses {
+        signed_off: vec!["UAT Passed".into()],
+        ..Default::default()
+    });
+    assert!(is_testing_complete(&uat_passed, Some("uat passed"), true));
+    assert!(!is_testing_complete(&uat_passed, Some("UAT"), true));
+    assert!(!is_testing_complete(&uat_passed, Some("Done"), true));
 }
 
 // -------------------------------------------------------- adapters, purity

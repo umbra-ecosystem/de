@@ -22,6 +22,8 @@ pub struct StatusNames {
     pub uat: String,
     pub returned: String,
     pub done: Vec<String>,
+    /// Statuses meaning UAT is signed off (defaults to `done`, never `uat`).
+    pub signed_off: Vec<String>,
 }
 
 impl Default for StatusNames {
@@ -38,6 +40,7 @@ impl From<&JiraStatuses> for StatusNames {
             uat: s.uat_name().into(),
             returned: s.returned_name().into(),
             done: s.done_names().into_iter().map(String::from).collect(),
+            signed_off: s.signed_off_names().into_iter().map(String::from).collect(),
         }
     }
 }
@@ -329,17 +332,20 @@ impl TicketSnapshot {
     }
 }
 
-/// Testing is complete once the ticket was integrated (alpha was reached) and Jira shows
-/// the `uat` status or one of the `done` statuses: UAT signed off. Only then are the PRs
-/// offered for approval.
+/// Testing is complete once the ticket was integrated (alpha was reached) and Jira shows a
+/// signed-off status (`[jira.statuses] signed_off`, by default the `done` statuses). The
+/// `uat` status itself means testing is still going on. Only then are the PRs offered for
+/// approval.
 pub fn is_testing_complete(
     statuses: &StatusNames,
     jira_status: Option<&str>,
     alpha_reached: bool,
 ) -> bool {
     alpha_reached
-        && (status_is(jira_status, &statuses.uat)
-            || statuses.done.iter().any(|d| status_is(jira_status, d)))
+        && statuses
+            .signed_off
+            .iter()
+            .any(|d| status_is(jira_status, d))
 }
 
 /// Jira priority names ranked so 0 is the most urgent; unknown or missing rank last.
