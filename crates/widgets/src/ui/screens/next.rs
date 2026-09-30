@@ -346,7 +346,13 @@ pub fn next(ui: &Ui, inputs: &Inputs, vm: &NextVm) -> AnyElement {
             )
     });
     let body = if rest.is_empty() && pinned.is_none() {
-        empty_state(pal, "Nothing to do.").into_any_element()
+        div()
+            .flex()
+            .flex_1()
+            .items_center()
+            .justify_center()
+            .child(empty_panel(ui, &vm.empty))
+            .into_any_element()
     } else if rest.is_empty() {
         div().flex_1().into_any_element()
     } else {

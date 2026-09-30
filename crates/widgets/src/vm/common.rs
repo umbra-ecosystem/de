@@ -29,6 +29,36 @@ impl Badge {
     }
 }
 
+/// What an empty screen says: what this place is for, and the next useful thing to do from here.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EmptyVm {
+    pub title: String,
+    pub hint: String,
+    pub actions: Vec<Btn>,
+}
+
+impl EmptyVm {
+    pub fn new(title: impl Into<String>, hint: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            hint: hint.into(),
+            actions: Vec::new(),
+        }
+    }
+
+    pub fn action(mut self, a: Btn) -> Self {
+        self.actions.push(a);
+        self
+    }
+
+    pub fn action_if(self, a: Option<Btn>) -> Self {
+        match a {
+            Some(a) => self.action(a),
+            None => self,
+        }
+    }
+}
+
 /// A button the view model offers. The view renders it and emits `intent` when clicked.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Btn {

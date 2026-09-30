@@ -132,6 +132,7 @@ pub struct NextVm {
     pub cards: Vec<SuggestionCard>,
     pub hidden: usize,
     pub show_all: bool,
+    pub empty: EmptyVm,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -242,7 +243,8 @@ pub struct TicketListVm {
     /// The local state column is shown only where it is not implied (the list of all tickets).
     pub show_local: bool,
     /// What the empty list says when there is nothing at all (not when filters hide everything).
-    pub empty: String,
+    /// Shown when there are no rows (the session swaps in a "nothing matches" one when filters hide them all).
+    pub empty: EmptyVm,
     pub sections: Vec<TicketSection>,
     /// Filled in by the session, which owns the search text, filters and sort.
     pub options: TicketFilterOptions,
@@ -250,8 +252,6 @@ pub struct TicketListVm {
     pub sort: Option<(TicketSort, bool)>,
     /// Rows in this group before filtering, to tell "empty" from "nothing matches".
     pub total: usize,
-    /// Another group that has tickets, to point at when this one is empty.
-    pub elsewhere: Option<(Group, usize)>,
 }
 
 /* ------------------------------ ticket ------------------------------ */

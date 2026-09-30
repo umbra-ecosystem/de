@@ -5,7 +5,7 @@ use std::hash::{Hash, Hasher};
 use gpui_kit::component::avatar::Avatar;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
-use gpui_kit::component::empty::{Empty, EmptyHeader, EmptyTitle};
+use gpui_kit::component::empty::{Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle};
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::tag::Tag;
 use gpui_kit::component::{Disableable, Selectable, Sizable};
@@ -179,8 +179,28 @@ pub fn heading(title: impl Into<SharedString>) -> Div {
     div().text_lg().child(title.into())
 }
 
-pub fn empty_state(_pal: &Pal, text: impl Into<SharedString>) -> Empty {
-    Empty::new().header(EmptyHeader::new().title(EmptyTitle::new().child(text.into())))
+/// An empty screen that helps: a title, what the place is for, and the next useful thing to do.
+pub fn empty_panel(ui: &Ui, e: &EmptyVm) -> Empty {
+    let pal = &ui.pal;
+    let mut empty = Empty::new().header(
+        EmptyHeader::new()
+            .title(EmptyTitle::new().child(e.title.clone()))
+            .description(EmptyDescription::new().child(e.hint.clone())),
+    );
+    if !e.actions.is_empty() {
+        empty = empty.content(
+            EmptyContent::new().child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .justify_center()
+                    .gap_2()
+                    .text_color(pal.fg)
+                    .children(e.actions.iter().map(|a| button(ui, a))),
+            ),
+        );
+    }
+    empty
 }
 
 pub fn warn_box(pal: &Pal, tone: Tone, children: impl IntoIterator<Item = AnyElement>) -> Div {

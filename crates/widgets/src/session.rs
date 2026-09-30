@@ -181,7 +181,10 @@ impl Session {
             Intent::SetTheme(t) => self.theme = t,
             Intent::ToggleShowAll => self.show_all = !self.show_all,
             Intent::ToggleTicketFilter(f) => self.ticket_filters.toggle(f),
-            Intent::ClearTicketFilters => self.ticket_filters = TicketFilters::default(),
+            Intent::ClearTicketFilters => {
+                self.ticket_filters = TicketFilters::default();
+                self.texts.remove(&Field::TicketFilter);
+            }
             Intent::SortTickets(col) => {
                 self.ticket_sort = match self.ticket_sort {
                     Some((c, true)) if c == col => Some((col, false)),
@@ -695,6 +698,14 @@ impl Session {
             }
         }
         v.sections.retain(|s| !s.rows.is_empty());
+        // Rows exist but the search or filters hide them all: say so, and offer the way back.
+        if v.sections.is_empty() && v.total > 0 {
+            v.empty = EmptyVm::new(
+                "No ticket matches",
+                "Nothing here fits the search and filters you have set.",
+            )
+            .action(Btn::new("Clear search and filters", Intent::ClearTicketFilters).primary());
+        }
         v.options = options;
         v.filters = filters;
         v.sort = sort;
@@ -713,6 +724,19 @@ impl Session {
                                 .as_ref()
                                 .is_some_and(|k| k.to_lowercase().contains(&q))
                     });
+                }
+                if n.cards.is_empty() && !q.is_empty() {
+                    n.empty = EmptyVm::new(
+                        "No suggestion matches",
+                        format!("Nothing matches \u{201c}{q}\u{201d}."),
+                    )
+                    .action(
+                        Btn::new(
+                            "Clear search",
+                            Intent::SetText(Field::NextFilter, String::new()),
+                        )
+                        .primary(),
+                    );
                 }
                 ScreenVm::Next(n)
             }
@@ -1610,6 +1634,39 @@ mod tests {
             panic!()
         };
         assert!(s.store().preview(&r).is_err());
+    }
+
+    #[test]
+    fn empty_lists_say_what_belongs_there_and_what_to_do() {
+        let mut s = Session::demo();
+        // a list that is empty in the demo
+        s.handle(Intent::go_tickets(Group::Done));
+        let ScreenVm::Tickets(v) = s.view().screen else {
+            panic!("not a ticket list")
+        };
+        assert!(v.sections.is_empty());
+        assert!(!v.empty.hint.is_empty());
+        assert!(
+            v.empty
+                .actions
+                .iter()
+                .any(|a| matches!(a.intent, Intent::Go(_))),
+            "it points at where the tickets are"
+        );
+        // every group has a real explanation, never a bare "Nothing"
+        for g in Group::LIST {
+            let e = s.store().tickets(g).empty;
+            assert!(e.hint.len() > 20, "{g:?}: {e:?}");
+        }
+        // rows exist but the search hides them: the way back is offered
+        s.handle(Intent::go_tickets(Group::All));
+        s.handle(Intent::SetText(Field::TicketFilter, "zzz-no-such".into()));
+        let ScreenVm::Tickets(v) = s.view().screen else {
+            panic!()
+        };
+        assert_eq!(v.empty.title, "No ticket matches");
+        s.handle(v.empty.actions[0].intent.clone());
+        assert_eq!(s.text(&Field::TicketFilter), "");
     }
 
     #[test]

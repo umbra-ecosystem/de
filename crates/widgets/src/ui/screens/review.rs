@@ -549,7 +549,6 @@ fn notice(ui: &Ui, b: &BannerVm) -> AnyElement {
 
 /// The whole tab. It fills its parent and scrolls inside its panes, not as a page.
 pub fn review(ui: &Ui, _cx: &App, inputs: &Inputs, r: &ReviewVm) -> Div {
-    let pal = &ui.pal;
     let notices = div()
         .flex()
         .flex_col()
@@ -570,7 +569,14 @@ pub fn review(ui: &Ui, _cx: &App, inputs: &Inputs, r: &ReviewVm) -> Div {
             div()
                 .px_4()
                 .py_4()
-                .child(empty_state(pal, "No pull requests for this ticket.")),
+                .child(empty_panel(
+                    ui,
+                    &EmptyVm::new(
+                        "No pull requests",
+                        "Open a pull request from one of this ticket's branches; it shows up here after the next sync.",
+                    )
+                    .action(Btn::new("Sync now", Intent::Do(Command::Sync))),
+                )),
         );
     }
     div()

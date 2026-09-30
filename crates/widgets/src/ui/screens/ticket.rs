@@ -199,9 +199,19 @@ pub fn audit_rows(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
 
 /// The ticket's audit log. The tab already says what it is, so there is no title.
 fn timeline(ui: &Ui, rows: &[AuditRow]) -> Div {
-    let pal = &ui.pal;
     div().child(if rows.is_empty() {
-        empty_state(pal, "No activity yet for this ticket.").into_any_element()
+        div()
+            .py_8()
+            .flex()
+            .justify_center()
+            .child(empty_panel(
+                ui,
+                &EmptyVm::new(
+                    "No activity yet",
+                    "Changes to this ticket's state and anything sent to Jira or GitHub for it are logged here.",
+                ),
+            ))
+            .into_any_element()
     } else {
         audit_table(ui, rows, false).into_any_element()
     })

@@ -128,7 +128,16 @@ fn apply_env(session: &mut Session) {
     };
     let mut parts = route.split(':');
     let route = match parts.next() {
-        Some("tickets") => Route::Tickets(Group::All),
+        Some("tickets") => Route::Tickets(match parts.next() {
+            Some("pool") => Group::Pool,
+            Some("mine") => Group::Mine,
+            Some("active") => Group::Active,
+            Some("parked") => Group::Parked,
+            Some("awaiting") => Group::Awaiting,
+            Some("returned") => Group::Returned,
+            Some("done") => Group::Done,
+            _ => Group::All,
+        }),
         Some("home") => Route::Next,
         Some("uat") => Route::OnUat,
         Some("workspace") => Route::Workspace,

@@ -108,6 +108,83 @@ impl Sim {
         v
     }
 
+    /// A button to another ticket list, when it has something in it.
+    fn go_if_any(&self, g: Group) -> Option<Btn> {
+        let n = self.tickets.iter().filter(|t| Self::in_group(t, g)).count();
+        (n > 0).then(|| Btn::new(format!("{} ({n})", g.label()), Intent::go_tickets(g)))
+    }
+
+    /// What each ticket list says when it is empty: what belongs there, and where to go instead.
+    fn group_empty(&self, group: Group) -> EmptyVm {
+        let sync = || Btn::new("Sync now", cmd(Command::Sync));
+        match group {
+            Group::Pool => EmptyVm::new(
+                "Nothing to claim",
+                "Tickets in Jira's Review column that nobody has claimed appear here. Sync to look for new ones.",
+            )
+            .action(sync()),
+            Group::Mine => EmptyVm::new(
+                "You are not reviewing anything",
+                "Claim a ticket from the review pool to start reviewing it.",
+            )
+            .action_if(self.go_if_any(Group::Pool).map(|b| b.primary())),
+            Group::Active => EmptyVm::new(
+                "No active ticket",
+                "Finish a review, then activate the ticket to test it locally. One ticket is active at a time.",
+            )
+            .action_if(self.go_if_any(Group::Mine)),
+            Group::Parked => EmptyVm::new(
+                "Nothing parked",
+                "Park the active ticket to set it aside. Its notes and checklist are kept until you pick it up again.",
+            )
+            .action_if(self.go_if_any(Group::Active)),
+            Group::Awaiting => EmptyVm::new(
+                "Nothing waiting on alpha",
+                "Tickets you have pushed to uat and announced wait here while others test them.",
+            )
+            .action_if(self.go_if_any(Group::Active)),
+            Group::Returned => EmptyVm::new(
+                "Nothing has come back",
+                "Tickets sent back from alpha or UAT, and ones that mention you after a return, show up here.",
+            ),
+            Group::Done => EmptyVm::new(
+                "Nothing signed off yet",
+                "Tickets Jira marks Done after alpha and UAT end up here.",
+            )
+            .action_if(self.go_if_any(Group::Awaiting)),
+            Group::All => EmptyVm::new("No tickets", "Sync to load your tickets from Jira.")
+                .action(sync().primary()),
+        }
+    }
+
+    fn uat_empty(&self) -> EmptyVm {
+        EmptyVm::new(
+            "Nothing of yours is on uat",
+            "Push a ticket from its Ship tab and it appears here with its deploy state.",
+        )
+        .action_if(self.go_if_any(Group::Active))
+        .action_if(self.go_if_any(Group::Mine))
+    }
+
+    fn home_empty(&self, hidden: usize) -> EmptyVm {
+        if hidden > 0 {
+            return EmptyVm::new(
+                "All caught up",
+                format!(
+                    "{hidden} dismissed or snoozed suggestion{} hidden.",
+                    if hidden == 1 { " is" } else { "s are" }
+                ),
+            )
+            .action(Btn::new("Show them", Intent::ToggleShowAll));
+        }
+        EmptyVm::new(
+            "All caught up",
+            "New suggestions appear after a sync, or when a ticket needs you.",
+        )
+        .action(Btn::new("Sync now", cmd(Command::Sync)))
+        .action_if(self.go_if_any(Group::Pool))
+    }
+
     fn ticket_row(&self, t: &Ticket) -> TicketRowVm {
         let un = Self::unseen_count(t);
         let mut flags = Vec::new();
@@ -961,6 +1038,7 @@ impl Store for Sim {
                 .collect(),
             hidden,
             show_all,
+            empty: self.home_empty(hidden),
         }
     }
 
@@ -999,32 +1077,14 @@ impl Store for Sim {
             }]
         };
         let total = sections.iter().map(|s| s.rows.len()).sum();
-        let elsewhere = Group::NAV
-            .iter()
-            .filter(|g| **g != group)
-            .map(|g| {
-                (
-                    *g,
-                    self.tickets
-                        .iter()
-                        .filter(|t| Self::in_group(t, *g))
-                        .count(),
-                )
-            })
-            .find(|(_, n)| *n > 0);
         TicketListVm {
             show_local: group == Group::All,
-            empty: if group == Group::All {
-                "No tickets.".to_string()
-            } else {
-                format!("Nothing in {}.", group.label().to_lowercase())
-            },
+            empty: self.group_empty(group),
             sections,
             options: TicketFilterOptions::default(),
             filters: TicketFilters::default(),
             sort: None,
             total,
-            elsewhere,
         }
     }
 
@@ -1109,7 +1169,7 @@ impl Store for Sim {
         OnUatVm {
             table: TicketListVm {
                 show_local: false,
-                empty: "Nothing of yours is on uat.".to_string(),
+                empty: self.uat_empty(),
                 sections: if rows.is_empty() {
                     Vec::new()
                 } else {
@@ -1122,7 +1182,6 @@ impl Store for Sim {
                 filters: TicketFilters::default(),
                 sort: None,
                 total,
-                elsewhere: None,
             },
             overlaps,
         }

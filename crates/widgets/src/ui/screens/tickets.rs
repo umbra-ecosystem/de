@@ -290,26 +290,12 @@ pub fn tickets(ui: &Ui, inputs: &Inputs, vm: &TicketListVm) -> AnyElement {
             Some(Intent::ClearTicketFilters),
         ));
     let body = if items.is_empty() {
-        let (text, link) = if vm.total > 0 {
-            ("No ticket here matches.".to_string(), None)
-        } else {
-            (
-                vm.empty.clone(),
-                vm.elsewhere.map(|(g, n)| {
-                    Btn::new(
-                        format!("{n} in {}", g.label().to_lowercase()),
-                        Intent::go_tickets(g),
-                    )
-                }),
-            )
-        };
         div()
             .flex()
-            .flex_col()
+            .flex_1()
             .items_center()
-            .gap_2()
-            .child(empty_state(pal, text))
-            .when_some(link, |d, a| d.child(button_ghost(ui, &a)))
+            .justify_center()
+            .child(empty_panel(ui, &vm.empty))
             .into_any_element()
     } else if vm.sections.iter().any(|s| s.heading.is_some()) {
         // A list with group headings (Returned) is short by nature, so it is a plain scrolling column: a heading

@@ -148,9 +148,19 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
 }
 
 pub fn audit(ui: &Ui, rows: &[AuditRow]) -> Div {
-    let pal = &ui.pal;
     div().child(if rows.is_empty() {
-        pad(empty_state(pal, "Nothing yet. Do something.")).into_any_element()
+        div()
+            .py_8()
+            .flex()
+            .justify_center()
+            .child(empty_panel(
+                ui,
+                &EmptyVm::new(
+                    "Nothing logged yet",
+                    "Every remote write and every change to a ticket's state is recorded here, with its outcome.",
+                ),
+            ))
+            .into_any_element()
     } else {
         audit_rows(ui, rows, true).into_any_element()
     })
