@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tasks now run through the shell (`sh -c '<command> "$@"'`): quoted arguments are preserved and `&&`, pipes and environment variables work in task commands. Configured, detected and workspace tasks all use the same path.
 - A failing task now makes `de` exit with the task's own exit code instead of printing `Error: Task ... failed` and exiting 1.
 
+### Added
+
+- `de git status`: a read-only per-project table of branch, dirty state (modified/staged/untracked) and ahead/behind.
+- `de stop` warns about projects with uncommitted or unpushed work and asks for confirmation; `--yes` skips it.
+- `de ticket claim|list|show|link|activate|park|deactivate|note|check`: track tickets locally and switch a workspace to a ticket.
+  - Repos with a branch containing the ticket key move to it; the others fall back to their base branch.
+  - Local changes are stashed and restored on deactivate.
+  - Per-repo `[branches]`, `[overlay.composer]` and `[activate]` sections in `de.toml` configure the fallback branch, the Composer path/symlink test overlay and post-activation tasks.
+- Local SQLite store (`state.db`, `cache.db`) for tickets, notes, checklists, time and an append-only audit log.
+
 ### Removed
 
 - Shims: `de shim *` and `de task check`.

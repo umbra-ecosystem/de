@@ -12,7 +12,7 @@ Dependency versions live in the root `[workspace.dependencies]`; crates use `dep
 ## Build & test
 
 - Toolchain is pinned to **1.92.0** by `rust-toolchain.toml`; use `cargo +1.92.0` or let the toolchain file select it.
-- `cargo build` — builds the workspace. `cargo test --workspace` — runs the only tests, which are inline `#[cfg(test)]` unit tests in `crates/core/src/workspace/dependency.rs` and `crates/core/src/project/task_detector.rs`. There is no test harness or integration-test suite.
+- `cargo build` — builds the workspace. `cargo test --workspace` — runs the inline `#[cfg(test)]` tests across both crates (several hundred; most use real temporary git repos and SQLite files, so they need the `git` binary and take ~20s). There is no separate integration-test suite.
 - `cargo clippy --workspace --all-targets` is clean; keep it that way.
 - There is **no CI test/lint gate**; `.github/workflows/release.yml` only runs cargo-dist on version tags/PRs.
 
@@ -28,7 +28,16 @@ Configured once in the root `[workspace.lints]` and inherited by each crate via 
 
 - Entrypoint: `crates/cli/src/main.rs` parses `cli.rs` `Cli`/`Commands` and dispatches to `crates/cli/src/commands/*` (one file per subcommand).
 - Subcommand groups: `commands/{task,workspace}` are directories with a `mod.rs`; top-level commands are single files.
-- `de-core` modules: `workspace` (workspace config, active-workspace state, dependency-ordered `ordered_projects`), `project` (project config, `Project::compose`, task detection), `config`, `types`, `utils::get_project_dirs`.
+- `de-core` modules:
+  - `workspace` (workspace config, active-workspace state, dependency-ordered `ordered_projects`), `project` (manifest incl. `[branches]`/`[overlay.composer]`/`[activate]`, `Project::compose`, task resolution/detection), `config`, `types`, `utils::get_project_dirs`.
+  - `store` — two SQLite databases (`state.db` precious local data, `cache.db` disposable remote mirror), WAL, append-only migrations (state is at version 3; add an upgrade test with every migration). Free functions over `&Store`; time is always passed in (`now: i64`), never read inside.
+  - `domain` — `TicketKey`, `LocalStatus` (+ transition table), `TicketKind`, `BaselineChoice`, link/audit enums.
+  - `git` — reads via `git2` (`GitRepo`), mutations and network via the `git` CLI (`GitRunner`, so the user's SSH/credential/hooks config applies). Never force, never `reset --hard`.
+  - `overlay` — the Composer test overlay (path/symlink repository, constraint `*`): apply, byte-exact revert from persisted backups, and the push guard `check_range_for_overlay`. External commands go through the `CommandRunner` trait so tests can fake them.
+  - `activation` — `plan_activation` (pure), `activate`, `deactivate`/`park`. One active ticket at a time (enforced in SQL).
+  - `testsupport` (test-only) — fixture of real temp git repos with bare origins and a real `state.db`; tests here use real git and SQLite, not mocks.
+- `crates/cli/src/commands/{ticket,git}.rs` are thin headless commands over those modules (`de ticket ...`, `de git status`); keep rendering in pure functions separate from data gathering.
+- The product direction and milestone status live in `GOAL.md`. Integrations (`acli`, `bkt`) and the GUI are not built yet.
 - `crates/cli/src/main.rs` re-exports the core modules at its crate root, so CLI code writes `crate::project::…` for `de_core::project::…`.
 - `PROJECT_NAME` is the literal `"de"` (not `CARGO_PKG_NAME`): it names the config dir and updater receipt, so it must not follow the crate name.
 - Compose calls go through `Project::compose(args)` (`docker compose -f <file> …`); `de compose -- <args>` is the passthrough for everything that isn't `start`/`stop`.
