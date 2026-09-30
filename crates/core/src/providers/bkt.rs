@@ -819,14 +819,15 @@ pub struct BktHostWriter<R: BktRunner = SystemRunner> {
 }
 
 impl BktHostWriter<SystemRunner> {
-    /// Does not spawn anything or touch the network.
-    pub fn new(_config: &Config) -> ProviderResult<Self> {
+    /// Does not spawn anything or touch the network. `pub(crate)`: code outside `de-core`
+    /// cannot build a writer at all.
+    pub(crate) fn new(_config: &Config) -> ProviderResult<Self> {
         Ok(Self::with_runner(SystemRunner::new()))
     }
 }
 
 impl<R: BktRunner> BktHostWriter<R> {
-    pub fn with_runner(runner: R) -> Self {
+    pub(crate) fn with_runner(runner: R) -> Self {
         Self {
             client: Client::new(runner),
         }

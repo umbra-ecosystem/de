@@ -51,7 +51,7 @@ pub fn build_ticket_provider(config: &Config) -> ProviderResult<Box<dyn TicketPr
 }
 
 /// The Jira writer, for the write gateway only. **Plug-in point for the `acli` adapter (write).**
-pub fn build_ticket_writer(config: &Config) -> ProviderResult<Box<dyn TicketWriter>> {
+pub(crate) fn build_ticket_writer(config: &Config) -> ProviderResult<Box<dyn TicketWriter>> {
     Ok(Box::new(super::acli::AcliJiraWriter::new(config)?))
 }
 
@@ -61,7 +61,7 @@ pub fn build_code_host(config: &Config) -> ProviderResult<Box<dyn CodeHost>> {
 }
 
 /// The Bitbucket writer, for the write gateway only. **Plug-in point for the `bkt` adapter (write).**
-pub fn build_code_host_writer(config: &Config) -> ProviderResult<Box<dyn CodeHostWriter>> {
+pub(crate) fn build_code_host_writer(config: &Config) -> ProviderResult<Box<dyn CodeHostWriter>> {
     Ok(Box::new(super::bkt::BktHostWriter::new(config)?))
 }
 

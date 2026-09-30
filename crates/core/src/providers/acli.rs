@@ -407,13 +407,14 @@ pub struct AcliJiraWriter<R = ProcessRunner> {
 }
 
 impl AcliJiraWriter<ProcessRunner> {
-    pub fn new(config: &Config) -> ProviderResult<Self> {
+    /// `pub(crate)`: code outside `de-core` (the CLI, a GUI) cannot build a writer at all.
+    pub(crate) fn new(config: &Config) -> ProviderResult<Self> {
         Ok(Self::with_runner(ProcessRunner::new(), site_of(config)))
     }
 }
 
 impl<R: CommandRunner + Send + Sync> AcliJiraWriter<R> {
-    pub fn with_runner(runner: R, site: Option<String>) -> Self {
+    pub(crate) fn with_runner(runner: R, site: Option<String>) -> Self {
         Self {
             inner: Acli { runner, site },
         }
