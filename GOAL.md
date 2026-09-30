@@ -191,9 +191,9 @@ Cargo workspace (already in place):
 Foundation first. Each milestone is usable and tested headlessly before the next starts.
 
 - **M0: Done.** Workspace split, command surface slimmed, task proxy (shell execution, exit codes propagate), clippy clean.
-- **M1: Domain and store.** Ticket/repo/branch model, SQLite with migrations, local state (claims, ordering, notes, checklist, time), audit log. Import current workspace config.
-- **M2: Git layer.** Structured status, key matching with manual override, safe in-place switch with stash/restore, diff-from-objects, temporary worktrees, restore the uncommitted/unpushed guard on `stop`.
-- **M3: Active ticket and local test.** Activate/park/restore, overlay engine (composer pointing at the ticket branch, rebuild tasks) with guaranteed revert and push guard.
+- **M1: Done** (except importing the current workspace config, deferred). Domain and store. Ticket/repo/branch model, SQLite with migrations, local state (claims, ordering, notes, checklist, time), audit log. Import current workspace config.
+- **M2: Done.** Git layer. Structured status, key matching with manual override, safe in-place switch with stash/restore, diff-from-objects, temporary worktrees, restore the uncommitted/unpushed guard on `stop`.
+- **M3: Done** (pending independent review findings). Active ticket and local test. Activate/park/restore, overlay engine (composer pointing at the ticket branch, rebuild tasks) with guaranteed revert and push guard.
 - **M4: Providers and sync.** Provider traits; Jira via `acli` (Review column, priority, @mentions, statuses), Bitbucket via `bkt` (PRs, pipelines by commit). Verify JSON, mention data and inline comments first; pin CLI versions. Cache, refresh, offline.
 - **M5: Write gateway and integration.** The `uat` merge-and-push flow (conflict reporting, recorded merge commits), deploy-comment drafts, Alpha Testing transition, pipeline re-run, all confirmed and audited.
 - **M6: Next-action engine.** Suggestion/Action model, the rules above, priority, dismiss/snooze persistence. Exposed headlessly as `de next` so rules can be tuned on real data before any UI.
@@ -237,7 +237,8 @@ Technical:
 
 ## Current state
 
-- Workspace of two crates (`de-core`, `de`); `start`, `stop`, `compose`, `run`, `exec`, `task`, `workspace`, `config` work.
-- Removed: shims, setup/snapshot, doctor/status, the old git commands, service tasks.
-- Tasks run through the shell with exit-code passthrough.
-- No domain store, git layer, providers, engine or GUI yet.
+- Workspace of two crates (`de-core`, `de`). Built and tested (real temporary git repos and SQLite, several hundred tests): M1 store and domain model, M2 git layer with `de git status` and the `stop` guard, M3 activation and the Composer overlay with `de ticket ...`.
+- A ticket can be claimed, linked to repos (auto-discovered by key, with manual override), activated (ticket branch or baseline per repo, stash and restore, overlay, rebuild tasks) and parked, entirely headless.
+- Not built: providers and sync (Jira via `acli`, Bitbucket via `bkt`), write gateway and the `uat` merge/push flow, next-action engine, menubar app, in-app review. Hotfix kind is still a manual `--hotfix` flag until PR destinations are synced.
+- Known gaps recorded by the M3 author: manifests/tasks are read before switching branches; composer/rebuild output is captured rather than streamed; the overlay was only tested against stub composers, never real composer; the overlay matches the workspace project id, not `[project].name`.
+- Removed earlier: shims, setup/snapshot, doctor/status, the old git commands, service tasks.
