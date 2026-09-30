@@ -114,7 +114,8 @@ pub fn ticket(
                     .flex()
                     .flex_col()
                     .when(!h.banners.is_empty(), |d| {
-                        d.child(div().px_4().py_3().child(notices))
+                        // No bottom padding: the first band below has its own top padding.
+                        d.child(div().px_4().pt_3().child(notices))
                     })
                     .child(match other {
                         TicketBody::Overview(o) => overview::overview(ui, cx, inputs, o),
