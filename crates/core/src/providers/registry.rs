@@ -46,13 +46,13 @@ fn adapter_unavailable(tool: &str) -> ProviderError {
 }
 
 /// The Jira reader. **Plug-in point for the `acli` adapter (read).**
-pub fn build_ticket_provider(_config: &Config) -> ProviderResult<Box<dyn TicketProvider>> {
-    Err(adapter_unavailable("acli"))
+pub fn build_ticket_provider(config: &Config) -> ProviderResult<Box<dyn TicketProvider>> {
+    Ok(Box::new(super::acli::AcliJira::new(config)?))
 }
 
 /// The Jira writer, for the write gateway only. **Plug-in point for the `acli` adapter (write).**
-pub fn build_ticket_writer(_config: &Config) -> ProviderResult<Box<dyn TicketWriter>> {
-    Err(adapter_unavailable("acli"))
+pub fn build_ticket_writer(config: &Config) -> ProviderResult<Box<dyn TicketWriter>> {
+    Ok(Box::new(super::acli::AcliJiraWriter::new(config)?))
 }
 
 /// The Bitbucket reader. **Plug-in point for the `bkt` adapter (read).**
@@ -74,15 +74,13 @@ mod tests {
     fn every_constructor_reports_an_unavailable_adapter_until_filled_in() {
         let config = Config::default();
         let providers = Providers::from_config(&config);
-        assert_eq!(
-            providers.jira.err().map(|e| e.kind()),
-            Some(ProviderErrorKind::NotInstalled)
-        );
+        // The Jira adapter is built without spawning anything.
+        assert!(providers.jira.is_ok());
+        assert!(build_ticket_writer(&config).is_ok());
         assert_eq!(
             providers.code_host.err().map(|e| e.kind()),
             Some(ProviderErrorKind::NotInstalled)
         );
-        assert!(build_ticket_writer(&config).is_err());
         assert!(build_code_host_writer(&config).is_err());
     }
 }
