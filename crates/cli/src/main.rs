@@ -65,6 +65,24 @@ fn main() -> eyre::Result<()> {
             }
             TicketCommands::Note { key, text } => commands::ticket::note(key, text),
             TicketCommands::Check { command } => commands::ticket::check(command),
+            TicketCommands::Integrate {
+                key,
+                dry_run,
+                workspace,
+            } => commands::ship::integrate(key, dry_run, workspace),
+            TicketCommands::Integration { key } => commands::ship::integration(key),
+            TicketCommands::Deploy { key, workspace } => commands::ship::deploy(key, workspace),
+            TicketCommands::DraftComment {
+                key,
+                partial,
+                note,
+                workspace,
+            } => commands::ship::draft_comment(key, partial, note, workspace),
+            TicketCommands::PostComment { key } => commands::ship::post_comment_cmd(key),
+            TicketCommands::Transition { key } => commands::ship::transition(key),
+            TicketCommands::CancelIntegration { key, workspace } => {
+                commands::ship::cancel(key, workspace)
+            }
         },
         Commands::Sync { only, force } => commands::sync::sync(only.map(Into::into), force),
         Commands::Providers { command } => match command {

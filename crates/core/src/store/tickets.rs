@@ -132,7 +132,32 @@ fn query_list(
 ///
 /// The database independently rejects a second `Active` ticket; the check here only gives
 /// a readable error.
+///
+/// `Integrated` is refused here: it means "merged and pushed to `uat`" and only the
+/// integration flow's finalize step may set it (see `mark_integrated`).
 pub fn set_status(
+    store: &Store,
+    key: &TicketKey,
+    to: LocalStatus,
+    now: i64,
+) -> eyre::Result<TicketTracking> {
+    if to == LocalStatus::Integrated {
+        bail!("{key} becomes 'integrated' only when it is merged and pushed to uat");
+    }
+    set_status_unguarded(store, key, to, now)
+}
+
+/// Sets `Integrated`. Crate-private on purpose: only `integration::finalize_integration`
+/// (through `activation::deactivate_for_integration`) calls it, after every push succeeded.
+pub(crate) fn mark_integrated(
+    store: &Store,
+    key: &TicketKey,
+    now: i64,
+) -> eyre::Result<TicketTracking> {
+    set_status_unguarded(store, key, LocalStatus::Integrated, now)
+}
+
+fn set_status_unguarded(
     store: &Store,
     key: &TicketKey,
     to: LocalStatus,

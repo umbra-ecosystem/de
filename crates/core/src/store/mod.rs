@@ -9,6 +9,7 @@
 //!   time and is rebuilt by the next sync.
 
 pub mod audit;
+pub mod drafts;
 pub mod jira_cache;
 pub mod jira_comments;
 pub mod links;
@@ -22,6 +23,7 @@ mod sql;
 pub mod sync_state;
 pub mod tickets;
 pub mod time;
+pub mod uat_details;
 pub mod uat_merges;
 
 #[cfg(test)]
@@ -216,6 +218,77 @@ mod tests {
         assert!(!dir.path().join("cache.db").exists());
         assert!(dir.path().join("state.db").exists());
         assert!(state.schema_version().unwrap() >= 1);
+    }
+
+    #[test]
+    fn the_drafts_and_merge_detail_migrations_upgrade_a_v4_database_keeping_its_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        {
+            let mut conn = Connection::open(&path).unwrap();
+            migrations::for_kind(Kind::State)
+                .to_version(&mut conn, 4)
+                .unwrap();
+            conn.execute(
+                "INSERT INTO tickets (key, status, manual_order, claimed_at, updated_at)
+                 VALUES ('PROJ-1', 'integrated', 0, 1, 1)",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO uat_merges (ticket_key, repo, branch, commit_sha, recorded_at)
+                 VALUES ('PROJ-1', 'web', 'uat', 'abc', 5)",
+                [],
+            )
+            .unwrap();
+        }
+
+        let store = Store::open_in(dir.path(), Kind::State).unwrap();
+        assert!(store.schema_version().unwrap() >= 6);
+        let key: crate::domain::TicketKey = "PROJ-1".parse().unwrap();
+
+        // The old merge is intact and readable without details.
+        let merges = uat_details::list_for_ticket(&store, &key).unwrap();
+        assert_eq!(merges.len(), 1);
+        assert_eq!(merges[0].merge.commit, "abc");
+        assert!(merges[0].details.is_none());
+
+        // The new tables work, and their CHECK lists accept exactly the enums' text forms.
+        for kind in drafts::DraftKind::ALL {
+            let d = drafts::create(&store, &key, *kind, "body", 1).unwrap();
+            assert_eq!(d.kind, *kind);
+        }
+        for status in drafts::DraftStatus::ALL {
+            store
+                .conn()
+                .execute(
+                    "INSERT INTO drafts (ticket_key, kind, body, status, created_at, posted_at)
+                     VALUES ('PROJ-1', 'transition', 'b', ?1, 1, CASE WHEN ?1 = 'posted' THEN 1 END)",
+                    [status.as_str()],
+                )
+                .unwrap();
+        }
+        assert!(
+            store
+                .conn()
+                .execute(
+                    "INSERT INTO drafts (ticket_key, kind, body, status, created_at)
+                     VALUES ('PROJ-1', 'bogus', 'b', 'draft', 1)",
+                    [],
+                )
+                .is_err()
+        );
+        // Posted needs a time, a draft must not have one.
+        assert!(
+            store
+                .conn()
+                .execute(
+                    "INSERT INTO drafts (ticket_key, kind, body, status, created_at)
+                     VALUES ('PROJ-1', 'transition', 'b', 'posted', 1)",
+                    [],
+                )
+                .is_err()
+        );
     }
 
     #[test]

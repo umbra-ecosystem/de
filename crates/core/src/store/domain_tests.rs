@@ -49,7 +49,7 @@ fn numbers(store: &Store) -> Vec<i64> {
 fn migrations_apply_on_a_fresh_database() {
     let s = state();
     let c = cache();
-    assert_eq!(s.schema_version().unwrap(), 4);
+    assert_eq!(s.schema_version().unwrap(), 6);
     assert_eq!(c.schema_version().unwrap(), 3);
 
     let tables = |store: &Store| -> Vec<String> {
@@ -113,7 +113,7 @@ fn upgrading_from_the_previous_schema_keeps_rows() {
     }
 
     let store = Store::open_in(dir.path(), Kind::State).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 4);
+    assert_eq!(store.schema_version().unwrap(), 6);
     let value: String = store
         .conn()
         .query_row("SELECT value FROM app_meta WHERE key = 'probe'", [], |r| {
@@ -157,7 +157,7 @@ fn upgrading_from_schema_2_keeps_tickets_and_adds_the_activation_tables() {
     }
 
     let store = Store::open_in(dir.path(), Kind::State).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 4);
+    assert_eq!(store.schema_version().unwrap(), 6);
 
     // Old rows survive untouched.
     let ticket = tickets::get(&store, &key("A-1")).unwrap().unwrap();
@@ -445,8 +445,30 @@ fn full_lifecycle_walk() {
         LocalStatus::Done,
         LocalStatus::Claimed, // came back to Review
     ] {
-        tickets::set_status(&store, &k, status, 1).unwrap();
+        if status == LocalStatus::Integrated {
+            // Only the integration flow may set it.
+            assert!(tickets::set_status(&store, &k, status, 1).is_err());
+            tickets::mark_integrated(&store, &k, 1).unwrap();
+        } else {
+            tickets::set_status(&store, &k, status, 1).unwrap();
+        }
     }
+}
+
+#[test]
+fn integrated_cannot_be_set_through_the_public_status_api() {
+    let store = state_with(&["A-1"]);
+    let k = key("A-1");
+    tickets::set_status(&store, &k, LocalStatus::Active, 1).unwrap();
+    let err = tickets::set_status(&store, &k, LocalStatus::Integrated, 2).unwrap_err();
+    assert!(format!("{err:#}").contains("pushed to uat"), "{err:#}");
+    assert_eq!(
+        tickets::get(&store, &k).unwrap().unwrap().status,
+        LocalStatus::Active
+    );
+    // The crate-private path still validates the transition.
+    tickets::set_status(&store, &k, LocalStatus::Parked, 3).unwrap();
+    assert!(tickets::mark_integrated(&store, &k, 4).is_err());
 }
 
 #[test]

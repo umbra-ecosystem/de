@@ -23,6 +23,7 @@ pub use engine::{
     ActivateOptions, ActivationReport, DeactivationReport, RepoActivation, RepoRestore,
     RestoreFailure, activate, deactivate, park, stash_label,
 };
+pub(crate) use engine::deactivate_for_integration;
 pub use plan::{
     ActivationPlan, Baselines, OverlayPlan, PlanError, PlanProblem, PlanRepo, RepoAction, RepoPlan,
     plan_activation,

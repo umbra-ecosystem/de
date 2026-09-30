@@ -165,6 +165,36 @@ CREATE TABLE uat_merges (
 CREATE INDEX uat_merges_by_repo ON uat_merges (repo, id);
 ";
 
+/// Drafts of external writes composed locally (deploy comments, transitions). Irreplaceable
+/// while unposted; a Posted row is what stops the same comment being posted twice.
+const STATE_DRAFTS: &str = "
+CREATE TABLE drafts (
+    id         INTEGER PRIMARY KEY,
+    ticket_key TEXT NOT NULL REFERENCES tickets (key) ON DELETE CASCADE,
+    kind       TEXT NOT NULL CHECK (kind IN ('deploy_comment','transition')),
+    body       TEXT NOT NULL,
+    status     TEXT NOT NULL CHECK (status IN ('draft','posted','discarded')),
+    created_at INTEGER NOT NULL,
+    posted_at  INTEGER,
+    remote_id  TEXT,
+    CHECK ((status = 'posted') = (posted_at IS NOT NULL))
+) STRICT;
+CREATE INDEX drafts_by_ticket ON drafts (ticket_key, id);
+";
+
+/// What the integration flow knew when it recorded a `uat_merges` row.
+const STATE_UAT_MERGE_DETAILS: &str = "
+CREATE TABLE uat_merge_details (
+    merge_id      INTEGER PRIMARY KEY REFERENCES uat_merges (id) ON DELETE CASCADE,
+    -- 'merge': pushed by the app. 'already_in_uat': the ticket was already contained in uat,
+    -- `commit_sha` is the uat tip that contains it and nothing was pushed.
+    kind          TEXT NOT NULL CHECK (kind IN ('merge','already_in_uat')),
+    ticket_branch TEXT NOT NULL,
+    ticket_tip    TEXT NOT NULL,
+    uat_before    TEXT NOT NULL
+) STRICT;
+";
+
 /// Mirror of Bitbucket PRs and pipelines and of Jira comments, plus per-source sync
 /// bookkeeping; all disposable.
 ///
@@ -271,6 +301,8 @@ static STATE: LazyLock<Migrations<'static>> = LazyLock::new(|| {
         M::up(STATE_TICKETS),
         M::up(STATE_ACTIVATION),
         M::up(STATE_UAT_MERGES),
+        M::up(STATE_DRAFTS),
+        M::up(STATE_UAT_MERGE_DETAILS),
     ])
 });
 

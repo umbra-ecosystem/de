@@ -26,6 +26,9 @@ pub struct ProjectManifest {
     /// Tasks to run when a ticket branch is activated (`[activate]`).
     #[serde(default, skip_serializing_if = "ActivateConfig::is_empty")]
     pub activate: ActivateConfig,
+    /// Local checks run in the integration worktree before `uat` is pushed (`[integrate]`).
+    #[serde(default, skip_serializing_if = "IntegrateConfig::is_empty")]
+    pub integrate: IntegrateConfig,
     /// Where this repo is hosted (`[hosting]`); repos without it are never synced.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hosting: Option<HostingConfig>,
@@ -255,6 +258,21 @@ pub struct ComposerOverlayConfig {
     pub rebuild: Vec<String>,
 }
 
+/// `[integrate]`: what to run before pushing `uat`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IntegrateConfig {
+    /// `de` task names run, in order, in the temporary integration worktree after the merge.
+    /// A failing check blocks that repo.
+    #[serde(default)]
+    pub checks: Vec<String>,
+}
+
+impl IntegrateConfig {
+    pub fn is_empty(&self) -> bool {
+        self.checks.is_empty()
+    }
+}
+
 /// `[activate]`: rebuilds for repos that need one whenever they sit on a ticket branch.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActivateConfig {
@@ -361,6 +379,18 @@ mod tests {
         let round_trip = parse(&toml::to_string_pretty(&with).unwrap());
         assert_eq!(round_trip.branches, with.branches);
         assert_eq!(round_trip.overlay, with.overlay);
+    }
+
+    #[test]
+    fn integrate_checks_parse_with_defaults() {
+        assert!(parse("").integrate.checks.is_empty());
+        assert!(parse("[integrate]\n").integrate.is_empty());
+        let m = parse("[integrate]\nchecks = [\"test\", \"lint\"]\nfuture = 1\n");
+        assert_eq!(m.integrate.checks, ["test", "lint"]);
+        let saved = toml::to_string_pretty(&parse("[project]\nname = \"a\"\n")).unwrap();
+        assert!(!saved.contains("integrate"), "{saved}");
+        let again = parse(&toml::to_string_pretty(&m).unwrap());
+        assert_eq!(again.integrate, m.integrate);
     }
 
     #[test]

@@ -121,6 +121,22 @@ impl Repo {
         }
     }
 
+    /// Create the integration branch `uat` on `origin` from the current branch (no local
+    /// `uat` branch is made), and fetch so `origin/uat` is known here.
+    pub fn add_uat(&self) {
+        let back = self.branch();
+        self.git(&["push", "origin", &format!("{back}:refs/heads/uat")]);
+        self.git(&["fetch", "origin"]);
+    }
+
+    /// The sha `origin` has for `branch`, read from the bare repository.
+    pub fn origin_sha(&self, branch: &str) -> String {
+        git(
+            &self.origin,
+            &["rev-parse", &format!("refs/heads/{branch}")],
+        )
+    }
+
     /// Push a new commit to `origin/<branch>` from a scratch clone, leaving this checkout
     /// behind its upstream.
     pub fn advance_origin(&self, branch: &str, file: &str) -> String {

@@ -957,14 +957,21 @@ fn deactivation_validates_the_target_and_the_state_before_touching_anything() {
     assert_eq!(fx.snapshot(), snapshot, "a rejected target moves nothing");
     assert_eq!(status_of(&fx, "PROJ-1"), LocalStatus::Active);
 
-    let report = deactivate(
+    // `Integrated` is refused for the public API, before anything is touched.
+    let err = deactivate(
         &fx.store,
         &fx.runner,
         &key("PROJ-1"),
         LocalStatus::Integrated,
         9,
     )
-    .unwrap();
+    .unwrap_err();
+    assert!(format!("{err:#}").contains("integration flow"), "{err:#}");
+    assert_eq!(fx.snapshot(), snapshot);
+    assert_eq!(status_of(&fx, "PROJ-1"), LocalStatus::Active);
+
+    let report =
+        super::deactivate_for_integration(&fx.store, &fx.runner, &key("PROJ-1"), 9).unwrap();
     assert_eq!(report.status, Some(LocalStatus::Integrated));
     assert_eq!(status_of(&fx, "PROJ-1"), LocalStatus::Integrated);
 }

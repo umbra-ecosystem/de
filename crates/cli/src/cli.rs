@@ -349,6 +349,65 @@ pub enum TicketCommands {
     /// Add a note to a ticket.
     Note { key: TicketKey, text: String },
 
+    /// Merge the active ticket into uat in a temporary worktree and, after you confirm,
+    /// push it (pushing uat deploys). There is no way to skip the confirmation.
+    Integrate {
+        key: TicketKey,
+
+        /// Prepare and show exactly what would be pushed, then stop. Never asks, never pushes.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// The workspace whose repos to integrate. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
+
+    /// Show the integration state of a ticket: touched repos and recorded uat merges.
+    Integration { key: TicketKey },
+
+    /// Show whether each repo's uat merge has been deployed (from the last `de sync`).
+    Deploy {
+        key: TicketKey,
+
+        /// The workspace whose repos to look at. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
+
+    /// Draft the Jira deploy comment (saved locally, nothing is posted).
+    DraftComment {
+        key: TicketKey,
+
+        /// Allow a comment while some repos are not deployed; it says which.
+        #[arg(long)]
+        partial: bool,
+
+        /// Text to append to the comment.
+        #[arg(long)]
+        note: Option<String>,
+
+        /// The workspace whose repos to look at. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
+
+    /// Show the drafted deploy comment and, after you confirm, post it to Jira.
+    PostComment { key: TicketKey },
+
+    /// After the comment is posted: show and, after you confirm, move the ticket to the
+    /// alpha-testing status in Jira.
+    Transition { key: TicketKey },
+
+    /// Remove the temporary integration worktrees of a ticket.
+    CancelIntegration {
+        key: TicketKey,
+
+        /// The workspace whose repos to clean. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
+
     /// Manage the test checklist of a ticket.
     Check {
         #[command(subcommand)]
