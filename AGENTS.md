@@ -2,10 +2,11 @@
 
 ## Project
 
-Rust CLI (`de`, v0.6.1) for managing isolated Docker Compose dev environments. Edition 2024. Cargo workspace of two crates:
+Rust CLI (`de`, v0.6.1) for managing isolated Docker Compose dev environments. Edition 2024. Cargo workspace of three crates:
 
 - `crates/core` (`de-core`, lib) — workspace/project config, task resolution, Compose orchestration. No CLI concerns.
 - `crates/cli` (package `de`, the binary) — `clap` definitions, `src/commands/*`, terminal UI.
+- `crates/widgets` (`de-widgets`, lib + `showcase` bin) — the GUI's view layer on `gpui-kit`: view models, widgets, and a fully working showcase app over a simulated store. **No engine, no data, no SQLite.** See "Widgets and the GUI" below.
 
 Dependency versions live in the root `[workspace.dependencies]`; crates use `dep.workspace = true`.
 
@@ -50,6 +51,17 @@ Configured once in the root `[workspace.lints]` and inherited by each crate via 
 - Compose calls go through `Project::compose(args)` (`docker compose -f <file> …`); `de compose -- <args>` is the passthrough for everything that isn't `start`/`stop`.
 - Config lives in the OS config dir (see `de_core::utils::get_project_dirs`) → `config.toml`, holding the active workspace. Per-directory state lives in a `.de/` dir (gitignored).
 - `de` **dogfoods itself**: this repo is a `de` project (`.de/config.toml`, `de.toml` define tasks/setup). Don't commit anything under `.de/`.
+
+## Widgets and the GUI
+
+**All new UI is built in `crates/widgets` first, shown and exercised in the showcase, and only then used by the `de-app` crate.** Never write a screen or widget directly in `de-app`.
+
+- `crates/widgets` depends on `gpui-kit` only. It must never depend on `de-core`, `rusqlite`, or any provider/git code, and never read the disk or network. Keep it that way: it is what lets the view be built and judged without the engine.
+- Layers: `vm` (plain-data view models and the `Intent`/`Command` a view may emit; no GPUI) → `store::Store` (the seam) → `session::Session` (UI state: route, tabs, sheets, toasts, typed text; no GPUI, unit-tested) → `ui` (stateless GPUI widgets and screens that draw a view model and emit intents).
+- Views never hold state or call the engine. State lives in the session; data comes from a `Store`. The showcase's store is `sim::Sim` (an in-memory port of the prototype in `docs/design/prototype`); `de-app` will implement `Store` over `de-core` and `de next --json`.
+- Every command that writes to a remote must return a `Preview` from `Store::preview`; the session then shows the confirm sheet before dispatching. Do not add a path that skips it.
+- Add a widget: view-model type in `vm`, a stateless function in `ui`, a case in the showcase. Add a flow: a `Session` test that drives it through intents only (`cargo test -p de-widgets`).
+- Run the showcase: `cargo run -p de-widgets --bin showcase` (it needs a desktop session; `gpui` opens a real window).
 
 ## Releases
 

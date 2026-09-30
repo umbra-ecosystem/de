@@ -1,0 +1,21 @@
+[package]
+name = "de-widgets"
+description = "View models and gpui-kit widgets for the de GUI, with a showcase app. No engine, no data."
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[lib]
+name = "de_widgets"
+path = "src/lib.rs"
+
+[[bin]]
+name = "showcase"
+path = "src/bin/showcase.rs"
+
+[dependencies]
+gpui-kit = "0.7"
+
+[lints]
+workspace = true
