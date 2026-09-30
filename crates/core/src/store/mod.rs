@@ -156,7 +156,10 @@ mod tests {
         let first = Store::open_in(dir.path(), Kind::State).unwrap();
         first
             .conn()
-            .execute("INSERT INTO app_meta (key, value) VALUES ('probe', '1')", [])
+            .execute(
+                "INSERT INTO app_meta (key, value) VALUES ('probe', '1')",
+                [],
+            )
             .unwrap();
         let version = first.schema_version().unwrap();
         drop(first);

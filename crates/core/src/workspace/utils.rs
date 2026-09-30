@@ -53,10 +53,7 @@ pub enum Order {
 }
 
 /// Loads the workspace's projects, ordered by their `depends_on` graph.
-pub fn ordered_projects(
-    workspace: &Workspace,
-    order: Order,
-) -> eyre::Result<Vec<(Slug, Project)>> {
+pub fn ordered_projects(workspace: &Workspace, order: Order) -> eyre::Result<Vec<(Slug, Project)>> {
     let (dependency_graph, projects) = workspace
         .load_dependency_graph()
         .map_err(|e| eyre!(e))
