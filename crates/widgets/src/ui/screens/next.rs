@@ -311,6 +311,17 @@ pub fn next(ui: &Ui, inputs: &Inputs, vm: &NextVm) -> AnyElement {
         .iter()
         .cloned()
         .partition(|c| c.attention && matches!(c.state, SugState::Open | SugState::Resurfaced));
+    // A ticket already pinned does not come back below as mere information (a mention of it, say): opening the
+    // pinned row shows that. Anything it could act on still appears.
+    let rest: Vec<SuggestionCard> = rest
+        .into_iter()
+        .filter(|c| {
+            !(c.info
+                && c.ticket
+                    .as_ref()
+                    .is_some_and(|t| urgent.iter().any(|u| u.ticket.as_ref() == Some(t))))
+        })
+        .collect();
     let pinned = (!urgent.is_empty()).then(|| {
         div()
             .flex()
