@@ -2,6 +2,11 @@
 
 Status: **design only, nothing built.** This is the outline for milestones M7 (menubar app) and M8 (in-app review). Wireframes are ASCII on purpose: they fix structure and flow, not visuals. Every screen names the core data it renders, so the outline can be checked against what already exists.
 
+> A clickable prototype with fake data, fake sync and fake pipelines lives in [`prototype/`](prototype/README.md).
+> It covers every flow below and adds a few changes proposed after the first outline: a persistent ticket stepper,
+> a pinned "now" bar with the overlay warning, an "On uat" screen, "since I last looked" markers, a right sidebar for
+> Jira facts, and an overlap warning before a push. Where this outline and the prototype differ, the prototype is newer.
+
 ## 1. Principles
 
 1. **Thin client.** The GUI renders `de next --json` and calls `de-core`. It has no rules of its own, never builds a command from a string, and never talks to Jira, Bitbucket or a git remote directly.

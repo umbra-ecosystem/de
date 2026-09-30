@@ -1,0 +1,1607 @@
+<title>de Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout concept: three fixed columns (places | work | facts), a slim top bar and a pinned "now" bar.
+   Low-fi wireframe language: grey surfaces, one accent for primary actions, colour only for risk and state. */
+:root{
+  --bg:#e9ecf1; --panel:#f5f6f9; --surface:#ffffff; --ink:#18202d; --mute:#586275; --faint:#8f99aa;
+  --line:#d5dae3; --line-strong:#aeb7c5; --fill:#e6e9ef; --accent:#0d6b63; --accent-ink:#ffffff; --accent-soft:#d3ebe8;
+  --ok:#1d7a43; --ok-soft:#dbf0e2; --warn:#96600a; --warn-soft:#f8ebd1; --bad:#b3261e; --bad-soft:#f7dddb; --bad-ink:#ffffff;
+  --dim:rgba(18,24,34,.5); --diff-add:#e3f4e8; --diff-del:#fbe5e3; --sel:#fff7d1;
+  --ui:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12151b; --panel:#181c24; --surface:#1f2430; --ink:#e6e9ef; --mute:#a3adbc; --faint:#6d7889;
+  --line:#313847; --line-strong:#485163; --fill:#2a303d; --accent:#3fb8ab; --accent-ink:#06211e; --accent-soft:#17403c;
+  --ok:#5cc48a; --ok-soft:#173a27; --warn:#e2a94a; --warn-soft:#3f3018; --bad:#f0857e; --bad-soft:#452321; --bad-ink:#2a0c0a;
+  --dim:rgba(0,0,0,.62); --diff-add:#173123; --diff-del:#3a2020; --sel:#4a4322; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#12151b; --panel:#181c24; --surface:#1f2430; --ink:#e6e9ef; --mute:#a3adbc; --faint:#6d7889;
+  --line:#313847; --line-strong:#485163; --fill:#2a303d; --accent:#3fb8ab; --accent-ink:#06211e; --accent-soft:#17403c;
+  --ok:#5cc48a; --ok-soft:#173a27; --warn:#e2a94a; --warn-soft:#3f3018; --bad:#f0857e; --bad-soft:#452321; --bad-ink:#2a0c0a;
+  --dim:rgba(0,0,0,.62); --diff-add:#173123; --diff-del:#3a2020; --sel:#4a4322; color-scheme:dark;}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.45;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:not-allowed}
+a{color:inherit}
+h2,h3,h4,h5{margin:0;text-wrap:balance}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.mono{font-family:var(--mono);font-size:12px}.key{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--ink);text-decoration:none}
+a.key:hover{text-decoration:underline}
+.key.big{font-size:15px}
+.mute{color:var(--mute)}.faint{color:var(--faint)}.small{font-size:12px}
+.pad{padding:6px 2px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.row.sb{justify-content:space-between;flex-wrap:nowrap}.row.wrap{flex-wrap:wrap}
+.sp{flex:1}
+.stack{display:flex;flex-direction:column;gap:10px}
+.spacer{flex:1}
+#root{height:100dvh}
+
+/* ---- shell ---- */
+.app{display:grid;grid-template-columns:232px minmax(0,1fr) 332px;height:100dvh}
+.app.noright{grid-template-columns:232px minmax(0,1fr)}
+.app.noright .right{display:none}
+.left,.right{overflow:auto;background:var(--panel);min-height:0}
+.left{border-right:1px solid var(--line);padding:12px 10px;display:flex;flex-direction:column;gap:2px}
+.right{border-left:1px solid var(--line);padding:12px 12px 24px}
+.center{display:flex;flex-direction:column;min-width:0;min-height:0}
+.content{overflow:auto;flex:1;padding:18px 24px 48px}
+.brand{display:flex;align-items:center;gap:8px;padding:2px 8px 10px}
+.logo{font-family:var(--mono);font-weight:700;font-size:18px;letter-spacing:-.02em}
+.proto{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;background:var(--warn-soft);color:var(--warn);border-radius:99px;padding:1px 8px;font-weight:600}
+.nav{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:6px;color:var(--mute);text-decoration:none}
+.nav b{font-weight:500;font-size:12px;color:var(--faint);font-family:var(--mono)}
+.nav:hover{background:var(--fill);color:var(--ink)}
+.nav.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 0 0 1px var(--line-strong)}
+.grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:14px 10px 4px;font-weight:600}
+.prov{border-top:1px solid var(--line);padding-top:10px;margin-top:8px;display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.hp{display:flex;align-items:center;gap:7px}.hp em{margin-left:auto;font-style:normal;color:var(--faint)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--faint);display:inline-block;flex:none}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
+.fresh{color:var(--faint);font-size:12px}.warn-t{color:var(--warn)}
+
+.top{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.crumb{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;white-space:nowrap}
+.crumb i{font-style:normal;color:var(--faint)}.crumb b{font-weight:600}.crumb a{color:var(--mute);text-decoration:none}
+.crumb .ct{color:var(--mute);overflow:hidden;text-overflow:ellipsis}
+.search{display:flex;gap:8px;align-items:center;background:var(--fill);border:1px solid transparent;border-radius:6px;padding:5px 10px;color:var(--faint);min-width:210px}
+.search:hover{border-color:var(--line-strong)}
+kbd{font-family:var(--mono);font-size:11px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 5px;margin-left:auto}
+.icon{background:transparent;border:1px solid transparent;border-radius:6px;padding:4px 8px;color:var(--mute)}
+.icon:hover{background:var(--fill)}
+.mob{display:none}
+.now{display:flex;align-items:center;gap:10px;padding:7px 16px;background:var(--accent-soft);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.now .nt{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:36ch}
+
+/* ---- primitives ---- */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:6px;border:1px solid var(--line-strong);background:var(--surface);font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap}
+.btn:hover:not(:disabled){border-color:var(--ink)}
+.btn.p{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.d{background:var(--bad);border-color:var(--bad);color:var(--bad-ink)}
+.btn.g{background:transparent;border-color:transparent;color:var(--mute)}
+.btn.g:hover:not(:disabled){background:var(--fill);border-color:transparent}
+.btn.sm{padding:2px 8px;font-size:12px}
+.btn:disabled{opacity:.45}
+.lnk{color:var(--accent);text-decoration:none}.lnk:hover{text-decoration:underline}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11.5px;font-weight:600;background:var(--fill);color:var(--mute);white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.acc{background:var(--accent-soft);color:var(--accent)}
+.pill.hot{background:var(--bad);color:var(--bad-ink)}
+.card{border:1px solid var(--line);border-radius:8px;padding:11px 13px;background:var(--surface)}
+.card.overlay{background:var(--warn-soft);border-color:var(--warn);color:var(--ink);margin-top:8px}
+.warn-box{border:1px solid var(--warn);background:var(--warn-soft);color:var(--ink);border-radius:6px;padding:7px 10px;margin:6px 0;font-size:13px}
+.empty{border:1px dashed var(--line-strong);border-radius:10px;padding:26px;text-align:center;color:var(--mute);display:flex;flex-direction:column;gap:8px;align-items:center}
+.empty.left{align-items:flex-start;text-align:left;background:var(--surface)}
+.empty b{color:var(--ink)}
+.chk{display:flex;align-items:center;gap:8px;color:var(--mute);font-size:12.5px}
+.chk.big{color:var(--ink);font-size:14px;padding:6px 0;border-bottom:1px solid var(--line)}
+.strike{text-decoration:line-through;color:var(--faint)}
+.radio{display:flex;gap:8px;align-items:center;padding:6px 0}
+.in,textarea{width:100%;background:var(--surface);color:var(--ink);border:1.5px solid var(--line-strong);border-radius:6px;padding:6px 9px;font:inherit}
+textarea{resize:vertical;min-height:70px}
+textarea.mono{font-family:var(--mono);font-size:12px}
+.in{width:auto;min-width:160px}.in.big{width:100%;font-size:15px;padding:10px 12px}.in.ro{display:inline-block;color:var(--mute);border-style:dashed}
+.lab{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:14px 0 6px}
+.lede{color:var(--mute);margin:4px 0 14px;max-width:74ch}
+h2{font-size:20px;font-weight:700;letter-spacing:-.01em}
+h3{font-size:14px;font-weight:700;margin-bottom:8px}
+h4{font-size:13px;margin:12px 0 4px}
+.dotnew{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);vertical-align:middle}
+.spin{width:11px;height:11px;border:2px solid var(--line-strong);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---- tables and tabs ---- */
+.tbwrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;padding:5px 8px;border-bottom:1px solid var(--line)}
+.tbl td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr.hover{cursor:pointer}.tbl tr.hover:hover td{background:var(--fill)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:12px 0 14px;flex-wrap:wrap}
+.tabs a{padding:6px 12px;color:var(--mute);border-bottom:2px solid transparent;margin-bottom:-1px;text-decoration:none;white-space:nowrap}
+.tabs a:hover{color:var(--ink)}
+.tabs a.on{color:var(--ink);font-weight:600;border-color:var(--accent)}
+.tabs.sm a{padding:4px 10px;font-size:13px}.tabs a b{font-family:var(--mono);font-size:11px;color:var(--faint);font-weight:500}
+.chip{border:1px solid var(--line-strong);background:var(--surface);border-radius:99px;padding:3px 12px;font-family:var(--mono);font-size:12px}
+.chip.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+
+/* ---- next / suggestions ---- */
+.card.sug{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;padding:12px 14px}
+.card.sug.res{border-color:var(--accent)}
+.card.sug.muted{opacity:.55}
+.rk{width:24px;height:24px;border-radius:50%;background:var(--fill);color:var(--mute);font-size:12px;font-weight:700;display:grid;place-items:center;margin-top:1px}
+.sug .tt{font-weight:600}
+.why{color:var(--mute);margin:3px 0 9px}
+.dim-card{position:relative}
+
+/* ---- ticket ---- */
+.thead .tt2{margin-top:4px;font-size:21px}
+.tbody{margin-top:2px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:22px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.col{min-width:0}.sec{margin-bottom:20px}
+.prose p{margin:0 0 8px;max-width:75ch}.prose ul{margin:0 0 8px;padding-left:20px}
+.code{font-family:var(--mono);font-size:12px;background:var(--fill);border-radius:6px;padding:8px 10px;white-space:pre-wrap;word-break:break-word;margin:6px 0}
+ul.ac{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:5px}
+.cmt{border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:8px;background:var(--surface)}
+.cmt.new{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.cbody p{margin:4px 0 0}
+.av{width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:10px;font-weight:700;display:grid;place-items:center;flex:none}
+.mention{background:var(--accent-soft);color:var(--accent);border-radius:4px;padding:0 4px;font-weight:600}
+.mention.me{background:var(--accent);color:var(--accent-ink)}
+.url{font-family:var(--mono);font-size:12px;color:var(--accent);word-break:break-all}
+.composer{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.att{display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}.fileic{color:var(--faint)}
+.qi{padding:6px 0;border-bottom:1px solid var(--line)}.qi:last-child{border-bottom:0}
+.stepper{list-style:none;display:flex;gap:0;padding:0;margin:12px 0 0;overflow-x:auto}
+.stepper li{flex:1;min-width:74px;text-align:center;position:relative;font-size:11px;color:var(--faint);padding-top:16px}
+.stepper li i{position:absolute;top:0;left:50%;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:var(--surface);border:2px solid var(--line-strong);z-index:1}
+.stepper li::before{content:"";position:absolute;top:5px;left:-50%;width:100%;height:2px;background:var(--line-strong)}
+.stepper li:first-child::before{display:none}
+.stepper li.done{color:var(--ok)}.stepper li.done i{background:var(--ok);border-color:var(--ok)}.stepper li.done::before{background:var(--ok)}
+.stepper li.now{color:var(--ink);font-weight:700}.stepper li.now i{border-color:var(--accent);background:var(--accent-soft)}
+.stepper li.now::before{background:var(--ok)}
+
+/* ---- review ---- */
+.prhead{border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin:10px 0;background:var(--surface);display:flex;flex-direction:column;gap:3px}
+.rvgrid{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px}
+.ftree{display:flex;flex-direction:column;gap:2px;font-size:12.5px}
+.fl{display:flex;flex-direction:column;align-items:flex-start;text-align:left;background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 8px;word-break:break-all}
+.fl:hover{background:var(--fill)}.fl.on{background:var(--surface);border-color:var(--line-strong)}
+.fl em{font-style:normal;font-family:var(--mono);font-size:11px}.ad{font-style:normal;color:var(--ok)}.dl2{font-style:normal;color:var(--bad)}
+.fpath{margin-bottom:6px}
+.diff{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:6px;overflow:auto;background:var(--surface)}
+.dl{display:grid;grid-template-columns:38px 38px 16px minmax(0,1fr) 28px;padding:0 6px;white-space:pre;position:relative}
+.dl code{font-family:inherit;white-space:pre-wrap;word-break:break-word}
+.dl.add{background:var(--diff-add)}.dl.del{background:var(--diff-del)}
+.dl .ln{color:var(--faint);text-align:right;padding-right:8px;user-select:none}
+.dl .sg{color:var(--mute)}
+.dl .plus{opacity:0;background:var(--accent);color:var(--accent-ink);border:0;border-radius:4px;width:20px;height:18px;line-height:16px;align-self:center;padding:0}
+.dl:hover .plus{opacity:1}
+.thread{font-family:var(--ui);font-size:12.5px;margin:4px 10px 6px 80px;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;background:var(--panel);white-space:normal}
+.thread.new{border-color:var(--accent)}
+.rvbar{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+
+/* ---- ship ---- */
+.steps{display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
+.step:last-child{border-bottom:0}
+.step .n{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--line-strong);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--mute)}
+.step.now .n{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
+.step.done .n{border-color:var(--ok);color:var(--ok)}
+.step.bad .n{border-color:var(--bad);color:var(--bad)}
+.sb2{display:flex;flex-direction:column;gap:8px;min-width:0}
+
+/* ---- uat contents ---- */
+.colsgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:18px}
+.envcol{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface);display:flex;flex-direction:column;gap:8px}
+.envit{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);display:flex;flex-direction:column;gap:3px}
+
+/* ---- right sidebar ---- */
+.rc{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:12px}
+.rc h5{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:13px;align-items:baseline}
+.kv span{color:var(--mute);flex:none}.kv b{font-weight:500;text-align:right;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+ul.act,ul.rep{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+ul.act li{display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}ul.act em{font-style:normal;color:var(--mute);font-family:var(--mono);font-size:11px}
+ul.rep li{display:flex;gap:7px;align-items:baseline}
+
+/* ---- sheets ---- */
+.scrim{position:fixed;inset:0;background:var(--dim);z-index:40}
+.sheet{position:fixed;z-index:50;left:50%;top:9vh;transform:translateX(-50%);width:min(580px,94vw);max-height:84vh;overflow:auto;background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 28px 60px -14px rgba(0,0,0,.55);display:flex;flex-direction:column}
+.sheet.wide{width:min(720px,94vw)}
+.sheet.pal{top:14vh;padding:10px;gap:8px}
+.pal-l{display:flex;flex-direction:column}.pi{text-align:left;background:transparent;border:0;padding:8px 10px;border-radius:6px}.pi:hover,.pi:focus{background:var(--fill)}
+.sh-h{padding:11px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:700;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+.sh-h.high{background:var(--bad-soft);color:var(--bad);border-bottom-color:var(--bad)}
+.sh-h.medium{background:var(--warn-soft);color:var(--warn)}
+.sh-b{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.sh-f{padding:11px 16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--panel);position:sticky;bottom:0}
+.ps{display:flex;gap:10px;align-items:baseline;color:var(--faint)}.ps i{font-style:normal;width:16px;text-align:center}
+.ps.run{color:var(--ink)}.ps.ok{color:var(--ink)}.ps.ok i{color:var(--ok)}.ps.warn i{color:var(--warn)}
+.dev{position:fixed;z-index:45;right:14px;bottom:14px;width:min(320px,92vw);max-height:80vh;overflow:auto;background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;padding:12px 14px;box-shadow:0 20px 40px -12px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+.dev .lab{margin:10px 0 4px}
+ol.try{margin:0;padding-left:18px;color:var(--mute);font-size:12.5px;display:flex;flex-direction:column;gap:4px}
+.toasts{position:fixed;z-index:60;left:50%;bottom:16px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+.toast{background:var(--ink);color:var(--surface);border-radius:8px;padding:7px 14px;font-size:13px;box-shadow:0 8px 20px rgba(0,0,0,.3)}
+.toast.ok{background:var(--ok);color:var(--accent-ink)}.toast.bad{background:var(--bad);color:var(--bad-ink)}.toast.warn{background:var(--warn);color:var(--surface)}
+
+@media (max-width:1180px){.app{grid-template-columns:220px minmax(0,1fr)}.app .right{display:none}.grid3{grid-template-columns:1fr}}
+@media (max-width:820px){
+  .app,.app.noright{grid-template-columns:minmax(0,1fr)}
+  .left{position:fixed;z-index:30;left:0;top:0;bottom:0;width:250px;transform:translateX(-102%);transition:transform .18s;box-shadow:8px 0 30px rgba(0,0,0,.3)}
+  .showleft .left{transform:none}
+  .mob{display:inline-block}.search span,.search kbd{display:none}.search{min-width:0}
+  .grid2,.rvgrid{grid-template-columns:minmax(0,1fr)}
+  .content{padding:14px 14px 40px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ticket facts move into the Overview whenever the right sidebar is not on screen */
+.narrow-only{display:none}
+.app.noright .narrow-only{display:block}
+@media (max-width:1180px){.narrow-only{display:block}}
+
+</style>
+<div id="root"></div>
+<script>
+(function(){
+'use strict';
+/* ============================ fake data ============================
+   Everything here is invented. Mirrors the shapes the real core serves:
+   tickets (Jira mirror + local tracking), PRs with source/destination, pipeline runs, audit log. */
+
+const ME = 'You';
+const JIRA = { review: 'In Review', alpha: 'Alpha Testing', returned: 'Returned', signed: ['Done'] };
+const PRIORITY_RANK = { Highest: 0, High: 1, Medium: 2, Low: 3 };
+
+/* Workspace repos. `base` is the fallback branch, `prod` the production branch (hotfix PRs target it).
+   web consumes api-client through a composer path overlay while testing. */
+const REPOS = {
+  'api-client': { base: 'develop', prod: 'master', host: 'acme/api-client', services: 3, overlayConsumer: false },
+  web:          { base: 'develop', prod: 'main',   host: 'acme/web',        services: 2, overlayConsumer: true, consumes: 'api-client' },
+  worker:       { base: 'develop', prod: 'master', host: 'acme/worker',     services: 1, overlayConsumer: false },
+  docs:         { base: 'master',  prod: 'master', host: 'acme/docs',       services: 0, overlayConsumer: false },
+};
+
+const P  = (x) => ({ t: 'p', x });
+const H  = (x) => ({ t: 'h', x });
+const UL = (...items) => ({ t: 'ul', items });
+const CODE = (x) => ({ t: 'code', x });
+
+/* diff line: kind, old no, new no, text */
+const L = (k, o, n, x) => ({ k, o, n, x });
+
+function seedTickets() {
+  const tickets = [];
+  const add = (t) => { tickets.push(Object.assign({
+    local: null, reviewed: false, reviewedSeq: null, checklist: [], notes: '', act: null, timeMs: 0,
+    merges: [], deploy: {}, drafts: [], prep: null, link: {}, excl: {}, seenN: 0, viewedAt: null,
+    newCommits: false, handledN: 0, cands: {}, prs: [], attachments: [], links: [], subtasks: [], ac: [],
+    labels: [], components: [], comments: [],
+  }, t)); };
+
+  add({
+    key: 'PROJ-142', type: 'Bug', priority: 'Medium', title: 'Fix login redirect after session expiry',
+    jira: JIRA.review, assignee: 'Sam Ortiz', reporter: 'Jane Doe', sprint: 'Sprint 41', epic: 'Auth hardening',
+    fixVersion: '2.14.0', estimate: '3 pts', created: '3 days ago', updated: '1 hour ago',
+    labels: ['auth', 'regression'], components: ['api-client', 'web'],
+    desc: [
+      P('Users whose session expires while they are on a deep link are sent to /home after logging back in, instead of the page they were on. Support has seen it on three accounts this week.'),
+      H('Steps to reproduce'),
+      UL('Log in and open /orders/4821', 'Wait for the session to expire (15 min) or clear the session cookie', 'Click any action and log in again'),
+      P('Expected: back on /orders/4821. Actual: /home.'),
+      CODE('GET /login?next=%2Forders%2F4821   ->   302 /home'),
+    ],
+    ac: ['The deep link is preserved through login', 'Only same-origin next values are accepted', 'Existing login form tests still pass'],
+    comments: [
+      { n: 1, who: 'Jane Doe', at: 'yesterday 16:40', body: [P('Three customers hit this today. One lost an unsaved order form, so this is more than cosmetic.')] },
+      { n: 2, who: 'Sam Ortiz', at: 'yesterday 17:05', body: [P('Root cause is in api-client: landing() ignores next. The fix is on two branches; the web side only passes the param through. @[you] can you take the review?')] },
+      { n: 3, who: 'Jane Doe', at: 'today 09:12', body: [P('Please also check the open-redirect case. Security asked about it.')] },
+    ],
+    attachments: [{ name: 'session-expiry.mov', size: '2.1 MB' }, { name: 'network-trace.har', size: '340 KB' }],
+    links: [{ rel: 'relates to', key: 'PROJ-127', title: 'Session cookie SameSite', status: 'Alpha Testing' }, { rel: 'is blocked by', key: 'PROJ-098', title: 'Refactor login module', status: 'Done' }],
+    subtasks: [{ title: 'Add regression test', done: true }, { title: 'Update the runbook', done: false }],
+    cands: { 'api-client': ['feature/PROJ-142-redirect'], web: ['feature/PROJ-142-web'] },
+    local: { status: 'claimed' }, seenN: 1,
+    checklist: [
+      { text: 'Deep link survives login', done: false },
+      { text: 'External next value is rejected', done: false },
+      { text: 'Logout clears the session', done: false },
+    ],
+    prs: [
+      { repo: 'api-client', id: 212, title: 'PROJ-142 Preserve next through login', src: 'feature/PROJ-142-redirect', dst: 'develop', updatedSeq: 1,
+        reviewers: [{ name: 'Jane Doe', approved: false }, { name: ME, approved: false }],
+        files: [
+          { path: 'src/redirect.rs', adds: 9, dels: 1, lines: [
+            L('ctx', 38, 38, 'use crate::user::User;'), L('ctx', 39, 39, ''),
+            L('ctx', 40, 40, 'pub fn target(user: &User, next: Option<&str>) -> Url {'),
+            L('del', 41, null, '    Url::parse("/home").unwrap()'),
+            L('add', null, 41, '    match next.filter(|n| is_same_origin(n)) {'),
+            L('add', null, 42, '        Some(n) => Url::parse(n).unwrap_or_else(|_| user.landing()),'),
+            L('add', null, 43, '        None => user.landing(),'),
+            L('add', null, 44, '    }'),
+            L('ctx', 42, 45, '}'), L('ctx', 43, 46, ''),
+            L('add', null, 47, 'fn is_same_origin(n: &str) -> bool {'),
+            L('add', null, 48, '    n.starts_with(\'/\') && !n.starts_with("//")'),
+            L('add', null, 49, '}'),
+          ] },
+          { path: 'tests/redirect_test.rs', adds: 14, dels: 0, lines: [
+            L('ctx', 1, 1, 'use api_client::redirect::target;'), L('ctx', 2, 2, ''),
+            L('add', null, 3, '#[test]'), L('add', null, 4, 'fn keeps_a_same_origin_next() {'),
+            L('add', null, 5, '    let url = target(&user(), Some("/orders/4821"));'),
+            L('add', null, 6, '    assert_eq!(url.path(), "/orders/4821");'), L('add', null, 7, '}'),
+            L('add', null, 8, '#[test]'), L('add', null, 9, 'fn rejects_an_external_next() {'),
+            L('add', null, 10, '    let url = target(&user(), Some("//evil.example/x"));'),
+            L('add', null, 11, '    assert_eq!(url.path(), user().landing().path());'), L('add', null, 12, '}'),
+          ] },
+        ],
+        threads: [{ id: 'th1', file: 'src/redirect.rs', line: 'n42', author: 'Jane Doe', text: 'Should we log when we reject a next value? Security asked for that.', resolved: false, replies: [] }],
+      },
+      { repo: 'web', id: 488, title: 'PROJ-142 Pass next to the login call', src: 'feature/PROJ-142-web', dst: 'develop', updatedSeq: 1,
+        reviewers: [{ name: 'Jane Doe', approved: false }, { name: ME, approved: false }],
+        files: [{ path: 'src/session.rs', adds: 4, dels: 2, lines: [
+          L('ctx', 20, 20, 'pub fn login(req: &Request) -> Result<Session> {'),
+          L('del', 21, null, '    let url = api::login(&req.credentials)?;'),
+          L('add', null, 21, '    let next = req.query("next");'),
+          L('add', null, 22, '    let url = api::login(&req.credentials, next.as_deref())?;'),
+          L('ctx', 22, 23, '    Ok(Session::from(url))'), L('ctx', 23, 24, '}'),
+        ] }],
+        threads: [],
+      },
+    ],
+  });
+
+  add({
+    key: 'PROJ-150', type: 'Story', priority: 'High', title: 'Fix header overflow on narrow screens',
+    jira: JIRA.review, assignee: 'Priya Nair', reporter: 'Marta Lind', sprint: 'Sprint 41', epic: 'Mobile polish',
+    fixVersion: '2.14.0', estimate: '2 pts', created: '2 days ago', updated: '3 hours ago',
+    labels: ['ui', 'mobile'], components: ['web'],
+    desc: [
+      P('On viewports narrower than 380px the header menu wraps under the logo and pushes the page sideways. The search field is the culprit.'),
+      H('Acceptance'), UL('No horizontal scroll at 320px', 'Menu stays reachable', 'Desktop layout unchanged'),
+    ],
+    ac: ['No horizontal scroll at 320px', 'Menu stays reachable', 'Desktop layout unchanged'],
+    comments: [
+      { n: 1, who: 'Marta Lind', at: '2 days ago', body: [P('Screenshot attached from an iPhone SE. It looks worse in landscape.')] },
+      { n: 2, who: 'Priya Nair', at: 'yesterday 11:20', body: [P('Fixed with a flex-wrap and a shrinking search. Two branches exist because I restarted; the -old one can be ignored.')] },
+    ],
+    attachments: [{ name: 'iphone-se.png', size: '480 KB' }],
+    links: [], subtasks: [{ title: 'Check landscape', done: true }],
+    cands: { web: ['feature/PROJ-150-header', 'feature/PROJ-150-header-old'] },
+    checklist: [{ text: 'No horizontal scroll at 320px', done: false }, { text: 'Menu reachable', done: false }],
+    prs: [{ repo: 'web', id: 490, title: 'PROJ-150 Wrap the header on narrow screens', src: 'feature/PROJ-150-header', dst: 'develop', updatedSeq: 1,
+      reviewers: [{ name: 'Marta Lind', approved: false }, { name: ME, approved: false }],
+      files: [
+        { path: 'src/header.css', adds: 6, dels: 2, lines: [
+          L('ctx', 10, 10, '.header {'), L('del', 11, null, '  display: flex;'),
+          L('add', null, 11, '  display: flex;'), L('add', null, 12, '  flex-wrap: wrap;'), L('add', null, 13, '  gap: 8px;'),
+          L('ctx', 12, 14, '}'), L('ctx', 13, 15, ''),
+          L('ctx', 14, 16, '.header .search {'), L('del', 15, null, '  width: 320px;'),
+          L('add', null, 17, '  flex: 1 1 120px;'), L('add', null, 18, '  min-width: 0;'), L('ctx', 16, 19, '}'),
+        ] },
+        { path: 'src/Header.tsx', adds: 2, dels: 1, lines: [
+          L('ctx', 8, 8, 'export function Header() {'), L('del', 9, null, '  return <nav className="header">'),
+          L('add', null, 9, '  return <nav className="header" aria-label="Main">'), L('ctx', 10, 10, '    <Logo />'),
+        ] },
+      ], threads: [] }],
+  });
+
+  add({
+    key: 'PROJ-139', type: 'Bug', priority: 'Highest', title: 'Payment retry double-charges on timeout',
+    jira: JIRA.review, assignee: 'Sam Ortiz', reporter: 'Omar Haddad', sprint: 'Hotfix', epic: 'Payments',
+    fixVersion: '2.13.1', estimate: '2 pts', created: 'today 07:50', updated: '30 min ago',
+    labels: ['payments', 'hotfix'], components: ['api-client', 'web'],
+    desc: [
+      P('When the payment provider times out, the client retries with a new idempotency key. If the first request actually succeeded the customer is charged twice.'),
+      H('Impact'), UL('11 customers charged twice since Monday', 'Refunds are being handled manually'),
+      P('Fix: reuse the idempotency key across retries. Targets the production branch because this is live.'),
+    ],
+    ac: ['A retry reuses the original idempotency key', 'A timed-out request is never re-sent with a new key'],
+    comments: [
+      { n: 1, who: 'Omar Haddad', at: 'today 07:55', body: [P('This is costing us real money. Fastest safe fix please.')] },
+      { n: 2, who: 'Sam Ortiz', at: 'today 09:30', body: [P('Both PRs target master and main. Needs @[you] to review and test.')] },
+    ],
+    attachments: [{ name: 'double-charge-report.csv', size: '18 KB' }],
+    links: [{ rel: 'is caused by', key: 'PROJ-071', title: 'Client retry policy', status: 'Done' }],
+    subtasks: [],
+    cands: { 'api-client': ['hotfix/PROJ-139-idempotency'], web: ['hotfix/PROJ-139-web'] },
+    checklist: [{ text: 'Retry keeps the same key', done: false }, { text: 'No second charge on timeout', done: false }],
+    prs: [
+      { repo: 'api-client', id: 214, title: 'PROJ-139 Reuse idempotency key on retry', src: 'hotfix/PROJ-139-idempotency', dst: 'master', updatedSeq: 1,
+        reviewers: [{ name: 'Omar Haddad', approved: false }, { name: ME, approved: false }],
+        files: [{ path: 'src/payments.rs', adds: 5, dels: 3, lines: [
+          L('ctx', 60, 60, 'fn charge(&self, req: &Charge) -> Result<Receipt> {'),
+          L('del', 61, null, '    let key = Uuid::new_v4();'),
+          L('add', null, 61, '    let key = req.idempotency_key.get_or_insert_with(Uuid::new_v4);'),
+          L('ctx', 62, 62, '    self.post("/charges", req, key)'), L('ctx', 63, 63, '}'),
+        ] }], threads: [] },
+      { repo: 'web', id: 491, title: 'PROJ-139 Send a stable key from the checkout', src: 'hotfix/PROJ-139-web', dst: 'main', updatedSeq: 1,
+        reviewers: [{ name: 'Omar Haddad', approved: false }, { name: ME, approved: false }],
+        files: [{ path: 'src/checkout.ts', adds: 3, dels: 1, lines: [
+          L('ctx', 14, 14, 'async function pay(order: Order) {'),
+          L('del', 15, null, '  return api.charge(order);'),
+          L('add', null, 15, '  order.key ??= crypto.randomUUID();'),
+          L('add', null, 16, '  return api.charge(order);'), L('ctx', 16, 17, '}'),
+        ] }], threads: [] },
+    ],
+  });
+
+  add({
+    key: 'PROJ-131', type: 'Task', priority: 'Low', title: 'Staging redirect loop',
+    jira: JIRA.returned, assignee: 'Sam Ortiz', reporter: 'Jane Doe', sprint: 'Sprint 40', epic: 'Auth hardening',
+    fixVersion: '2.13.0', estimate: '1 pt', created: '9 days ago', updated: '2 hours ago',
+    labels: ['auth'], components: ['web'],
+    desc: [P('Expired sessions loop between /login and /home on staging only.'), UL('Reproduce with a stale cookie', 'Compare staging and production cookie domains')],
+    ac: ['No redirect loop with an expired cookie'],
+    comments: [
+      { n: 1, who: 'Sam Ortiz', at: '6 days ago', body: [P('Deployed to alpha, cookie domain fixed.')] },
+      { n: 2, who: 'Jane Doe', at: 'today 10:05', body: [P('Sent back. @[you] can you re-check the redirect on staging? It still loops for expired sessions.')] },
+    ],
+    attachments: [], links: [{ rel: 'relates to', key: 'PROJ-142', title: 'Fix login redirect after session expiry', status: 'In Review' }], subtasks: [],
+    cands: { web: ['feature/PROJ-131-cookie'] },
+    local: { status: 'integrated' }, reviewed: true, reviewedSeq: 1, seenN: 1,
+    merges: [{ repo: 'web', commit: '2b90cd3', at: '6 days ago' }],
+    deploy: { web: { state: 'deployed', run: 401, since: -1e9 } },
+    drafts: [{ id: 'd1', kind: 'comment', body: 'Deployed to alpha.', status: 'posted' }],
+    prs: [{ repo: 'web', id: 470, title: 'PROJ-131 Scope the session cookie', src: 'feature/PROJ-131-cookie', dst: 'develop', updatedSeq: 1,
+      reviewers: [{ name: 'Jane Doe', approved: false }, { name: ME, approved: false }],
+      files: [{ path: 'src/cookie.ts', adds: 2, dels: 1, lines: [L('ctx', 3, 3, 'export const cookie = {'), L('del', 4, null, '  domain: ".acme.dev",'), L('add', null, 4, '  domain: "staging.acme.dev",'), L('ctx', 5, 5, '};')] }],
+      threads: [] }],
+  });
+
+  add({
+    key: 'PROJ-127', type: 'Story', priority: 'Medium', title: 'Session cookie SameSite',
+    jira: JIRA.alpha, assignee: 'Priya Nair', reporter: 'Omar Haddad', sprint: 'Sprint 40', epic: 'Auth hardening',
+    fixVersion: '2.13.0', estimate: '2 pts', created: '12 days ago', updated: 'yesterday',
+    labels: ['auth', 'security'], components: ['api-client', 'web'],
+    desc: [P('Set SameSite=Lax on the session cookie and document the cross-site flows that need None.'), UL('api-client sets the attribute', 'web forwards it on redirects')],
+    ac: ['Cookie carries SameSite=Lax', 'Docs list the exceptions'],
+    comments: [
+      { n: 1, who: 'Priya Nair', at: 'yesterday 15:10', body: [P('Deployed to alpha.'), P('api-client: pipeline #311 https://ci.example/acme/api-client/311'), P('web: pipeline #398 https://ci.example/acme/web/398')] },
+    ],
+    attachments: [], links: [{ rel: 'relates to', key: 'PROJ-142', title: 'Fix login redirect after session expiry', status: 'In Review' }], subtasks: [],
+    cands: { 'api-client': ['feature/PROJ-127-samesite'], web: ['feature/PROJ-127-samesite'] },
+    local: { status: 'integrated' }, reviewed: true, reviewedSeq: 1, seenN: 1,
+    merges: [{ repo: 'api-client', commit: '8c01d22', at: 'yesterday' }, { repo: 'web', commit: '44ab0f9', at: 'yesterday' }],
+    deploy: { 'api-client': { state: 'deployed', run: 311, since: -1e9 }, web: { state: 'deployed', run: 398, since: -1e9 } },
+    drafts: [{ id: 'd0', kind: 'comment', body: 'Deployed to alpha.', status: 'posted' }],
+    prs: [
+      { repo: 'api-client', id: 205, title: 'PROJ-127 SameSite=Lax', src: 'feature/PROJ-127-samesite', dst: 'develop', updatedSeq: 1, reviewers: [{ name: 'Omar Haddad', approved: true }, { name: ME, approved: false }],
+        files: [{ path: 'src/cookie.rs', adds: 2, dels: 0, lines: [L('add', null, 12, '    .same_site(SameSite::Lax)')] }], threads: [] },
+      { repo: 'web', id: 469, title: 'PROJ-127 Forward SameSite', src: 'feature/PROJ-127-samesite', dst: 'develop', updatedSeq: 1, reviewers: [{ name: 'Omar Haddad', approved: true }, { name: ME, approved: false }],
+        files: [{ path: 'src/session.rs', adds: 3, dels: 1, lines: [L('ctx', 30, 30, 'fn store(c: Cookie) {'), L('add', null, 31, '    let c = c.same_site(Lax);')] }], threads: [] },
+    ],
+  });
+
+  add({
+    key: 'PROJ-160', type: 'Task', priority: 'Low', title: 'Update onboarding copy',
+    jira: JIRA.review, assignee: 'Marta Lind', reporter: 'Marta Lind', sprint: 'Sprint 41', epic: 'Docs',
+    fixVersion: '2.14.0', estimate: '1 pt', created: 'yesterday', updated: 'yesterday',
+    labels: ['docs'], components: ['docs'],
+    desc: [P('Replace the old welcome text with the new wording from marketing.')], ac: ['New wording in the getting started page'],
+    comments: [], attachments: [], links: [], subtasks: [],
+    cands: { docs: ['docs/PROJ-160-onboarding'] },
+    checklist: [{ text: 'Page reads correctly', done: false }],
+    prs: [{ repo: 'docs', id: 58, title: 'PROJ-160 Onboarding copy', src: 'docs/PROJ-160-onboarding', dst: 'master', updatedSeq: 1,
+      reviewers: [{ name: 'Marta Lind', approved: false }, { name: ME, approved: false }],
+      files: [{ path: 'getting-started.md', adds: 4, dels: 3, lines: [L('ctx', 1, 1, '# Getting started'), L('del', 2, null, 'Welcome aboard.'), L('add', null, 2, 'Welcome to Acme. Here is how to get going in ten minutes.')] }], threads: [] }],
+  });
+
+  return tickets;
+}
+
+/* Tickets that "arrive" on later fake syncs. */
+function syncScript() {
+  return [
+    { text: 'PROJ-155 appeared in the Review column', apply(S) {
+      S.tickets.push(Object.assign(seedTickets()[0], {
+        key: 'PROJ-155', type: 'Bug', priority: 'High', title: 'Toast overlaps the footer on iPad',
+        jira: JIRA.review, assignee: 'Priya Nair', reporter: 'Marta Lind', sprint: 'Sprint 41', epic: 'Mobile polish',
+        labels: ['ui'], components: ['web'], created: 'today 10:40', updated: 'just now',
+        desc: [P('On iPad in portrait the success toast covers the footer links until it is dismissed.')], ac: ['Toast never covers the footer'],
+        comments: [{ n: 1, who: 'Marta Lind', at: 'today 10:41', body: [P('Seen on iPad Air. @[you] you had this pattern in the header ticket, thoughts?')] }],
+        attachments: [], links: [], subtasks: [], seenN: 0, local: null, reviewed: false, merges: [], deploy: {}, drafts: [],
+        cands: { web: ['feature/PROJ-155-toast'] }, checklist: [{ text: 'Toast clear of the footer', done: false }],
+        prs: [{ repo: 'web', id: 495, title: 'PROJ-155 Lift the toast above the footer', src: 'feature/PROJ-155-toast', dst: 'develop', updatedSeq: 1,
+          reviewers: [{ name: 'Marta Lind', approved: false }, { name: ME, approved: false }],
+          files: [{ path: 'src/toast.css', adds: 2, dels: 1, lines: [L('ctx', 5, 5, '.toast {'), L('del', 6, null, '  bottom: 0;'), L('add', null, 6, '  bottom: 64px;'), L('ctx', 7, 7, '}')] }], threads: [] }],
+      }));
+    } },
+    { text: 'PROJ-150 got a new comment that mentions you', apply(S) {
+      const t = S.tickets.find((x) => x.key === 'PROJ-150');
+      t.comments.push({ n: 3, who: 'Marta Lind', at: 'just now', body: [P('@[you] can you check the header on iPad landscape too?')] });
+    } },
+  ];
+}
+
+'use strict';
+/* ============================ fake core ============================
+   A small in-memory stand-in for de-core: state, the lifecycle actions the real core exposes,
+   fake sync, fake pipelines, and a simplified copy of the next-action rules. No I/O, no network. */
+
+const MS_PER_MIN = 4000;            // one simulated minute per 4 real seconds
+const START_MIN = 9 * 60 + 40;      // the simulated day starts at 09:40
+
+function newState() {
+  return {
+    ms: 0, seq: 100, run: 480,
+    sync: { running: false, lastOk: -2 * MS_PER_MIN, lastAttempt: -2 * MS_PER_MIN, lastError: null, report: [], script: 0 },
+    providers: { jira: { ready: true }, bkt: { ready: true } },
+    sim: { offline: false, conflict: null, leak: null, uatMoved: false, failDeploy: null },
+    ws: {
+      branches: { 'api-client': 'develop', web: 'wip/my-experiment', worker: 'develop', docs: 'master' },
+      dirty: { web: true },
+      up: true,
+    },
+    tickets: seedTickets(), audit: [], responses: {}, order: null,
+    ui: { route: { name: 'next' }, sheet: null, toasts: [], dev: false, right: true, left: false, showAllSug: false, drafts: {}, prSel: {}, fileSel: {}, palette: null },
+  };
+}
+let S = newState();
+const script = syncScript();
+
+/* ---------------------------- helpers ---------------------------- */
+const tk = (k) => S.tickets.find((t) => t.key === k);
+const status = (t) => (t.local ? t.local.status : null);
+const activeTicket = () => S.tickets.find((t) => status(t) === 'active');
+const clock = () => { const m = START_MIN + Math.floor(S.ms / MS_PER_MIN); return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+const minsAgo = (ms) => Math.max(0, Math.floor((S.ms - ms) / MS_PER_MIN));
+const nextSeq = () => ++S.seq;
+const hex = (s) => { let h = 5381; for (const c of String(s)) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0; return h.toString(16).padStart(8, '0').slice(0, 7); };
+const isHotfix = (t) => t.prs.some((p) => REPOS[p.repo].prod !== REPOS[p.repo].base && p.dst === REPOS[p.repo].prod);
+const mentionsMe = (c) => c.body.some((b) => (b.t === 'p' && /@\[you\]/i.test(b.x)));
+const maxN = (t) => t.comments.reduce((m, c) => Math.max(m, c.n), 0);
+const unseenMentions = (t) => t.comments.filter((c) => c.n > t.seenN && c.who !== ME && mentionsMe(c));
+const unseenCount = (t) => t.comments.filter((c) => c.n > t.seenN && c.who !== ME).length;
+const durationMs = (t) => t.timeMs + (t.act ? S.ms - t.act.startedMs : 0);
+const fmtDur = (ms) => { const m = Math.floor(ms / MS_PER_MIN); return m >= 60 ? Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm' : m + 'm'; };
+const isSignedOff = (t) => JIRA.signed.includes(t.jira);
+
+function audit(action, ticket, repo, outcome, details) {
+  S.audit.unshift({ id: nextSeq(), at: clock(), action, ticket: ticket || null, repo: repo || null, outcome: outcome || 'success', details: details || '' });
+}
+function toast(msg, kind) { S.ui.toasts.push({ id: nextSeq(), msg, kind: kind || 'info', until: S.ms + 6000 }); }
+
+/* which repos a ticket touches (has a ticket branch), which are ambiguous */
+function repoPlan(t) {
+  return Object.keys(REPOS).map((repo) => {
+    const cands = t.cands[repo] || [];
+    const excluded = !!t.excl[repo];
+    const manual = t.link[repo] || null;
+    const chosen = excluded ? null : manual || (cands.length === 1 ? cands[0] : null);
+    return { repo, cands, excluded, manual, chosen, ambiguous: !excluded && !manual && cands.length > 1 };
+  }).filter((p) => p.cands.length || p.excluded);
+}
+const touchedRepos = (t) => repoPlan(t).filter((p) => p.chosen);
+
+/* ---------------------------- local lifecycle ---------------------------- */
+function claim(key) {
+  const t = tk(key); if (!t || t.local) return { ok: false };
+  t.local = { status: 'claimed' }; audit('ticket.claim', key); return { ok: true };
+}
+function startReview(key) {
+  const t = tk(key); if (!t) return { ok: false };
+  if (!t.local) t.local = { status: 'claimed' };
+  if (['claimed', 'parked'].includes(status(t)) || status(t) === 'reviewing') t.local.status = status(t) === 'parked' ? 'parked' : 'reviewing';
+  t.reviewed = false; t.reviewedSeq = null; audit('review.start', key); return { ok: true };
+}
+function markReviewed(key) {
+  const t = tk(key); if (!t) return { ok: false };
+  t.reviewed = true; t.reviewedSeq = Math.max(...t.prs.map((p) => p.updatedSeq), 0);
+  if (status(t) === 'claimed') t.local.status = 'reviewing';
+  audit('review.mark_reviewed', key); return { ok: true };
+}
+function toggleChecklist(key, i) { const t = tk(key); t.checklist[i].done = !t.checklist[i].done; }
+function addChecklist(key, text) { const t = tk(key); if (text && text.trim()) t.checklist.push({ text: text.trim(), done: false }); }
+function setLink(key, repo, branch) { const t = tk(key); t.link[repo] = branch; audit('links.choose', key, repo, 'success', branch); }
+function markSeen(key) { const t = tk(key); if (t) t.seenN = maxN(t); }
+function reclaim(key) {
+  const t = tk(key); t.local = { status: 'claimed' }; t.reviewed = false; t.reviewedSeq = null; t.merges = []; t.deploy = {}; t.drafts = []; t.newCommits = false; t.prep = null;
+  audit('ticket.reclaim', key, null, 'success', 'back in Review, treated as new'); return { ok: true };
+}
+function untrackDone(key) { const t = tk(key); t.local = { status: 'done' }; audit('ticket.done', key); }
+
+/* ---------------------------- activation ---------------------------- */
+const baselineFor = (repo, hotfix, choice) => {
+  if (!hotfix) return REPOS[repo].base;
+  return choice === 'production' ? REPOS[repo].prod : choice === 'uat' ? 'uat' : REPOS[repo].base;
+};
+function activationPlan(t, choice) {
+  const errors = []; const rows = [];
+  const plans = Object.fromEntries(repoPlan(t).map((p) => [p.repo, p]));
+  for (const repo of Object.keys(REPOS)) {
+    const p = plans[repo];
+    if (p && p.ambiguous) errors.push(repo + ': ' + p.cands.length + ' branches match ' + t.key + '. Choose one on the Overview tab.');
+    if (p && p.chosen) rows.push({ repo, role: 'ticket', branch: p.chosen });
+    else rows.push({ repo, role: 'baseline', branch: baselineFor(repo, isHotfix(t), choice) });
+  }
+  const overlayRow = rows.find((r) => REPOS[r.repo].overlayConsumer && rows.find((x) => x.repo === REPOS[r.repo].consumes && x.role === 'ticket'));
+  const overlay = overlayRow ? { repo: overlayRow.repo, provider: REPOS[overlayRow.repo].consumes } : null;
+  return { errors, rows, overlay };
+}
+function activate(key, choice) {
+  const t = tk(key);
+  if (!t || !t.local) return { ok: false, errors: ['Claim the ticket first.'] };
+  const other = activeTicket();
+  if (other) return { ok: false, errors: [other.key + ' is already active. Park or finish it first.'] };
+  if (!['claimed', 'reviewing', 'parked', 'integrated'].includes(status(t))) return { ok: false, errors: ['A ' + status(t) + ' ticket cannot be activated.'] };
+  if (isHotfix(t) && !choice) return { ok: false, needBaseline: true };
+  const plan = activationPlan(t, choice);
+  if (plan.errors.length) return { ok: false, errors: plan.errors };
+  audit('activation.start', key);
+  const records = []; const warnings = [];
+  for (const r of plan.rows) {
+    const prev = S.ws.branches[r.repo]; const stash = !!S.ws.dirty[r.repo];
+    S.ws.branches[r.repo] = r.branch; if (stash) S.ws.dirty[r.repo] = false;
+    records.push({ repo: r.repo, role: r.role, branch: r.branch, prev, stash, label: stash ? 'de:' + key + ':' + r.repo : null });
+    audit('activation.repo_switched', key, r.repo, 'success', (r.role === 'ticket' ? 'ticket branch ' : 'baseline ') + r.branch);
+  }
+  if (plan.overlay) audit('overlay.apply', key, plan.overlay.repo, 'success', 'composer path repository -> ../' + plan.overlay.provider + ', constraint "*"');
+  t.act = { startedMs: S.ms, records, overlay: plan.overlay, choice: choice || null };
+  t.local.status = 'active'; t.prep = null;
+  audit('activation.complete', key);
+  return { ok: true, rows: plan.rows, records, overlay: plan.overlay, warnings };
+}
+function deactivate(key, target, by) {
+  const t = tk(key);
+  if (!t || !t.act) return { ok: false, errors: ['Nothing to restore for ' + key + '.'] };
+  const restored = []; let overlayReverted = null;
+  if (t.act.overlay) { overlayReverted = t.act.overlay; audit('overlay.revert', key, t.act.overlay.repo, 'success', 'composer.json and composer.lock restored, composer install run'); }
+  for (const r of [...t.act.records].reverse()) {
+    S.ws.branches[r.repo] = r.prev; if (r.stash) S.ws.dirty[r.repo] = true;
+    restored.push({ repo: r.repo, to: r.prev, stash: r.label });
+    audit('deactivation.repo_restored', key, r.repo, 'success', 'back on ' + r.prev + (r.stash ? ', stash popped' : ''));
+  }
+  t.timeMs += S.ms - t.act.startedMs; t.act = null;
+  t.local.status = target || 'parked';
+  audit(by === 'finalize' ? 'integration.finalize' : 'deactivation.complete', key);
+  return { ok: true, restored, overlayReverted };
+}
+
+/* ---------------------------- integration ---------------------------- */
+function prepare(key) {
+  const t = tk(key);
+  if (!t || status(t) !== 'active') return { ok: false, error: 'The ticket must be active (tested locally) before it can be integrated.' };
+  const rows = touchedRepos(t).map((p) => {
+    const repo = p.repo;
+    const done = t.merges.find((m) => m.repo === repo);
+    if (done) return { repo, outcome: 'alreadyPushed', commit: done.commit };
+    if (S.sim.conflict === repo) return { repo, outcome: 'conflict', files: ['src/session.rs'], with: 'PROJ-127' };
+    if (S.sim.leak === repo) return { repo, outcome: 'blocked', reason: 'overlay leak: composer.json adds a path repository (commit ' + hex('leak' + repo) + ')' };
+    const files = t.prs.filter((x) => x.repo === repo).flatMap((x) => x.files);
+    const overlaps = [];
+    for (const o of S.tickets) {
+      if (o.key === t.key || !o.merges.some((m) => m.repo === repo)) continue;
+      for (const f of o.prs.filter((x) => x.repo === repo).flatMap((x) => x.files)) if (files.some((g) => g.path === f.path)) overlaps.push({ key: o.key, file: f.path });
+    }
+    return { repo, outcome: 'ready', branch: p.chosen, commits: 2 + files.length, files: files.length, uatBefore: hex('u' + repo + S.seq), merge: hex('m' + repo + key + S.seq), overlaps };
+  });
+  t.prep = { at: S.ms, rows };
+  audit('integration.prepare', key, null, rows.every((r) => r.outcome === 'ready' || r.outcome === 'alreadyPushed') ? 'success' : 'failure', rows.map((r) => r.repo + ':' + r.outcome).join(' '));
+  return { ok: true, prep: t.prep };
+}
+const prepPushable = (t) => !!t.prep && t.prep.rows.some((r) => r.outcome === 'ready') && t.prep.rows.every((r) => r.outcome === 'ready' || r.outcome === 'alreadyPushed');
+function push(key) {
+  const t = tk(key); const prep = t && t.prep;
+  if (!prep || !prepPushable(t)) return { ok: false, error: 'Nothing is ready to push. Prepare the integration again.' };
+  audit('git.push_uat.attempted', key, null, 'skipped', prep.rows.map((r) => r.repo + ' ' + (r.merge || r.commit) + ':refs/heads/uat').join('; '));
+  const results = [];
+  for (const r of prep.rows) {
+    if (r.outcome === 'alreadyPushed') { results.push({ repo: r.repo, result: 'AlreadyPushed' }); continue; }
+    if (S.sim.uatMoved) {
+      results.push({ repo: r.repo, result: 'Rejected', reason: 'uat moved on the remote since you prepared' });
+      audit('git.push_uat.repo', key, r.repo, 'failure', 'rejected: uat moved'); S.sim.uatMoved = false; t.prep = null; break;
+    }
+    t.merges.push({ repo: r.repo, commit: r.merge, at: clock() });
+    t.deploy[r.repo] = { state: 'pending', run: ++S.run, since: S.ms, step: 'Queued' };
+    results.push({ repo: r.repo, result: 'Pushed', commit: r.merge });
+    audit('git.push_uat.repo', key, r.repo, 'success', r.uatBefore + ' -> ' + r.merge);
+  }
+  const allPushed = touchedRepos(t).every((p) => t.merges.some((m) => m.repo === p.repo));
+  let finalized = false;
+  if (allPushed && results.every((x) => x.result === 'Pushed' || x.result === 'AlreadyPushed')) {
+    audit('git.push_uat', key, null, 'success', results.length + ' repos');
+    deactivate(key, 'integrated', 'finalize'); t.prep = null; finalized = true;
+  } else audit('git.push_uat', key, null, 'failure', 'not every repo was pushed');
+  return { ok: true, results, finalized };
+}
+function rerun(key, repo) {
+  const t = tk(key); const d = t && t.deploy[repo]; if (!d) return { ok: false };
+  d.run = ++S.run; d.state = 'pending'; d.since = S.ms; d.step = 'Queued'; if (S.sim.failDeploy === repo) S.sim.failDeploy = null;
+  audit('bitbucket.pipeline_rerun', key, repo, 'success', 'new run #' + d.run); return { ok: true };
+}
+function stepDeploy() {
+  for (const t of S.tickets) for (const [repo, d] of Object.entries(t.deploy)) {
+    if (d.state === 'deployed' || d.state === 'failed') continue;
+    const el = S.ms - d.since;
+    if (el < 3000) { d.state = 'pending'; d.step = 'Queued'; }
+    else if (el < 8000) { d.state = 'running'; d.step = el < 5000 ? 'Build' : el < 6500 ? 'Test' : 'Deploy alpha'; }
+    else {
+      d.state = S.sim.failDeploy === repo ? 'failed' : 'deployed'; d.step = d.state === 'failed' ? 'Deploy alpha' : 'Deploy alpha';
+      toast(t.key + ' ' + repo + ' pipeline #' + d.run + (d.state === 'failed' ? ' failed' : ' deployed to alpha'), d.state === 'failed' ? 'bad' : 'ok');
+    }
+  }
+}
+function advance(ms) { S.ms += ms; stepDeploy(); S.ui.toasts = S.ui.toasts.filter((x) => x.until > S.ms); }
+
+const allDeployed = (t) => t.merges.length > 0 && touchedRepos(t).every((p) => t.merges.some((m) => m.repo === p.repo)) && t.merges.every((m) => t.deploy[m.repo] && t.deploy[m.repo].state === 'deployed');
+const anyFailed = (t) => t.merges.filter((m) => t.deploy[m.repo] && t.deploy[m.repo].state === 'failed');
+const anyRunning = (t) => t.merges.some((m) => t.deploy[m.repo] && ['pending', 'running'].includes(t.deploy[m.repo].state));
+
+/* ---------------------------- announce ---------------------------- */
+const draftOf = (t, kind) => t.drafts.filter((d) => d.kind === kind).slice(-1)[0] || null;
+function composeDraft(key) {
+  const t = tk(key); if (!t || !allDeployed(t)) return { ok: false, error: 'Every touched repo must be deployed first.' };
+  const lines = t.merges.map((m) => { const pr = t.prs.find((p) => p.repo === m.repo); const d = t.deploy[m.repo]; return '• ' + m.repo + '  PR #' + (pr ? pr.id : '-') + ' · pipeline #' + d.run + ' · https://ci.example/' + REPOS[m.repo].host + '/' + d.run; });
+  t.drafts.push({ id: 'd' + nextSeq(), kind: 'comment', body: 'Deployed to alpha:\n' + lines.join('\n'), status: 'draft' });
+  audit('draft.compose', key); return { ok: true };
+}
+function postComment(key, draftId) {
+  const t = tk(key); const d = t.drafts.find((x) => x.id === draftId);
+  if (!d || d.status === 'posted') return { ok: false, error: 'That draft was already posted.' };
+  d.status = 'posted'; t.comments.push({ n: maxN(t) + 1, who: ME, at: 'today ' + clock(), body: d.body.split('\n').map((x) => P(x)) });
+  t.seenN = maxN(t); audit('jira.comment', key, null, 'success', 'deploy comment'); return { ok: true };
+}
+function transition(key) {
+  const t = tk(key); const d = draftOf(t, 'comment');
+  if (!d || d.status !== 'posted') return { ok: false, error: 'Post the deploy comment first.' };
+  t.jira = JIRA.alpha; audit('jira.transition', key, null, 'success', JIRA.review + ' -> ' + JIRA.alpha); return { ok: true };
+}
+function postFreeComment(key, text) {
+  const t = tk(key); t.comments.push({ n: maxN(t) + 1, who: ME, at: 'today ' + clock(), body: text.split('\n').map((x) => P(x)) });
+  t.seenN = maxN(t); audit('jira.comment', key, null, 'success', 'free comment'); return { ok: true };
+}
+
+/* ---------------------------- review writes ---------------------------- */
+function approve(key, repo, prId) {
+  const t = tk(key); const pr = t.prs.find((p) => p.repo === repo && p.id === prId); const me = pr.reviewers.find((r) => r.name === ME);
+  me.approved = true; audit('bitbucket.pr_approve', key, repo, 'success', '#' + prId);
+  if (t.prs.every((p) => p.reviewers.find((r) => r.name === ME).approved)) { t.local.status = 'done'; audit('ticket.done', key); }
+  return { ok: true };
+}
+function requestChanges(key, repo, prId, text) {
+  const t = tk(key); const pr = t.prs.find((p) => p.repo === repo && p.id === prId);
+  pr.threads.push({ id: 'th' + nextSeq(), file: pr.files[0].path, line: null, author: ME, text: 'Changes requested: ' + text, resolved: false, replies: [] });
+  audit('bitbucket.pr_request_changes', key, repo, 'success', '#' + prId); return { ok: true };
+}
+function addThread(key, prId, file, line, text) {
+  const t = tk(key); const pr = t.prs.find((p) => p.id === prId);
+  pr.threads.push({ id: 'th' + nextSeq(), file, line, author: ME, text, resolved: false, replies: [] });
+  audit('bitbucket.pr_comment', key, pr.repo, 'success', file + ':' + line); return { ok: true };
+}
+
+/* ---------------------------- fake sync ---------------------------- */
+function syncStart() {
+  if (S.sync.running) return { ok: false };
+  S.sync.running = true; S.sync.lastAttempt = S.ms; return { ok: true };
+}
+function syncFinish() {
+  const report = []; S.sync.running = false;
+  if (S.sim.offline) { S.sync.lastError = 'network unreachable'; S.sync.report = [{ src: 'Jira (acli)', ok: false, text: 'network unreachable, cache kept' }, { src: 'Bitbucket (bkt)', ok: false, text: 'network unreachable, cache kept' }]; audit('sync', null, null, 'failure', 'offline'); return { ok: false, report: S.sync.report }; }
+  report.push({ src: 'Jira (acli)', ok: true, text: 'pool refreshed' });
+  if (S.providers.bkt.ready) report.push({ src: 'Bitbucket (bkt)', ok: true, text: 'PRs and pipelines refreshed' });
+  else report.push({ src: 'Bitbucket (bkt)', ok: false, text: 'signed out, cache kept. Run bkt auth login' });
+  const ev = script[S.sync.script]; if (ev) { ev.apply(S); S.sync.script++; report.push({ src: 'Jira (acli)', ok: true, text: ev.text }); toast(ev.text, 'info'); }
+  S.sync.lastOk = S.ms; S.sync.lastError = report.some((r) => !r.ok) ? 'partial' : null; S.sync.report = report;
+  audit('sync', null, null, S.sync.lastError ? 'failure' : 'success', report.map((r) => r.text).join('; '));
+  return { ok: true, report };
+}
+function syncNow() { syncStart(); return syncFinish(); }
+
+/* ---------------------------- simulate (dev panel) ---------------------------- */
+const SIM = {
+  mention(key) { const t = tk(key); t.comments.push({ n: maxN(t) + 1, who: 'Jane Doe', at: 'today ' + clock(), body: [P('@[you] can you look at this again? It still misbehaves on staging.')] }); toast('New comment mentioning you on ' + key, 'info'); },
+  signOff(key) { const t = tk(key); t.jira = 'Done'; toast(key + ' moved to Done in Jira (signed off)', 'ok'); },
+  returned(key) { const t = tk(key); t.jira = JIRA.returned; t.comments.push({ n: maxN(t) + 1, who: 'Jane Doe', at: 'today ' + clock(), body: [P('Sent back. @[you] please re-check.')] }); toast(key + ' was returned in Jira', 'warn'); },
+  backToReview(key) { const t = tk(key); t.jira = JIRA.review; toast(key + ' is back in the Review column', 'info'); },
+  newCommits(key) { const t = tk(key); t.prs.forEach((p) => { p.updatedSeq += 1; }); t.newCommits = true; toast('New commits pushed to the branches of ' + key, 'info'); },
+  toggle(name, val) { S.sim[name] = val; },
+  bkt(ready) { S.providers.bkt.ready = ready; },
+  jira(ready) { S.providers.jira.ready = ready; },
+};
+
+/* ============================ next-action rules ============================
+   Simplified from the real engine: pure over S, ranked, each with a stated reason. */
+const BANDS = { deploy_failed: 1000, integration_blocked: 990, returned_to_review: 850, returned_mention: 840, re_review: 830, start_review: 820, finish_review: 810,
+  approve_prs: 690, integrate_ready: 680, push_ready: 675, compose_deploy_comment: 670, post_deploy_comment: 665, transition_alpha: 660, remerge_needed: 645,
+  activate_reviewed: 640, park_active: 620, deploy_waiting: 600, claim_new: 480, adapter_unavailable: 299, sync_stale: 1200 };
+
+function suggest() {
+  const out = []; const act = activeTicket();
+  const push_ = (s) => { out.push(Object.assign({ level: 'local', info: false }, s, { priority: (BANDS[s.rule] || 100) + (s.rank ? -s.rank * 10 : 0) })); };
+
+  // sync
+  const age = minsAgo(S.sync.lastOk); const sinceAttempt = minsAgo(S.sync.lastAttempt);
+  if (!S.sync.running && ((S.sync.lastError && sinceAttempt >= 15) || (!S.sync.lastError && age >= 6 && sinceAttempt >= 1)))
+    push_({ id: '-:sync_stale:all', ticket: null, rule: 'sync_stale', title: 'Sync now', reason: 'Data was last refreshed ' + age + ' min ago.', level: 'auto', act: { do: 'sync' }, hash: 'sync' });
+
+  for (const t of S.tickets) {
+    const st = status(t); const hot = isHotfix(t); const key = t.key;
+    const need = (rule, sug) => push_(Object.assign({ ticket: key, rule, hotfix: hot }, sug));
+
+    // returned + mentioned, or any unseen mention
+    const ms = unseenMentions(t);
+    if (ms.length && ['integrated', 'done', null, 'claimed', 'reviewing', 'parked', 'active'].includes(st))
+      need('returned_mention', { id: key + ':returned_mention', title: (t.jira === JIRA.returned ? 'Returned: you were mentioned' : 'You were mentioned'), reason: ms[ms.length - 1].who + ' mentioned you on ' + key + ' (' + ms.length + ' unseen comment' + (ms.length > 1 ? 's' : '') + ').', info: true, act: { do: 'open', key, tab: 'overview' }, hash: 'm' + ms.length });
+    if (t.jira === JIRA.review && (st === 'integrated' || st === 'done') && !t.newCommits && draftOf(t, 'comment') && draftOf(t, 'comment').status === 'posted' && t.merges.length)
+      need('returned_to_review', { id: key + ':returned_to_review', title: 'Back in the Review column', reason: key + ' returned to Review after alpha. Treat it as new: claim it again.', act: { do: 'reclaim', key }, hash: 'rr' });
+
+    if (!st && t.jira === JIRA.review) continue;   // unclaimed handled by claim_new below
+    if (st === 'claimed') need('start_review', { id: key + ':start_review', title: 'Start the review', reason: key + ' is claimed. Read its ' + t.prs.length + ' PR' + (t.prs.length > 1 ? 's' : '') + ' against ' + [...new Set(t.prs.map((p) => p.dst))].join(', ') + '.', act: { do: 'startReview', key }, hash: 's' });
+    if (st === 'reviewing' && !t.reviewed) need('finish_review', { id: key + ':finish_review', title: 'Finish the review', reason: 'Review in progress. Mark it reviewed when the diffs and comments are done.', act: { do: 'open', key, tab: 'review' }, hash: 'f' });
+    if (t.reviewed && t.prs.some((p) => p.updatedSeq > t.reviewedSeq) && ['reviewing', 'parked', 'claimed'].includes(st))
+      need('re_review', { id: key + ':re_review', title: 'Re-review: new commits', reason: 'The branches moved since you reviewed ' + key + '.', act: { do: 'startReview', key }, hash: 'rv' + Math.max(...t.prs.map((p) => p.updatedSeq)) });
+
+    if (!act && t.reviewed && ['reviewing', 'parked'].includes(st) && t.jira !== JIRA.returned)
+      need('activate_reviewed', { id: key + ':activate', title: hot ? 'Activate hotfix (choose baseline)' : 'Activate for local test', reason: 'Reviewed' + (st === 'parked' ? ' and parked' : '') + '. Nothing is active. This switches the touched repos to the ticket branches and stashes local changes.', act: { do: 'activate', key }, hash: 'a' });
+    if (act && act.key !== key && hot && t.reviewed && ['reviewing', 'parked'].includes(st))
+      push_({ id: act.key + ':park_active:' + key, ticket: act.key, rule: 'park_active', hotfix: true, title: 'Park ' + act.key + ' for the hotfix ' + key, reason: key + ' is a hotfix waiting to be tested. Parking restores the repos and reverts the overlay.', act: { do: 'park', key: act.key }, hash: 'pa' });
+
+    if (st === 'active') {
+      const done = t.checklist.length > 0 && t.checklist.every((c) => c.done); const pushed = touchedRepos(t).every((p) => t.merges.some((m) => m.repo === p.repo));
+      const prepped = t.prep && t.prep.rows.some((r) => r.outcome === 'conflict' || r.outcome === 'blocked');
+      if (done && !t.prep && !pushed) need('integrate_ready', { id: key + ':integrate_ready', title: 'Prepare integration to uat', reason: 'Checklist complete (' + t.checklist.length + ' of ' + t.checklist.length + '). ' + touchedRepos(t).length + ' repo' + (touchedRepos(t).length > 1 ? 's' : '') + ' touched. Preparing pushes nothing.', act: { do: 'prepare', key }, hash: 'i' });
+      if (t.prep && prepPushable(t)) need('push_ready', { id: key + ':push_ready', title: 'Review and push to uat', reason: 'Merge ready in ' + t.prep.rows.filter((r) => r.outcome === 'ready').map((r) => r.repo).join(', ') + '. Pushing deploys to alpha.', level: 'external', act: { do: 'pushAsk', key }, hash: 'p' + t.prep.at });
+      if (prepped) t.prep.rows.filter((r) => r.outcome === 'conflict' || r.outcome === 'blocked').forEach((r) => need('integration_blocked', { id: key + ':blocked:' + r.repo, title: r.outcome === 'conflict' ? 'Resolve the uat conflict in ' + r.repo : 'Integration blocked in ' + r.repo, reason: r.outcome === 'conflict' ? 'Merging into uat conflicts with ' + r.with + ' in ' + r.files.join(', ') + '. Nothing was pushed.' : r.reason, info: true, act: { do: 'open', key, tab: 'ship' }, hash: r.outcome + r.repo }));
+    }
+
+    // A returned ticket is only your business if you are mentioned (handled above) or it fails to deploy.
+    const sentBack = t.jira === JIRA.returned;
+    if (t.merges.length) {
+      for (const m of anyFailed(t)) {
+        const d = t.deploy[m.repo];
+        need('deploy_failed', { id: key + ':deploy_failed:' + m.repo, title: 'Deploy failed in ' + m.repo, reason: 'The deploy step of pipeline #' + d.run + ' failed after your push to uat.', info: false, level: 'external', needs: 'bkt', act: { do: 'rerunAsk', key, repo: m.repo }, hash: 'df' + d.run });
+      }
+      if (sentBack) continue;
+      if (anyRunning(t) && !anyFailed(t).length) need('deploy_waiting', { id: key + ':deploy_waiting', title: 'Waiting for pipelines', reason: t.merges.filter((m) => ['pending', 'running'].includes(t.deploy[m.repo].state)).map((m) => m.repo + ' #' + t.deploy[m.repo].run + ' (' + t.deploy[m.repo].step + ')').join(', ') + '.', info: true, level: 'auto', act: { do: 'open', key, tab: 'ship' }, hash: 'w' });
+      const d = draftOf(t, 'comment');
+      if (allDeployed(t) && !d) need('compose_deploy_comment', { id: key + ':compose', title: 'Draft the deploy comment', reason: 'Every touched repo is deployed to alpha. The draft lists each repo with its PR and pipeline.', act: { do: 'composeDraft', key }, hash: 'c' });
+      if (d && d.status === 'draft') need('post_deploy_comment', { id: key + ':post', title: 'Post the deploy comment to Jira', reason: 'A draft is ready. Edit it, then post.', level: 'external', needs: 'acli', act: { do: 'postAsk', key, draft: d.id }, hash: 'pc' + d.id });
+      if (d && d.status === 'posted' && t.jira === JIRA.review) need('transition_alpha', { id: key + ':transition', title: 'Move to ' + JIRA.alpha, reason: 'The comment is posted. Transition ' + JIRA.review + ' → ' + JIRA.alpha + '.', level: 'external', needs: 'acli', act: { do: 'transitionAsk', key }, hash: 't' });
+    }
+    if (st === 'integrated' && t.newCommits && !act) need('remerge_needed', { id: key + ':remerge', title: hot ? 'Re-merge needed (choose baseline)' : 'Re-merge needed', reason: 'The ticket branches have commits that uat lacks after your recorded merge. Activate it again, test, and integrate again.', act: { do: 'activate', key }, hash: 'rm' });
+    if (st === 'integrated' && isSignedOff(t)) {
+      t.prs.filter((p) => !p.reviewers.find((r) => r.name === ME).approved).forEach((p) => need('approve_prs', { id: key + ':approve:' + p.repo + '#' + p.id, title: 'Approve ' + REPOS[p.repo].host + ' #' + p.id, reason: key + ' passed testing (Jira: ' + t.jira + '). Approval is the last gate.', level: 'external', needs: 'bkt', act: { do: 'approveAsk', key, repo: p.repo, pr: p.id }, hash: 'ap' + p.id }));
+    }
+  }
+
+  // claim queue
+  const pool = S.tickets.filter((t) => !t.local && t.jira === JIRA.review).sort((a, b) => (PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]) || a.key.localeCompare(b.key, undefined, { numeric: true }));
+  pool.forEach((t, i) => push_({ id: t.key + ':claim_new', ticket: t.key, rule: 'claim_new', hotfix: isHotfix(t), rank: i, title: 'Claim ' + t.key, reason: 'In the Review column, priority ' + t.priority + (isHotfix(t) ? ', targets production (hotfix)' : '') + ', #' + (i + 1) + ' in your queue.', act: { do: 'claim', key: t.key }, hash: 'q', facts: { queue: i } }));
+
+  // hotfix boost, adapter availability
+  const res = out.map((s) => {
+    let p = s.priority; if (s.hotfix && s.priority >= 400 && s.rule !== 'park_active') p += 200;
+    if (s.needs && !S.providers[s.needs === 'acli' ? 'jira' : 'bkt'].ready) {
+      const name = s.needs === 'acli' ? 'acli' : 'bkt';
+      return Object.assign({}, s, { id: '-:adapter:' + name + ':' + s.rule, ticket: s.ticket, rule: 'adapter_unavailable', title: name + ' is signed out', reason: 'Cannot ' + s.title.toLowerCase() + ' until ' + name + ' is logged in. Run ' + name + ' auth login.', info: true, level: 'auto', act: { do: 'settings' }, priority: 299, hash: 'ad' });
+    }
+    return Object.assign({}, s, { priority: p });
+  });
+  const seen = new Set(); const uniq = res.filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)));
+  uniq.sort((a, b) => (b.priority - a.priority) || a.id.localeCompare(b.id));
+  uniq.forEach((s, i) => { s.rank = i + 1; s.state = sugState(s); });
+  return uniq;
+}
+function sugState(s) {
+  const r = S.responses[s.id]; if (!r) return 'open';
+  if (r.kind === 'dismissed') return r.hash === s.hash ? 'dismissed' : 'resurfaced';
+  if (r.kind === 'snoozed') return S.ms < r.until ? 'snoozed' : 'open';
+  return 'open';
+}
+const visibleSuggestions = () => suggest().filter((s) => s.state === 'open' || s.state === 'resurfaced');
+function dismiss(id) { const s = suggest().find((x) => x.id === id); S.responses[id] = { kind: 'dismissed', hash: s ? s.hash : '' }; audit('suggestion.dismiss', s && s.ticket, null, 'success', id); }
+function snooze(id, mins) { S.responses[id] = { kind: 'snoozed', until: S.ms + mins * MS_PER_MIN }; audit('suggestion.snooze', null, null, 'success', id + ' ' + mins + 'm'); }
+
+/* Test hook (node only) */
+if (typeof window === 'undefined') {
+  globalThis.__DE = { get S() { return S; }, reclaim, syncStart, syncFinish, reset() { S = newState(); script.length = 0; syncScript().forEach((e) => script.push(e)); }, tk, claim, startReview, markReviewed, toggleChecklist, activate, deactivate, prepare, push, rerun, advance, allDeployed,
+    composeDraft, postComment, transition, approve, syncNow, SIM, suggest, visibleSuggestions, dismiss, snooze, setLink, markSeen, repoPlan, isHotfix, draftOf, postFreeComment, addThread, requestChanges, activeTicket, unseenMentions };
+}
+
+'use strict';
+/* ============================ view helpers and shell ============================ */
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const attr = (o) => Object.entries(o || {}).map(([k, v]) => ' data-' + k + '="' + esc(v) + '"').join('');
+const btn = (label, act, args, cls, extra) => '<button class="btn ' + (cls || '') + '" data-act="' + act + '"' + attr(args) + (extra && extra.disabled ? ' disabled' : '') + (extra && extra.title ? ' title="' + esc(extra.title) + '"' : '') + '>' + label + '</button>';
+const pill = (text, cls) => '<span class="pill ' + (cls || '') + '">' + esc(text) + '</span>';
+const link = (label, act, args, cls) => '<a href="#" class="lnk ' + (cls || '') + '" data-act="' + act + '"' + attr(args) + '>' + label + '</a>';
+const jiraCls = (s) => (s === JIRA.returned ? 'warn' : s === JIRA.alpha ? 'acc' : JIRA.signed.includes(s) ? 'ok' : '');
+const localCls = (s) => ({ active: 'acc', integrated: 'ok', parked: '', done: 'ok', reviewing: 'warn', claimed: '' }[s] || '');
+const LOCAL_LABEL = { claimed: 'Claimed', reviewing: 'Reviewing', active: 'Active', parked: 'Parked', integrated: 'Integrated', done: 'Done' };
+const prioCls = (p) => (p === 'Highest' ? 'bad' : p === 'High' ? 'warn' : '');
+
+function blocksHtml(blocks) {
+  const inline = (x) => esc(x).replace(/@\[([^\]]+)\]/g, (m, n) => '<span class="mention' + (n.toLowerCase() === 'you' ? ' me' : '') + '">@' + (n.toLowerCase() === 'you' ? 'you' : n) + '</span>').replace(/(https?:\/\/[^\s<]+)/g, '<span class="url">$1</span>');
+  return blocks.map((b) => {
+    if (b.t === 'p') return '<p>' + inline(b.x) + '</p>';
+    if (b.t === 'h') return '<h4>' + esc(b.x) + '</h4>';
+    if (b.t === 'ul') return '<ul>' + b.items.map((i) => '<li>' + inline(i) + '</li>').join('') + '</ul>';
+    if (b.t === 'code') return '<pre class="code">' + esc(b.x) + '</pre>';
+    return '';
+  }).join('');
+}
+
+/* ---------------- ticket progress (idea: one stepper on every ticket screen) ---------------- */
+const STEPS = ['Claimed', 'Reviewed', 'Testing', 'On uat', 'Deployed', 'Announced', 'Alpha', 'Signed off', 'Approved'];
+function progressIndex(t) {
+  const st = status(t); const d = draftOf(t, 'comment');
+  if (st === 'done') return 9;
+  if (st === 'integrated' || (t.merges.length && st !== 'active')) {
+    if (isSignedOff(t)) return 7;
+    if (t.jira === JIRA.alpha) return 6;
+    if (d && d.status === 'posted') return 5;
+    if (allDeployed(t)) return 4;
+    return 3;
+  }
+  if (st === 'active') return 2;
+  if (t.reviewed) return 2 - 0.5;
+  if (st) return 1;
+  return 0;
+}
+function stepper(t) {
+  const idx = progressIndex(t);
+  return '<ol class="stepper">' + STEPS.map((s, i) => '<li class="' + (i < idx ? 'done' : i === Math.floor(idx) || (idx % 1 && i === Math.ceil(idx)) ? 'now' : '') + '"><i></i><span>' + s + '</span></li>').join('') + '</ol>';
+}
+
+/* ---------------- left sidebar (fixed) ---------------- */
+const groupOf = {
+  pool: (t) => !t.local && t.jira === JIRA.review,
+  mine: (t) => ['claimed', 'reviewing'].includes(status(t)) && t.jira !== JIRA.returned,
+  active: (t) => status(t) === 'active',
+  parked: (t) => status(t) === 'parked',
+  awaiting: (t) => status(t) === 'integrated' && t.jira !== JIRA.returned,
+  returned: (t) => t.jira === JIRA.returned,
+  done: (t) => status(t) === 'done',
+  all: () => true,
+};
+const GROUP_LABEL = { pool: 'Review pool', mine: 'In review', active: 'Active', parked: 'Parked', awaiting: 'Awaiting alpha', returned: 'Returned', done: 'Done', all: 'All tickets' };
+const count = (g) => S.tickets.filter(groupOf[g]).length;
+
+function leftNav() {
+  const r = S.ui.route; const sug = visibleSuggestions().filter((s) => !s.info || s.level !== 'auto').length;
+  const it = (label, route, n, extra) => '<a href="#" class="nav ' + ((r.name === route.name && (route.group ? r.group === route.group : true) && (route.name !== 'ticket')) ? 'on' : '') + '" data-act="go"' + attr({ name: route.name, group: route.group || '' }) + '><span>' + label + '</span>' + (n != null ? '<b>' + n + '</b>' : '') + (extra || '') + '</a>';
+  const health = (name, ok) => '<div class="hp"><i class="dot ' + (ok ? 'ok' : 'warn') + '"></i><span>' + name + '</span><em>' + (ok ? 'ready' : 'signed out') + '</em></div>';
+  const act = activeTicket();
+  return '<div class="brand"><span class="logo">de</span><span class="proto">prototype</span></div>' +
+    it('Next', { name: 'next' }, sug) +
+    '<div class="grp">Tickets</div>' + ['pool', 'mine', 'active', 'parked', 'awaiting', 'returned', 'done'].map((g) => it(GROUP_LABEL[g], { name: 'tickets', group: g }, count(g))).join('') +
+    '<div class="grp">Environment</div>' + it('On uat', { name: 'env' }, null) + it('Workspace', { name: 'workspace' }, null) +
+    '<div class="grp">System</div>' + it('Audit log', { name: 'audit' }, S.audit.length) + it('Settings', { name: 'settings' }, null) + it('Change ideas', { name: 'ideas' }, null) +
+    '<div class="spacer"></div>' +
+    '<div class="prov">' + health('acli · Jira', S.providers.jira.ready) + health('bkt · Bitbucket', S.providers.bkt.ready) +
+    '<div class="fresh">' + (S.sync.running ? 'Syncing…' : S.sync.lastError ? '<span class="warn-t">Last sync: ' + esc(S.sync.lastError) + '</span>' : 'Synced ' + minsAgo(S.sync.lastOk) + ' min ago') + '</div></div>';
+}
+
+/* ---------------- top bar and now bar ---------------- */
+function crumb() {
+  const r = S.ui.route;
+  if (r.name === 'ticket') { const t = tk(r.key); return '<a href="#" data-act="go" data-name="tickets" data-group="all">Tickets</a><i>/</i><b class="key">' + esc(r.key) + '</b><span class="ct">' + esc(t ? t.title : '') + '</span>'; }
+  const L = { next: 'Next', tickets: GROUP_LABEL[r.group] || 'Tickets', env: 'On uat', workspace: 'Workspace', audit: 'Audit log', settings: 'Settings', ideas: 'Change ideas' };
+  return '<b>' + esc(L[r.name] || '') + '</b>';
+}
+function topBar() {
+  return '<div class="top"><button class="icon mob" data-act="toggleLeft" aria-label="Menu">☰</button><div class="crumb">' + crumb() + '</div><span class="sp"></span>' +
+    '<button class="search" data-act="palette">⌕ <span>Search or jump</span> <kbd>⌘K</kbd></button>' +
+    '<button class="btn" data-act="sync"' + (S.sync.running ? ' disabled' : '') + '>' + (S.sync.running ? '<span class="spin"></span> Syncing' : '↻ Sync') + '</button>' +
+    '<button class="btn ' + (S.ui.dev ? 'p' : '') + '" data-act="toggleDev">Simulate</button>' +
+    '<button class="icon" data-act="toggleRight" aria-label="Toggle details" title="Toggle right sidebar">▤</button></div>';
+}
+function nowBar() {
+  const t = activeTicket(); if (!t) return '';
+  const ov = t.act && t.act.overlay;
+  return '<div class="now"><span class="pill acc">▶ ACTIVE</span><a href="#" class="key" data-act="go" data-name="ticket" data-key="' + t.key + '" data-tab="test">' + t.key + '</a><span class="nt">' + esc(t.title) + '</span><span class="mono mute">' + fmtDur(durationMs(t)) + '</span>' +
+    (ov ? '<span class="pill warn" title="composer path repository in ' + ov.repo + '. Must be reverted before anything is pushed.">⚡ overlay on ' + ov.repo + '</span>' : '') +
+    '<span class="sp"></span>' + btn('Open', 'go', { name: 'ticket', key: t.key, tab: 'test' }, 'sm') + btn('Park…', 'parkAsk', { key: t.key }, 'sm') + '</div>';
+}
+
+/* ---------------- right sidebar (contextual) ---------------- */
+const kv = (k, v) => '<div class="kv"><span>' + k + '</span><b>' + v + '</b></div>';
+function activityFor(key, n) {
+  const rows = S.audit.filter((a) => !key || a.ticket === key).slice(0, n || 6);
+  if (!rows.length) return '<div class="faint pad">No activity yet.</div>';
+  return '<ul class="act">' + rows.map((a) => '<li><span class="mono faint">' + a.at + '</span> <span>' + esc(a.action) + '</span>' + (a.repo ? ' <em>' + esc(a.repo) + '</em>' : '') + (a.outcome === 'failure' ? ' ' + pill('failed', 'bad') : '') + '</li>').join('') + '</ul>';
+}
+function syncCard() {
+  const rep = S.sync.report.length ? '<ul class="rep">' + S.sync.report.map((r) => '<li>' + (r.ok ? '<i class="dot ok"></i>' : '<i class="dot bad"></i>') + '<span><b>' + esc(r.src) + '</b> ' + esc(r.text) + '</span></li>').join('') + '</ul>' : '<div class="faint">No sync yet this session.</div>';
+  return '<section class="rc"><h5>Sync</h5><div class="row sb"><span>' + (S.sync.running ? 'Syncing…' : 'Synced ' + minsAgo(S.sync.lastOk) + ' min ago') + '</span>' + btn('↻ Sync now', 'sync', {}, 'sm', { disabled: S.sync.running }) + '</div>' + rep + '<div class="faint small">Fake sync: each run applies the next scripted arrival (a new ticket, a new mention). Sync is read-only and never deletes cache on failure.</div></section>';
+}
+function rightNext() {
+  const t = activeTicket();
+  const now = t ? '<section class="rc"><h5>Now</h5><div><a href="#" class="key" data-act="go" data-name="ticket" data-key="' + t.key + '" data-tab="test">' + t.key + '</a> ' + esc(t.title) + '</div><div class="mute small">' + fmtDur(durationMs(t)) + ' · ' + t.checklist.filter((c) => c.done).length + '/' + t.checklist.length + ' checked</div><div class="row">' + btn('Open', 'go', { name: 'ticket', key: t.key, tab: 'test' }, 'sm') + '</div></section>'
+    : '<section class="rc"><h5>Now</h5><div class="mute">No active ticket. Activate a reviewed ticket to test it locally.</div></section>';
+  const q = S.tickets.filter(groupOf.pool).sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]).slice(0, 4);
+  const queue = '<section class="rc"><h5>Claim queue</h5>' + (q.length ? q.map((x) => '<div class="qi"><a href="#" class="key" data-act="go" data-name="ticket" data-key="' + x.key + '" data-tab="overview">' + x.key + '</a> ' + pill(x.priority, prioCls(x.priority)) + (isHotfix(x) ? ' ' + pill('HOTFIX', 'hot') : '') + '<div class="mute small">' + esc(x.title) + '</div></div>').join('') : '<div class="faint">Empty.</div>') + '</section>';
+  return now + syncCard() + queue + '<section class="rc"><h5>Recent activity</h5>' + activityFor(null, 6) + '</section>';
+}
+function rightTicket(t) {
+  const hot = isHotfix(t); const st = status(t);
+  const prs = t.prs.map((p) => { const d = t.deploy[p.repo]; const ap = p.reviewers.filter((r) => r.approved).length;
+    return '<div class="qi"><div class="row sb"><span class="mono">' + esc(p.repo) + ' #' + p.id + '</span>' + pill('open', '') + '</div><div class="mute small">' + esc(p.src) + ' → ' + pill(p.dst, p.dst === REPOS[p.repo].prod && REPOS[p.repo].prod !== REPOS[p.repo].base ? 'hot' : '') + '</div><div class="small">' + ap + '/' + p.reviewers.length + ' approvals' + (d ? ' · pipeline #' + d.run + ' ' + pill(d.state, d.state === 'deployed' ? 'ok' : d.state === 'failed' ? 'bad' : 'warn') : '') + '</div></div>'; }).join('');
+  return '<section class="rc"><h5>Status</h5>' + kv('Jira', pill(t.jira, jiraCls(t.jira))) + kv('Local', st ? pill(LOCAL_LABEL[st], localCls(st)) : pill('not claimed', '')) + kv('Kind', hot ? pill('HOTFIX', 'hot') : 'Normal') + kv('Time', fmtDur(durationMs(t))) + kv('Reviewed', t.reviewed ? pill('yes', 'ok') : 'no') + '</section>' +
+    '<section class="rc"><h5>Details</h5>' + kv('Type', esc(t.type)) + kv('Priority', pill(t.priority, prioCls(t.priority))) + kv('Assignee', esc(t.assignee)) + kv('Reporter', esc(t.reporter)) + kv('Sprint', esc(t.sprint)) + kv('Epic', esc(t.epic)) + kv('Fix version', esc(t.fixVersion)) + kv('Estimate', esc(t.estimate)) +
+    kv('Components', t.components.map((c) => pill(c)).join(' ')) + kv('Labels', t.labels.map((c) => pill(c)).join(' ') || '–') + kv('Created', esc(t.created)) + kv('Updated', esc(t.updated)) + '</section>' +
+    '<section class="rc"><h5>Pull requests</h5>' + prs + '</section>' +
+    (t.links.length ? '<section class="rc"><h5>Linked issues</h5>' + t.links.map((l) => '<div class="qi"><span class="faint small">' + esc(l.rel) + '</span> ' + (tk(l.key) ? link('<span class="key">' + esc(l.key) + '</span>', 'go', { name: 'ticket', key: l.key, tab: 'overview' }) : '<span class="key">' + esc(l.key) + '</span>') + ' ' + pill(l.status, jiraCls(l.status)) + '<div class="mute small">' + esc(l.title) + '</div></div>').join('') + '</section>' : '') +
+    '<section class="rc"><h5>Activity</h5>' + activityFor(t.key, 8) + '</section>';
+}
+function rightPlain(name) {
+  const hints = {
+    tickets: 'Ordered by Jira priority, then your own order. Open a ticket to see its description, comments, PRs and pipelines.',
+    env: 'Shows what is on uat in each repo right now, and which tickets could collide. uat accumulates tickets, so this is the picture to check before pushing.',
+    workspace: 'Start and stop keep the CLI meaning: dependency order, with a guard for uncommitted or unpushed work.',
+    audit: 'Every external write is audited before it happens (an "attempted" entry) and after (the outcome). Append-only.',
+    settings: 'The app never stores tokens. Each tool keeps its own login.',
+    ideas: 'Proposals for changing the design. Ones marked built are already in this prototype.',
+  };
+  return '<section class="rc"><h5>About this screen</h5><div class="mute">' + hints[name] + '</div></section>' + syncCard() + '<section class="rc"><h5>Recent activity</h5>' + activityFor(null, 6) + '</section>';
+}
+function rightPanel() {
+  const r = S.ui.route;
+  if (r.name === 'ticket' && tk(r.key)) return rightTicket(tk(r.key));
+  if (r.name === 'next') return rightNext();
+  return rightPlain(r.name);
+}
+
+'use strict';
+/* ============================ screens ============================ */
+
+/* ---------------- Next ---------------- */
+function sugCard(s) {
+  const lvl = s.level === 'external' ? pill('sends to a remote', 'bad') : s.level === 'auto' ? pill('automatic', '') : pill('local', '');
+  const labelFor = { sync: 'Sync now', claim: 'Claim', startReview: 'Start review', activate: 'Activate…', prepare: 'Prepare integration', pushAsk: 'Review & push to uat…', composeDraft: 'Draft comment', postAsk: 'Review & post…', transitionAsk: 'Transition…', approveAsk: 'Approve…', rerunAsk: 'Re-run…', open: 'Open', park: 'Park…', reclaim: 'Claim again', settings: 'Open Settings', markReviewed: 'Mark reviewed' };
+  const primary = btn(labelFor[s.act.do] || 'Do', 'sug', { id: s.id }, s.level === 'external' ? 'p' : s.info ? '' : 'p');
+  const extra = s.act.do === 'open' || s.act.do === 'rerunAsk' ? '' : '';
+  return '<article class="card sug ' + (s.state === 'resurfaced' ? 'res' : '') + '"><div class="rk">' + s.rank + '</div><div class="sb-main">' +
+    '<div class="row">' + (s.hotfix ? pill('HOTFIX', 'hot') : '') + (s.info ? pill('info', '') : '') + (s.ticket ? '<a href="#" class="key" data-act="go" data-name="ticket" data-key="' + s.ticket + '" data-tab="overview">' + s.ticket + '</a>' : '') + '<b class="tt">' + esc(s.title) + '</b>' + (s.state === 'resurfaced' ? '<span class="dotnew" title="Came back because the facts changed"></span>' : '') + '</div>' +
+    '<div class="why">' + esc(s.reason) + '</div>' +
+    '<div class="row sb"><span class="row">' + primary + extra + lvl + '</span><span class="row small"><span class="faint">Snooze</span>' + btn('2m', 'snoozeSug', { id: s.id, m: 2 }, 'g sm') + btn('10m', 'snoozeSug', { id: s.id, m: 10 }, 'g sm') + btn('Dismiss', 'dismissSug', { id: s.id }, 'g sm') + '</span></div></div></article>';
+}
+function viewNext() {
+  const all = suggest(); const shown = S.ui.showAllSug ? all : all.filter((s) => s.state === 'open' || s.state === 'resurfaced');
+  const hidden = all.length - all.filter((s) => s.state === 'open' || s.state === 'resurfaced').length;
+  return '<div class="row sb"><h2>Next</h2><label class="chk"><input type="checkbox" data-act="toggleAllSug" ' + (S.ui.showAllSug ? 'checked' : '') + '> show dismissed and snoozed (' + hidden + ')</label></div>' +
+    '<p class="lede">Ranked by what unblocks you first. Each card says why it exists. Buttons that send something to a remote end in “…” and open a preview you must confirm.</p>' +
+    (shown.length ? '<div class="stack">' + shown.map((s) => s.state === 'dismissed' || s.state === 'snoozed' ? '<div class="dim-card">' + sugCard(s).replace('<article class="card sug', '<article class="card sug muted') + '<div class="small faint pad">' + s.state + ' · ' + btn('Undo', 'undoSug', { id: s.id }, 'g sm') + '</div></div>' : sugCard(s)).join('') + '</div>'
+      : '<div class="empty"><b>Nothing to do.</b><div>Everything is synced and no ticket needs you. Sync to look for new work.</div>' + btn('↻ Sync', 'sync', {}, 'p') + '</div>');
+}
+
+/* ---------------- ticket list ---------------- */
+function ticketRow(t) {
+  const st = status(t); const un = unseenCount(t); const rv = t.reviewed && t.prs.some((p) => p.updatedSeq > t.reviewedSeq);
+  const d = t.deploy; const dep = t.merges.length ? (allDeployed(t) ? pill('deployed', 'ok') : anyFailed(t).length ? pill('failed', 'bad') : pill('deploying', 'warn')) : '';
+  return '<tr class="hover" data-act="go" data-name="ticket" data-key="' + t.key + '" data-tab="overview"><td class="key">' + t.key + '</td><td>' + pill(t.priority, prioCls(t.priority)) + '</td><td><b>' + esc(t.title) + '</b>' + (isHotfix(t) ? ' ' + pill('HOTFIX', 'hot') : '') + '<div class="mute small">' + esc(t.type) + ' · ' + esc(t.assignee) + '</div></td><td>' + pill(t.jira, jiraCls(t.jira)) + '</td><td>' + (st ? pill(LOCAL_LABEL[st], localCls(st)) : '<span class="faint">unclaimed</span>') + '</td><td>' + t.prs.map((p) => '<span class="mono">' + p.repo + '</span>').join(' ') + '</td><td>' + dep + (un ? ' ' + pill(un + ' new', 'acc') : '') + (rv ? ' ' + pill('new commits', 'warn') : '') + '</td></tr>';
+}
+function viewTickets() {
+  const g = S.ui.route.group || 'all';
+  const rows = S.tickets.filter(groupOf[g]).sort((a, b) => (PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]) || a.key.localeCompare(b.key, undefined, { numeric: true }));
+  return '<h2>' + GROUP_LABEL[g] + '</h2><p class="lede">Ordered by Jira priority. “new” counts comments and commits since you last opened the ticket.</p>' +
+    '<div class="tabs sm">' + ['pool', 'mine', 'active', 'parked', 'awaiting', 'returned', 'done', 'all'].map((k) => '<a href="#" data-act="go" data-name="tickets" data-group="' + k + '" class="' + (k === g ? 'on' : '') + '">' + GROUP_LABEL[k] + ' <b>' + count(k) + '</b></a>').join('') + '</div>' +
+    (rows.length ? '<div class="tbwrap"><table class="tbl"><thead><tr><th>Key</th><th>Priority</th><th>Title</th><th>Jira</th><th>Local</th><th>Repos</th><th></th></tr></thead><tbody>' + rows.map(ticketRow).join('') + '</tbody></table></div>' : '<div class="empty"><b>No tickets here.</b></div>');
+}
+
+/* ---------------- ticket detail ---------------- */
+function ticketHead(t, tab) {
+  const st = status(t); const hot = isHotfix(t);
+  const acts = [];
+  if (!st) acts.push(btn('Claim', 'claim', { key: t.key }, 'p'));
+  if (st === 'claimed') acts.push(btn('Start review', 'startReview', { key: t.key }, 'p'));
+  if (['claimed', 'reviewing', 'parked'].includes(st) && t.reviewed) acts.push(btn('Activate…', 'activate', { key: t.key }, 'p'));
+  if (st === 'reviewing' && !t.reviewed) acts.push(btn('Mark reviewed', 'markReviewed', { key: t.key }, 'p'));
+  if (st === 'active') acts.push(btn('Park…', 'parkAsk', { key: t.key }));
+  const tabs = ['overview', 'review', 'test', 'ship', 'timeline'];
+  const un = unseenCount(t) - (S.ui.seenSnap && S.ui.seenSnap[t.key] != null ? 0 : 0);
+  return '<div class="thead"><div class="row sb"><div><div class="row"><span class="key big">' + t.key + '</span>' + pill(t.type) + pill(t.priority, prioCls(t.priority)) + (hot ? pill('HOTFIX', 'hot') : '') + pill(t.jira, jiraCls(t.jira)) + (st ? pill(LOCAL_LABEL[st], localCls(st)) : pill('not claimed')) + '</div><h2 class="tt2">' + esc(t.title) + '</h2></div><div class="row">' + acts.join('') + '</div></div>' + stepper(t) +
+    '<div class="tabs">' + tabs.map((k) => '<a href="#" data-act="go" data-name="ticket" data-key="' + t.key + '" data-tab="' + k + '" class="' + (k === tab ? 'on' : '') + '">' + ({ overview: 'Overview', review: 'Review', test: 'Test', ship: 'Ship', timeline: 'Timeline' })[k] + (k === 'review' && t.reviewed && t.prs.some((p) => p.updatedSeq > t.reviewedSeq) ? ' <i class="dotnew"></i>' : '') + '</a>').join('') + '</div></div>';
+}
+
+function reposTable(t) {
+  const plan = repoPlan(t); const base = Object.keys(REPOS).filter((r) => !plan.find((p) => p.repo === r));
+  const row = (p) => {
+    const pr = t.prs.find((x) => x.repo === p.repo); const d = t.deploy[p.repo];
+    const br = p.ambiguous ? '<div class="warn-box">⚠ ' + p.cands.length + ' branches match. Choose one:<div class="row">' + p.cands.map((c) => btn(esc(c), 'choose', { key: t.key, repo: p.repo, branch: c }, 'sm')).join('') + '</div></div>' : '<span class="mono">' + esc(p.chosen || '–') + '</span>' + (p.manual ? ' ' + pill('chosen', '') : '');
+    return '<tr><td class="mono">' + p.repo + '</td><td>' + br + '</td><td>' + (pr ? '#' + pr.id + ' <span class="faint small">→ ' + esc(pr.dst) + '</span>' : '<span class="faint">–</span>') + '</td><td>' + (d ? pill(d.state === 'deployed' ? 'deployed alpha' : d.state, d.state === 'deployed' ? 'ok' : d.state === 'failed' ? 'bad' : 'warn') + ' <span class="faint small">#' + d.run + '</span>' : '<span class="faint">not pushed</span>') + '</td></tr>';
+  };
+  return '<div class="tbwrap"><table class="tbl"><thead><tr><th>Repo</th><th>Branch</th><th>PR</th><th>Deploy</th></tr></thead><tbody>' + plan.map(row).join('') +
+    base.map((r) => '<tr class="faint"><td class="mono">' + r + '</td><td class="mono">' + REPOS[r].base + ' (baseline)</td><td>–</td><td>not touched</td></tr>').join('') + '</tbody></table></div>';
+}
+function tabOverview(t) {
+  const snap = S.ui.seenSnap && S.ui.seenSnap[t.key] != null ? S.ui.seenSnap[t.key] : t.seenN;
+  const comments = t.comments.length ? t.comments.map((c) => '<div class="cmt ' + (c.n > snap && c.who !== ME ? 'new' : '') + '"><div class="row sb"><span class="row"><span class="av">' + esc(c.who.split(' ').map((x) => x[0]).join('')) + '</span><b>' + esc(c.who) + '</b><span class="faint small">' + esc(c.at) + '</span></span>' + (c.n > snap && c.who !== ME ? pill('new', 'acc') : '') + '</div><div class="cbody">' + blocksHtml(c.body) + '</div></div>').join('') : '<div class="faint">No comments yet.</div>';
+  return '<div class="grid2"><div class="col">' +
+    '<section class="sec"><h3>Description</h3><div class="prose">' + blocksHtml(t.desc) + '</div></section>' +
+    '<section class="sec"><h3>Acceptance criteria</h3><ul class="ac">' + t.ac.map((a) => '<li>☐ ' + esc(a) + '</li>').join('') + '</ul></section>' +
+    (t.subtasks.length ? '<section class="sec"><h3>Subtasks</h3><ul class="ac">' + t.subtasks.map((s) => '<li>' + (s.done ? '☑' : '☐') + ' ' + esc(s.title) + '</li>').join('') + '</ul></section>' : '') +
+    '<section class="sec"><h3>Repos and pull requests</h3>' + reposTable(t) + '</section>' +
+    '<section class="sec"><h3>Comments <span class="faint small">(' + t.comments.length + ', from Jira)</span></h3>' + comments +
+    '<div class="composer"><textarea id="cmt" rows="3" placeholder="Add a comment to Jira…" data-bind="cmt:' + t.key + '">' + esc(S.ui.drafts['cmt:' + t.key] || '') + '</textarea><div class="row sb"><span class="faint small">Posting goes through the confirm sheet.</span>' + btn('Post to Jira…', 'commentAsk', { key: t.key }, 'p') + '</div></div></section></div>' +
+    '<div class="col side">' +
+    (t.attachments.length ? '<section class="sec"><h3>Attachments</h3>' + t.attachments.map((a) => '<div class="att"><span class="fileic">▤</span><div><div>' + esc(a.name) + '</div><div class="faint small">' + esc(a.size) + '</div></div></div>').join('') + '</section>' : '') +
+    '<section class="sec"><h3>Your notes</h3><textarea rows="5" placeholder="Private notes, saved locally…" data-bind="notes:' + t.key + '">' + esc(t.notes) + '</textarea><div class="faint small">Local only. Never sent to Jira.</div></section><div class="narrow-only">' + rightTicket(t) + '</div></div></div>';
+}
+
+/* ---- review ---- */
+function diffView(t, pr, fi) {
+  const f = pr.files[fi]; const threads = pr.threads.filter((th) => th.file === f.path);
+  const comp = S.ui.inline && S.ui.inline.pr === pr.id && S.ui.inline.file === f.path ? S.ui.inline : null;
+  const rows = f.lines.map((l) => {
+    const anchor = l.n != null ? 'n' + l.n : 'o' + l.o; const ths = threads.filter((th) => th.line === anchor);
+    let out = '<div class="dl ' + l.k + '"><span class="ln">' + (l.o == null ? '' : l.o) + '</span><span class="ln">' + (l.n == null ? '' : l.n) + '</span><span class="sg">' + (l.k === 'add' ? '+' : l.k === 'del' ? '−' : '') + '</span><code>' + esc(l.x) + '</code><button class="plus" data-act="inlineOpen" data-key="' + t.key + '" data-pr="' + pr.id + '" data-file="' + esc(f.path) + '" data-line="' + anchor + '" title="Comment on this line">+</button></div>';
+    ths.forEach((th) => { out += '<div class="thread"><div class="row"><span class="av">' + esc(th.author.split(' ').map((x) => x[0]).join('')) + '</span><b>' + esc(th.author) + '</b>' + (th.author === ME ? pill('you', 'acc') : '') + '</div><div>' + esc(th.text) + '</div></div>'; });
+    if (comp && comp.line === anchor) out += '<div class="thread new"><textarea id="inl" rows="3" placeholder="Comment on ' + esc(f.path) + ' line ' + anchor.slice(1) + '…" data-bind="inl:0">' + esc(S.ui.drafts['inl:0'] || '') + '</textarea><div class="row">' + btn('Comment…', 'inlineAsk', {}, 'p sm') + btn('Cancel', 'inlineCancel', {}, 'g sm') + '</div></div>';
+    return out;
+  }).join('');
+  return '<div class="diff">' + rows + '</div>';
+}
+function tabReview(t) {
+  if (!t.prs.length) return '<div class="empty">No pull requests for this ticket.</div>';
+  const sel = S.ui.prSel[t.key] != null && t.prs.find((p) => p.id === S.ui.prSel[t.key]) ? t.prs.find((p) => p.id === S.ui.prSel[t.key]) : t.prs[0];
+  const fi = Math.min(S.ui.fileSel[t.key + ':' + sel.id] || 0, sel.files.length - 1);
+  const me = sel.reviewers.find((r) => r.name === ME); const canApprove = isSignedOff(t) && S.providers.bkt.ready && !me.approved;
+  const stale = t.reviewed && t.prs.some((p) => p.updatedSeq > t.reviewedSeq);
+  return (stale ? '<div class="warn-box">⚠ New commits arrived since you reviewed this ticket. ' + btn('Start review again', 'startReview', { key: t.key }, 'sm') + '</div>' : '') +
+    '<div class="row sb"><div class="row">' + t.prs.map((p) => '<button class="chip ' + (p.id === sel.id ? 'on' : '') + '" data-act="selPr" data-key="' + t.key + '" data-pr="' + p.id + '">' + p.repo + ' #' + p.id + '</button>').join('') + '</div><div class="row small"><span class="faint">unified</span></div></div>' +
+    '<div class="prhead"><b>' + esc(sel.title) + '</b><div class="mute">' + esc(sel.src) + ' → ' + pill(sel.dst, sel.dst === REPOS[sel.repo].prod && REPOS[sel.repo].prod !== REPOS[sel.repo].base ? 'hot' : '') + ' <span class="faint small">diffed against the PR destination, from local git, nothing checked out</span></div><div class="row small">Reviewers: ' + sel.reviewers.map((r) => pill(r.name + (r.approved ? ' ✓' : ''), r.approved ? 'ok' : '')).join(' ') + '</div></div>' +
+    '<div class="rvgrid"><div class="ftree"><div class="lab">Files (' + sel.files.length + ')</div>' + sel.files.map((f, i) => '<button class="fl ' + (i === fi ? 'on' : '') + '" data-act="selFile" data-key="' + t.key + '" data-pr="' + sel.id + '" data-i="' + i + '"><span class="mono">' + esc(f.path) + '</span><em><i class="ad">+' + f.adds + '</i> <i class="dl2">−' + f.dels + '</i></em></button>').join('') + '<div class="lab">Threads (' + sel.threads.length + ')</div><div class="faint small">' + sel.threads.length + ' inline comment' + (sel.threads.length === 1 ? '' : 's') + '</div></div><div>' +
+    '<div class="mono fpath">' + esc(sel.files[fi].path) + '</div>' + diffView(t, sel, fi) + '</div></div>' +
+    '<div class="row rvbar">' + btn(t.reviewed ? '✓ Reviewed' : 'Mark reviewed', 'markReviewed', { key: t.key }, t.reviewed ? '' : 'p', { disabled: t.reviewed && !stale }) + btn('Request changes…', 'reqAsk', { key: t.key, pr: sel.id }) + btn('Approve…', 'approveAsk', { key: t.key, repo: sel.repo, pr: sel.id }, 'p', { disabled: !canApprove }) +
+    '<span class="faint small">' + (me.approved ? 'You approved this PR.' : !isSignedOff(t) ? 'Approval unlocks when the ticket reaches a signed-off status (now: ' + esc(t.jira) + ').' : !S.providers.bkt.ready ? 'bkt is signed out.' : '') + '</span></div>';
+}
+
+/* ---- test ---- */
+function tabTest(t) {
+  const st = status(t);
+  if (st !== 'active') {
+    const why = !st ? 'Claim and review this ticket first.' : !t.reviewed && st !== 'integrated' ? 'Finish the review, then activate to test locally.' : st === 'integrated' ? 'This ticket is already on uat. Activate it again only for a fix after alpha.' : 'Activating switches the touched repos to the ticket branches, stashes local changes, and applies the test overlay where needed.';
+    const plan = activationPlan(t, null);
+    return '<div class="empty left"><b>Not active.</b><div>' + esc(why) + '</div>' + (plan.errors.length ? '<div class="warn-box">' + plan.errors.map(esc).join('<br>') + '</div>' : '') +
+      '<div class="lab">If you activate now</div><div class="tbwrap"><table class="tbl"><tbody>' + plan.rows.map((r) => '<tr><td class="mono">' + r.repo + '</td><td>' + (r.role === 'ticket' ? pill('ticket branch', 'acc') : pill('baseline', '')) + '</td><td class="mono">' + esc(r.branch) + '</td><td class="faint small">was ' + esc(S.ws.branches[r.repo]) + (S.ws.dirty[r.repo] ? ', local changes stashed' : '') + '</td></tr>').join('') + '</tbody></table></div>' +
+      (plan.overlay ? '<div class="card overlay">⚡ Test overlay in <b>' + plan.overlay.repo + '</b>: composer path repository → ../' + plan.overlay.provider + ', constraint “*”. Reverted when you park or finish.</div>' : '') +
+      (['claimed', 'reviewing', 'parked', 'integrated'].includes(st) ? '<div class="row">' + btn('Activate…', 'activate', { key: t.key }, 'p') + '</div>' : '') + '</div>';
+  }
+  const done = t.checklist.filter((c) => c.done).length;
+  return '<div class="grid2"><div class="col"><section class="sec"><div class="row sb"><h3>Checklist</h3>' + pill(done + ' of ' + t.checklist.length, done === t.checklist.length && done ? 'ok' : '') + '</div>' +
+    t.checklist.map((c, i) => '<label class="chk big"><input type="checkbox" data-act="toggleChk" data-key="' + t.key + '" data-i="' + i + '" ' + (c.done ? 'checked' : '') + '> <span class="' + (c.done ? 'strike' : '') + '">' + esc(c.text) + '</span></label>').join('') +
+    '<div class="row"><input id="chkadd" class="in" placeholder="Add an item…" data-bind="chk:' + t.key + '"> ' + btn('Add', 'addChk', { key: t.key }, 'sm') + '</div></section>' +
+    '<section class="sec"><h3>Notes</h3><textarea rows="5" data-bind="notes:' + t.key + '" placeholder="What you verified, what broke…">' + esc(t.notes) + '</textarea></section></div>' +
+    '<div class="col side"><section class="sec"><h3>Environment</h3><div class="tbwrap"><table class="tbl"><tbody>' + t.act.records.map((r) => '<tr><td class="mono">' + r.repo + '</td><td>' + (r.role === 'ticket' ? pill('ticket', 'acc') : pill('baseline')) + '</td><td class="mono">' + esc(r.branch) + '</td></tr>' + (r.stash ? '<tr class="faint"><td></td><td colspan="2" class="small">stash “' + esc(r.label) + '”, was on ' + esc(r.prev) + '</td></tr>' : '')).join('') + '</tbody></table></div>' +
+    (t.act.overlay ? '<div class="card overlay"><b>⚡ Test overlay applied in ' + t.act.overlay.repo + '</b><div class="small">composer path repository → ../' + t.act.overlay.provider + ', constraint “*”. Rebuild ran. <b>Never pushed:</b> reverted when you park or finish, and blocked by a guard if it reaches a commit.</div></div>' : '<div class="faint small">No overlay needed: the API client is not on a ticket branch.</div>') + '</section>' +
+    '<section class="sec"><h3>Next</h3><div class="stack">' + btn('Prepare integration →', 'go', { name: 'ticket', key: t.key, tab: 'ship' }, 'p') + btn('Park…', 'parkAsk', { key: t.key }) + '</div></section></div></div>';
+}
+
+/* ---- ship ---- */
+function pipeChip(t, repo) {
+  const d = t.deploy[repo]; if (!d) return '<span class="faint">not pushed</span>';
+  const cls = d.state === 'deployed' ? 'ok' : d.state === 'failed' ? 'bad' : 'warn';
+  return pill((d.state === 'deployed' ? '● deployed alpha' : d.state === 'failed' ? '✕ failed' : '◐ ' + d.state), cls) + ' <span class="faint small">#' + d.run + (d.state === 'running' || d.state === 'pending' ? ' · ' + d.step : '') + '</span>';
+}
+function tabShip(t) {
+  const st = status(t); const pushedAll = touchedRepos(t).length && touchedRepos(t).every((p) => t.merges.some((m) => m.repo === p.repo));
+  const s1 = st === 'active' ? 'now' : pushedAll ? 'done' : '';
+  let step1;
+  if (st === 'active') {
+    const prep = t.prep;
+    step1 = (prep ? '<div class="tbwrap"><table class="tbl"><tbody>' + prep.rows.map((r) => {
+      if (r.outcome === 'ready') return '<tr><td class="mono">' + r.repo + '</td><td>' + pill('merge ready', 'ok') + '</td><td>+' + r.commits + ' commits · ' + r.files + ' files</td><td class="mono faint small">uat ' + r.uatBefore + ' → ' + r.merge + '</td></tr>' + (r.overlaps.length ? '<tr><td></td><td colspan="3"><div class="warn-box">⚠ Overlaps with ' + r.overlaps.map((o) => '<b>' + o.key + '</b> (' + esc(o.file) + ')').join(', ') + ' already on uat. Not a conflict, but check the combined behaviour.</div></td></tr>' : '');
+      if (r.outcome === 'alreadyPushed') return '<tr><td class="mono">' + r.repo + '</td><td>' + pill('already pushed', 'ok') + '</td><td colspan="2" class="mono faint small">' + r.commit + '</td></tr>';
+      if (r.outcome === 'conflict') return '<tr><td class="mono">' + r.repo + '</td><td>' + pill('conflict', 'bad') + '</td><td colspan="2">Conflicts with <b>' + r.with + '</b> in <span class="mono">' + esc(r.files.join(', ')) + '</span>. The merge was aborted; nothing was pushed.</td></tr>';
+      return '<tr><td class="mono">' + r.repo + '</td><td>' + pill('blocked', 'bad') + '</td><td colspan="2">' + esc(r.reason) + '</td></tr>';
+    }).join('') + '</tbody></table></div><div class="row small">' + pill('overlay guard ✓ by SHA', 'ok') + pill('no overlay in worktree ✓', 'ok') + '</div>' : '<div class="mute">Preparing merges each touched repo into a temporary worktree of uat and checks it. It pushes nothing.</div>') +
+      '<div class="row">' + btn(prep ? 'Refresh preparation' : 'Prepare integration', 'prepare', { key: t.key }, prep ? '' : 'p') + btn('Review & push to uat…', 'pushAsk', { key: t.key }, 'p', { disabled: !prepPushable(t) }) + '</div>';
+  } else if (pushedAll) {
+    step1 = '<div class="tbwrap"><table class="tbl"><tbody>' + t.merges.map((m) => '<tr><td class="mono">' + m.repo + '</td><td>' + pill('on uat', 'ok') + '</td><td class="mono faint small">' + m.commit + '</td><td class="faint small">' + esc(m.at) + '</td></tr>').join('') + '</tbody></table></div>' + (t.newCommits ? '<div class="warn-box">⚠ New commits on the ticket branches are not on uat. Activate the ticket again to re-merge.</div>' : '');
+  } else step1 = '<div class="mute">Activate and test the ticket first. Integration needs the ticket to be active.</div>';
+
+  const fails = anyFailed(t);
+  const step2 = t.merges.length ? '<div class="tbwrap"><table class="tbl"><tbody>' + t.merges.map((m) => '<tr><td class="mono">' + m.repo + '</td><td>' + pipeChip(t, m.repo) + '</td><td>' + (t.deploy[m.repo].state === 'failed' ? btn('Re-run…', 'rerunAsk', { key: t.key, repo: m.repo }, 'sm') : '') + '</td></tr>').join('') + '</tbody></table></div><div class="faint small">Pipelines advance on their own (fake, a few seconds each). Use Simulate to make one fail.</div>' : '<div class="mute">Pipelines appear after the push.</div>';
+
+  const d = draftOf(t, 'comment'); const dep = allDeployed(t);
+  const step3 = d ? (d.status === 'posted' ? '<div class="card"><pre class="code">' + esc(d.body) + '</pre><div class="small">' + pill('posted to Jira', 'ok') + '</div></div>' : '<textarea rows="4" class="mono" data-bind="draft:' + t.key + ':' + d.id + '">' + esc(d.body) + '</textarea><div class="row">' + btn('Post to Jira…', 'postAsk', { key: t.key, draft: d.id }, 'p') + '<span class="faint small">Edit freely. Lists each repo with its PR and pipeline.</span></div>')
+    : dep ? '<div class="row">' + btn('Draft the comment', 'composeDraft', { key: t.key }, 'p') + '</div>' : '<div class="mute">Available when every touched repo is deployed.</div>';
+  const step4 = d && d.status === 'posted' ? (t.jira === JIRA.alpha || isSignedOff(t) ? '<div>' + pill(t.jira, jiraCls(t.jira)) + '</div>' : '<div class="row"><span>' + JIRA.review + ' → ' + JIRA.alpha + '</span>' + btn('Transition…', 'transitionAsk', { key: t.key }, 'p') + '</div>') : '<div class="mute">After the comment is posted.</div>';
+  const pending = t.prs.filter((p) => !p.reviewers.find((r) => r.name === ME).approved);
+  const step5 = t.merges.length ? '<div class="mute">Alpha and UAT are done by others. When Jira reaches a signed-off status (' + JIRA.signed.join(', ') + '), approval unlocks. New commits suggest a re-merge; a returned ticket only matters if you are mentioned.</div>' +
+    (isSignedOff(t) ? '<div class="tbwrap"><table class="tbl"><tbody>' + t.prs.map((p) => { const ok = p.reviewers.find((r) => r.name === ME).approved; return '<tr><td class="mono">' + p.repo + ' #' + p.id + '</td><td>' + (ok ? pill('approved by you', 'ok') : pill('needs your approval', 'warn')) + '</td><td>' + (ok ? '' : btn('Approve…', 'approveAsk', { key: t.key, repo: p.repo, pr: p.id }, 'p sm')) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') : '<div class="mute">Later.</div>';
+  const stepBox = (n, title, cls, body) => '<div class="step ' + cls + '"><div class="n">' + (cls === 'done' ? '✓' : n) + '</div><div class="sb2"><h3>' + title + '</h3>' + body + '</div></div>';
+  return '<div class="steps">' + stepBox(1, 'Integrate to uat', s1, step1) + stepBox(2, 'Pipelines', t.merges.length ? (fails.length ? 'bad' : dep ? 'done' : 'now') : '', step2) + stepBox(3, 'Deploy comment', d ? (d.status === 'posted' ? 'done' : 'now') : dep ? 'now' : '', step3) + stepBox(4, 'Move ticket', d && d.status === 'posted' ? (t.jira === JIRA.alpha || isSignedOff(t) ? 'done' : 'now') : '', step4) + stepBox(5, 'After alpha', isSignedOff(t) ? 'now' : '', step5) + '</div>';
+}
+function tabTimeline(t) {
+  const rows = S.audit.filter((a) => a.ticket === t.key);
+  return '<section class="sec"><h3>Audit log for ' + t.key + '</h3><div class="faint small">Append-only. An “attempted” entry is written before any external write, the outcome after.</div>' + (rows.length ? '<div class="tbwrap"><table class="tbl"><thead><tr><th>Time</th><th>Action</th><th>Repo</th><th>Outcome</th><th>Details</th></tr></thead><tbody>' + rows.map(auditRow).join('') + '</tbody></table></div>' : '<div class="empty">No activity yet for this ticket.</div>') + '</section>';
+}
+function viewTicket() {
+  const r = S.ui.route; const t = tk(r.key); if (!t) return '<div class="empty">Unknown ticket.</div>';
+  const tab = r.tab || 'overview';
+  return ticketHead(t, tab) + '<div class="tbody">' + ({ overview: tabOverview, review: tabReview, test: tabTest, ship: tabShip, timeline: tabTimeline }[tab] || tabOverview)(t) + '</div>';
+}
+
+/* ---------------- what is on uat ---------------- */
+function viewEnv() {
+  const cols = Object.keys(REPOS).filter((r) => r !== 'docs' || S.tickets.some((t) => t.merges.some((m) => m.repo === 'docs')));
+  const per = (repo) => S.tickets.filter((t) => t.merges.some((m) => m.repo === repo)).map((t) => ({ t, m: t.merges.find((m) => m.repo === repo), d: t.deploy[repo] }));
+  const overlaps = [];
+  for (const repo of cols) { const list = per(repo); for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) { const a = list[i].t.prs.filter((p) => p.repo === repo).flatMap((p) => p.files.map((f) => f.path)); const b = list[j].t.prs.filter((p) => p.repo === repo).flatMap((p) => p.files.map((f) => f.path)); a.filter((f) => b.includes(f)).forEach((f) => overlaps.push({ repo, a: list[i].t.key, b: list[j].t.key, file: f })); } }
+  return '<h2>On uat</h2><p class="lede">uat accumulates tickets, so what is deployed to alpha is the sum of everything merged. Check this before pushing: two tickets touching the same file can behave differently together.</p>' +
+    '<div class="colsgrid">' + cols.map((repo) => { const list = per(repo); return '<section class="envcol"><div class="row sb"><h3 class="mono">' + repo + '</h3><span class="pill">' + REPOS[repo].host + '</span></div>' + (list.length ? list.map(({ t, m, d }) => '<div class="envit"><div class="row sb"><a href="#" class="key" data-act="go" data-name="ticket" data-key="' + t.key + '" data-tab="ship">' + t.key + '</a><span class="mono faint small">' + m.commit + '</span></div><div class="small">' + esc(t.title) + '</div><div class="row small">' + (d ? pipeChip(t, repo) : '') + ' ' + pill(t.jira, jiraCls(t.jira)) + '</div></div>').join('') : '<div class="faint">Nothing merged by you.</div>') + '</section>'; }).join('') + '</div>' +
+    '<section class="sec"><h3>Potential overlap</h3>' + (overlaps.length ? overlaps.map((o) => '<div class="warn-box"><b>' + o.repo + '</b>: ' + o.a + ' and ' + o.b + ' both change <span class="mono">' + esc(o.file) + '</span>.</div>').join('') : '<div class="faint">No overlapping files between tickets on uat.</div>') + '<div class="faint small">Idea: warn about this before a ticket is prepared, not after.</div></section>';
+}
+
+/* ---------------- workspace ---------------- */
+function viewWorkspace() {
+  const act = activeTicket();
+  return '<div class="row sb"><h2>Workspace shop</h2><span class="row">' + pill(S.ws.up ? '● services up' : '○ services down', S.ws.up ? 'ok' : '') + (S.ws.up ? btn('Stop…', 'stopAsk', {}) : btn('Start', 'startWs', {}, 'p')) + '</span></div><p class="lede">Start and stop keep the CLI meaning: dependency order, and a guard for uncommitted or unpushed work.</p><div class="mono mute">db → api → web</div>' +
+    '<div class="tbwrap"><table class="tbl"><thead><tr><th>Project</th><th>Services</th><th>Branch</th><th>State</th></tr></thead><tbody>' + Object.keys(REPOS).map((r) => { const ov = act && act.act && act.act.overlay && act.act.overlay.repo === r; const dirty = S.ws.dirty[r]; return '<tr><td class="mono">' + r + '</td><td>' + REPOS[r].services + '</td><td class="mono">' + esc(S.ws.branches[r]) + '</td><td>' + (S.ws.up ? pill('up', 'ok') : pill('down')) + ' ' + (dirty ? pill('uncommitted changes', 'warn') : pill('clean')) + (ov ? ' ' + pill('⚡ overlay', 'warn') : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+    (act ? '<div class="card overlay">Active ticket <b>' + act.key + '</b> holds the repos above. Stashed local changes are restored when you park or finish.</div>' : '');
+}
+
+/* ---------------- audit ---------------- */
+function auditRow(a) {
+  return '<tr><td class="mono">' + a.at + '</td><td class="mono">' + esc(a.action) + '</td><td class="mono">' + esc(a.repo || '') + '</td><td>' + pill(a.outcome, a.outcome === 'success' ? 'ok' : a.outcome === 'failure' ? 'bad' : '') + '</td><td class="small">' + (a.ticket ? '<span class="key">' + a.ticket + '</span> ' : '') + esc(a.details) + '</td></tr>';
+}
+function viewAudit() {
+  return '<h2>Audit log</h2><p class="lede">Every external write is recorded before it runs (attempted) and after (outcome). Read-only.</p>' + (S.audit.length ? '<div class="tbwrap"><table class="tbl"><thead><tr><th>Time</th><th>Action</th><th>Repo</th><th>Outcome</th><th>Details</th></tr></thead><tbody>' + S.audit.map(auditRow).join('') + '</tbody></table></div>' : '<div class="empty">Nothing yet. Do something.</div>');
+}
+
+/* ---------------- settings ---------------- */
+function viewSettings() {
+  const prov = (name, key, cmd, ver) => '<div class="card"><div class="row sb"><b>' + name + '</b>' + pill(S.providers[key].ready ? 'ready' : 'signed out', S.providers[key].ready ? 'ok' : 'warn') + '</div><div class="mute mono small">' + ver + '</div>' + (S.providers[key].ready ? '<div class="small mute">Logged in. Tokens live in the tool, never here.</div>' + btn('Simulate sign-out', 'provider', { k: key, v: 0 }, 'sm') : '<div class="small">Run <span class="mono">' + cmd + '</span> in a terminal, then re-check.</div>' + btn('Fake sign-in', 'provider', { k: key, v: 1 }, 'p sm')) + '</div>';
+  return '<h2>Settings</h2><div class="grid3"><section class="sec"><h3>Providers</h3>' + prov('acli · Jira', 'jira', 'acli jira auth login', 'v1.3.39') + prov('bkt · Bitbucket', 'bkt', 'bkt auth login && bkt context use <name>', 'v0.32.1') + '<div class="row">' + btn('Re-check', 'recheck', {}) + btn('Diagnose…', 'diagnose', {}) + '</div><div class="faint small">Diagnose runs the read-only probe and shows raw tool output. It can contain ticket titles: read it before sharing.</div></section>' +
+    '<section class="sec"><h3>Jira mapping</h3>' + kv('Review status', '<span class="in ro">' + JIRA.review + '</span>') + kv('Alpha status', '<span class="in ro">' + JIRA.alpha + '</span>') + kv('Returned', '<span class="in ro">' + JIRA.returned + '</span>') + kv('Signed off', '<span class="in ro">' + JIRA.signed.join(', ') + '</span>') + kv('Review JQL', '<span class="in ro">project = PROJ AND status = "In Review"</span>') + kv('My account id', '<span class="in ro">acct-0001</span>') + '<div class="faint small">Approval is only suggested once a ticket reaches a signed-off status.</div></section>' +
+    '<section class="sec"><h3>Repos</h3><div class="tbwrap"><table class="tbl"><thead><tr><th>Repo</th><th>Base</th><th>Prod</th><th>Overlay</th></tr></thead><tbody>' + Object.entries(REPOS).map(([r, c]) => '<tr><td class="mono">' + r + '</td><td class="mono">' + c.base + '</td><td class="mono">' + c.prod + '</td><td>' + (c.overlayConsumer ? 'consumes ' + c.consumes : '–') + '</td></tr>').join('') + '</tbody></table></div><h3>Data</h3>' + kv('state.db', '<span class="mono">…/de/state.db</span>') + kv('cache.db', '<span class="mono">…/de/cache.db</span> ' + btn('reset cache', 'resetCache', {}, 'sm')) + '<div class="row">' + btn('Reset this demo', 'resetDemo', {}, 'sm') + '</div></section></div>';
+}
+
+/* ---------------- change ideas ---------------- */
+const IDEAS = [
+  { built: true, t: 'One progress stepper on every ticket screen', w: 'The state of a ticket (claimed, reviewed, testing, on uat, deployed, announced, alpha, signed off, approved) is the thing you most often need and today lives across three tabs. A persistent stepper under the ticket title makes it visible everywhere.' },
+  { built: true, t: 'A “Now” bar for the active ticket, with the overlay warning', w: 'Only one ticket is active and its overlay must never reach uat. Keeping the active ticket, its timer and the overlay state pinned under the top bar on every screen removes the chance of forgetting.' },
+  { built: true, t: 'An “On uat” screen: what is on alpha right now, per repo', w: 'uat accumulates tickets, so alpha is the sum of everything merged. A per-repo column of merged tickets with pipeline state answers “what am I about to add to?” and surfaces overlapping files.' },
+  { built: true, t: '“What changed since I last looked” on tickets', w: 'As reviewer you re-open tickets constantly. New comments, new commits and mentions are counted per ticket and highlighted when you open it, instead of you diffing your memory.' },
+  { built: true, t: 'Right sidebar for facts, left sidebar for places', w: 'Jira facts (fields, links, PRs, activity) change with the selected ticket; navigation does not. Keeping them in separate fixed columns stops the main area from carrying both.' },
+  { built: true, t: 'Overlap warning before pushing, not after', w: 'When you prepare an integration, warn if another ticket already on uat changes the same file. It is not a conflict, but it is the case where alpha behaves differently from your local test.' },
+  { built: false, t: 'Conflict pre-check while reviewing', w: 'Run the uat merge dry-run as soon as a ticket is reviewed, so a conflict is known before you spend time testing it locally.' },
+  { built: false, t: 'Board view for the Review pool', w: 'A kanban option (Pool, In review, Awaiting alpha, Returned) for people who think in columns. The list stays the default because the ranking is the point.' },
+  { built: false, t: 'Split diff and per-hunk “viewed”', w: 'Unified is built. Large PRs benefit from split view and marking individual hunks as viewed, not just files.' },
+  { built: false, t: 'Per-repo review, one combined tree', w: 'Today each PR is a chip. One file tree grouped by repo would let you scan a two-repo ticket in one pass.' },
+  { built: false, t: 'Automatic time tracking suggestions', w: 'Offer to start and stop the timer from activation and park, and show a daily total, so time never depends on remembering.' },
+  { built: false, t: 'Pre-push checklist per repo', w: 'Let each repo declare its manual local checks (tests, lint) as a checklist that must be ticked before the push button enables. Today the gate is manual and varies.' },
+  { built: false, t: 'Hold-to-confirm as an alternative to typing the key', w: 'Typing the ticket key is safe but slow. A 1.5 second press-and-hold with a visible ring is faster and still deliberate. Worth testing both.' },
+];
+function viewIdeas() {
+  return '<h2>Change ideas</h2><p class="lede">Proposals for changing the design from the first outline. Those marked built are already in this prototype so you can judge them.</p><div class="stack">' + IDEAS.map((i) => '<article class="card"><div class="row sb"><b>' + esc(i.t) + '</b>' + pill(i.built ? 'built in prototype' : 'proposed', i.built ? 'ok' : '') + '</div><div class="mute">' + esc(i.w) + '</div></article>').join('') + '</div>';
+}
+
+function mainView() {
+  const n = S.ui.route.name;
+  return ({ next: viewNext, tickets: viewTickets, ticket: viewTicket, env: viewEnv, workspace: viewWorkspace, audit: viewAudit, settings: viewSettings, ideas: viewIdeas }[n] || viewNext)();
+}
+
+'use strict';
+/* ============================ sheets, actions, boot ============================ */
+
+const IS_BROWSER = typeof document !== 'undefined';
+
+/* ---------------- confirm sheet (the gateway preview) ---------------- */
+function openConfirm(o) {
+  const blocked = o.needs && !S.providers[o.needs === 'acli' ? 'jira' : 'bkt'].ready ? (o.needs === 'acli' ? 'acli' : 'bkt') + ' is signed out. Nothing can be sent until you log in.' : null;
+  S.ui.sheet = Object.assign({ kind: 'confirm', typed: '', risk: 'medium', blocked }, o);
+}
+function closeSheet() { S.ui.sheet = null; }
+
+function askPush(key) {
+  const t = tk(key); if (!t.prep || !prepPushable(t)) { toast('Prepare the integration first.', 'warn'); return; }
+  const rows = t.prep.rows.filter((r) => r.outcome === 'ready');
+  openConfirm({
+    risk: 'high', title: 'Push to uat', ticket: key, need: key, auditName: 'git.push_uat',
+    lead: 'This will run, exactly:', payload: rows.map((r) => r.repo.padEnd(11) + ' git push origin ' + r.merge + ':refs/heads/uat'),
+    details: rows.map((r) => ({ a: r.repo, b: 'uat ' + r.uatBefore + ' → ' + r.merge, c: '+' + r.commits + ' commits · ' + r.files + ' files' })),
+    checks: ['overlay guard ✓ (by SHA)', 'no overlay in worktree ✓', 'no force'], warn: 'Pushing deploys to alpha. Nothing has been sent yet.',
+    confirmLabel: 'Push to uat', exec: () => { const r = push(key);
+      if (!r.ok) return { toast: [r.error, 'bad'] };
+      return { sheet: { kind: 'result', title: 'Push to uat', ticket: key, rows: r.results, finalized: r.finalized } }; },
+  });
+}
+function askPostDraft(key, draftId) {
+  const t = tk(key); const d = t.drafts.find((x) => x.id === draftId);
+  openConfirm({ risk: 'medium', title: 'Post a comment to Jira', ticket: key, needs: 'acli', auditName: 'jira.comment', lead: 'This exact text will be posted as you:', payload: d.body.split('\n'), warn: 'Posted comments cannot be recalled from here.', confirmLabel: 'Post comment',
+    exec: () => { const r = postComment(key, draftId); return { toast: [r.ok ? 'Comment posted to ' + key : r.error, r.ok ? 'ok' : 'bad'] }; } });
+}
+function askTransition(key) {
+  const t = tk(key);
+  openConfirm({ risk: 'medium', title: 'Move the ticket in Jira', ticket: key, needs: 'acli', auditName: 'jira.transition', lead: 'This will transition:', payload: [key + '   ' + t.jira + ' → ' + JIRA.alpha], warn: 'Others watch this status.', confirmLabel: 'Transition',
+    exec: () => { const r = transition(key); return { toast: [r.ok ? key + ' moved to ' + JIRA.alpha : r.error, r.ok ? 'ok' : 'bad'] }; } });
+}
+function askApprove(key, repo, pr) {
+  openConfirm({ risk: 'medium', title: 'Approve a pull request', ticket: key, needs: 'bkt', auditName: 'bitbucket.pr_approve', lead: 'This will approve:', payload: [REPOS[repo].host + ' #' + pr], warn: 'Approval is the last gate. It only unlocks after sign-off.', confirmLabel: 'Approve',
+    exec: () => { approve(key, repo, pr); return { toast: ['Approved ' + repo + ' #' + pr, 'ok'] }; } });
+}
+function askRerun(key, repo) {
+  const d = tk(key).deploy[repo];
+  openConfirm({ risk: 'medium', title: 'Re-run a pipeline', ticket: key, needs: 'bkt', auditName: 'bitbucket.pipeline_rerun', lead: 'This will re-run:', payload: [REPOS[repo].host + ' pipeline #' + d.run + ' (deploy to alpha)'], warn: 'Re-running redeploys to alpha.', confirmLabel: 'Re-run',
+    exec: () => { rerun(key, repo); return { toast: ['Re-running ' + repo, 'info'] }; } });
+}
+function askComment(key) {
+  const text = (S.ui.drafts['cmt:' + key] || '').trim(); if (!text) { toast('Write a comment first.', 'warn'); return; }
+  openConfirm({ risk: 'medium', title: 'Post a comment to Jira', ticket: key, needs: 'acli', auditName: 'jira.comment', lead: 'This exact text will be posted as you:', payload: text.split('\n'), confirmLabel: 'Post comment',
+    exec: () => { postFreeComment(key, text); S.ui.drafts['cmt:' + key] = ''; return { toast: ['Comment posted to ' + key, 'ok'] }; } });
+}
+function askInline(key) {
+  const inl = S.ui.inline; const text = (S.ui.drafts['inl:0'] || '').trim(); if (!inl || !text) { toast('Write a comment first.', 'warn'); return; }
+  const pr = tk(key).prs.find((p) => p.id === inl.pr);
+  openConfirm({ risk: 'medium', title: 'Post an inline PR comment', ticket: key, needs: 'bkt', auditName: 'bitbucket.pr_comment', lead: REPOS[pr.repo].host + ' #' + pr.id + ' · ' + inl.file + ' line ' + inl.line.slice(1) + ' (' + (inl.line[0] === 'n' ? 'new' : 'old') + ' side)', payload: text.split('\n'), warn: 'If the tool cannot post inline it fails; it never posts a general comment instead.', confirmLabel: 'Post comment',
+    exec: () => { addThread(key, inl.pr, inl.file, inl.line, text); S.ui.inline = null; S.ui.drafts['inl:0'] = ''; return { toast: ['Comment posted on ' + pr.repo + ' #' + pr.id, 'ok'] }; } });
+}
+function askRequestChanges(key, prId) {
+  const pr = tk(key).prs.find((p) => p.id === prId);
+  openConfirm({ risk: 'medium', title: 'Request changes', ticket: key, needs: 'bkt', auditName: 'bitbucket.pr_request_changes', lead: 'This will request changes on:', payload: [REPOS[pr.repo].host + ' #' + pr.id, '', 'Please address the inline comments before this goes further.'], confirmLabel: 'Request changes',
+    exec: () => { requestChanges(key, pr.repo, prId, 'please address the inline comments'); return { toast: ['Changes requested on ' + pr.repo + ' #' + pr.id, 'ok'] }; } });
+}
+function askStop() {
+  const dirty = Object.keys(S.ws.dirty).filter((r) => S.ws.dirty[r]);
+  if (!dirty.length) { S.ws.up = false; audit('workspace.stop', null); toast('Workspace stopped', 'info'); return; }
+  openConfirm({ risk: 'low', title: 'Stop the workspace', auditName: 'workspace.stop', lead: 'Some projects have work that a stop will not save:', payload: dirty.map((r) => r + ': uncommitted changes'), warn: 'Stopping only brings services down. It does not touch your files.', confirmLabel: 'Stop anyway', exec: () => { S.ws.up = false; audit('workspace.stop', null); return { toast: ['Workspace stopped', 'info'] }; } });
+}
+function runConfirm() {
+  const sh = S.ui.sheet; if (!sh || sh.kind !== 'confirm' || sh.blocked) return;
+  if (sh.need && sh.typed.trim().toLowerCase() !== sh.need.toLowerCase()) return;
+  const payloadText = (sh.payload || []).join(' | ');
+  audit(sh.auditName + '.attempted', sh.ticket, null, 'skipped', payloadText.slice(0, 140));
+  if (S.sim.offline && (sh.needs || sh.auditName === 'git.push_uat' && false)) {
+    audit(sh.auditName, sh.ticket, null, 'failure', 'network unreachable, nothing sent'); closeSheet(); toast('Network unreachable. Nothing was sent.', 'bad'); return;
+  }
+  const res = sh.exec(); closeSheet();
+  if (res && res.sheet) S.ui.sheet = res.sheet;
+  if (res && res.toast) toast(res.toast[0], res.toast[1]);
+}
+function sheetBody() {
+  const sh = S.ui.sheet; if (!sh) return '';
+  if (sh.kind === 'confirm') {
+    const ok = !sh.blocked && (!sh.need || sh.typed.trim().toLowerCase() === sh.need.toLowerCase());
+    return '<div class="sheet ' + sh.risk + '"><div class="sh-h ' + sh.risk + '"><span>' + (sh.risk === 'high' ? '⛔ HIGH RISK · ' : sh.risk === 'medium' ? '⚠ ' : '') + esc(sh.title) + '</span>' + (sh.ticket ? '<span class="key">' + sh.ticket + '</span>' : '') + '</div><div class="sh-b">' +
+      (sh.blocked ? '<div class="warn-box">Cannot send: ' + esc(sh.blocked) + '</div>' + btn('Open Settings', 'goSettings', {}, 'sm') :
+        '<div>' + esc(sh.lead) + '</div><pre class="code">' + esc(sh.payload.join('\n')) + '</pre>' +
+        (sh.details ? '<table class="tbl"><tbody>' + sh.details.map((d) => '<tr><td class="mono">' + esc(d.a) + '</td><td class="mono faint small">' + esc(d.b) + '</td><td>' + esc(d.c) + '</td></tr>').join('') + '</tbody></table>' : '') +
+        (sh.checks ? '<div class="row small">' + sh.checks.map((c) => pill(c, 'ok')).join('') + '</div>' : '') +
+        (sh.warn ? '<div class="mute"><b>' + esc(sh.warn) + '</b></div>' : '') +
+        (sh.need ? '<div class="row"><span>Type <span class="key">' + esc(sh.need) + '</span> to confirm</span><input id="typed" class="in mono" autocomplete="off" spellcheck="false" data-bind="typed:0" value="' + esc(sh.typed) + '"></div>' : '')) +
+      '</div><div class="sh-f"><span class="faint small">Draft → confirm → execute. Audited before and after.</span><span class="row">' + btn('Cancel', 'closeSheet', {}) + (sh.blocked ? '' : '<button id="confirmBtn" class="btn ' + (sh.risk === 'high' ? 'd' : 'p') + '" data-act="runConfirm"' + (ok ? '' : ' disabled') + '>' + esc(sh.confirmLabel || 'Confirm') + '</button>') + '</span></div></div>';
+  }
+  if (sh.kind === 'result') {
+    return '<div class="sheet"><div class="sh-h"><span>' + esc(sh.title) + ': result</span><span class="key">' + sh.ticket + '</span></div><div class="sh-b"><table class="tbl"><tbody>' + sh.rows.map((r) => '<tr><td class="mono">' + r.repo + '</td><td>' + pill(r.result, r.result === 'Pushed' || r.result === 'AlreadyPushed' ? 'ok' : 'bad') + '</td><td class="mono faint small">' + esc(r.commit || r.reason || '') + '</td></tr>').join('') + '</tbody></table>' +
+      (sh.finalized ? '<div class="card">✓ Every touched repo is on uat. The ticket is now <b>Integrated</b>; your checkouts were restored and the overlay reverted.</div>' : sh.rows.some((r) => r.result === 'Rejected') ? '<div class="warn-box">Rejected: uat moved since you prepared. Nothing was pushed for that repo. Prepare again; do not retry blindly.</div>' : '<div class="warn-box">Not every repo was pushed. Run it again to finish the rest; repos already pushed are skipped.</div>') +
+      '</div><div class="sh-f"><span></span>' + btn('Done', 'closeSheet', {}, 'p') + '</div></div>';
+  }
+  if (sh.kind === 'baseline') {
+    return '<div class="sheet"><div class="sh-h"><span>' + esc(sh.key) + ' is a hotfix</span></div><div class="sh-b"><div>Repos this ticket does not touch should run on:</div>' + [['production', 'Production branch (master / main): what the fix will be applied to'], ['base', 'develop: the latest development code'], ['uat', 'uat: what is on alpha now']].map(([v, l]) => '<label class="radio"><input type="radio" name="bl" value="' + v + '" data-act="pickBaseline" ' + (sh.choice === v ? 'checked' : '') + '> ' + esc(l) + '</label>').join('') + '<div class="faint small">Applies to this activation only. Nothing is remembered.</div></div><div class="sh-f"><span></span><span class="row">' + btn('Cancel', 'closeSheet', {}) + btn('Activate', 'activateWith', { key: sh.key }, 'p') + '</span></div></div>';
+  }
+  if (sh.kind === 'progress') {
+    return '<div class="sheet"><div class="sh-h"><span>' + esc(sh.title) + '</span></div><div class="sh-b">' + sh.steps.map((s) => '<div class="ps ' + s.st + '"><i>' + (s.st === 'ok' ? '✓' : s.st === 'run' ? '◐' : s.st === 'warn' ? '!' : '○') + '</i><span><b class="mono">' + esc(s.repo || '') + '</b> ' + esc(s.text) + '</span></div>').join('') + (sh.done ? '<div class="card">' + esc(sh.summary) + '</div>' : '') + '</div><div class="sh-f"><span class="faint small">' + (sh.done ? '' : 'Working…') + '</span>' + btn('Close', 'closeSheet', {}, sh.done ? 'p' : '', { disabled: !sh.done }) + '</div></div>';
+  }
+  if (sh.kind === 'errors') {
+    return '<div class="sheet"><div class="sh-h"><span>' + esc(sh.title) + '</span></div><div class="sh-b">' + sh.errors.map((e) => '<div class="warn-box">' + esc(e) + '</div>').join('') + '</div><div class="sh-f"><span></span>' + btn('Close', 'closeSheet', {}, 'p') + '</div></div>';
+  }
+  if (sh.kind === 'diagnose') {
+    return '<div class="sheet wide"><div class="sh-h"><span>Diagnose providers (fake output)</span></div><div class="sh-b"><div class="warn-box">Real output can contain ticket titles and names. Read it before sharing.</div><pre class="code">$ acli --version\n[exit 0]\nacli version 1.3.39-stable\n\n$ acli jira auth status\n[exit 0]\n✓ Authenticated\n\n$ bkt --version\n[exit 0]\nbkt version 0.32.1\n\n$ bkt auth status --json\n[exit 0]\n' + (S.providers.bkt.ready ? '{ "hosts": [ … ], "contexts": [ … ] }' : '{ "hosts": null, "contexts": null }') + '</pre></div><div class="sh-f"><span></span>' + btn('Close', 'closeSheet', {}, 'p') + '</div></div>';
+  }
+  if (sh.kind === 'palette') {
+    const q = (sh.q || '').toLowerCase();
+    const items = [{ l: 'Next', a: { name: 'next' } }, { l: 'On uat', a: { name: 'env' } }, { l: 'Workspace', a: { name: 'workspace' } }, { l: 'Audit log', a: { name: 'audit' } }, { l: 'Settings', a: { name: 'settings' } }, { l: 'Change ideas', a: { name: 'ideas' } }]
+      .concat(S.tickets.map((t) => ({ l: t.key + '  ' + t.title, a: { name: 'ticket', key: t.key, tab: 'overview' } }))).filter((i) => !q || i.l.toLowerCase().includes(q)).slice(0, 9);
+    return '<div class="sheet pal"><input id="palq" class="in big" placeholder="Jump to a ticket or screen…" data-bind="palq:0" value="' + esc(sh.q || '') + '" autocomplete="off"><div class="pal-l">' + items.map((i) => '<button class="pi" data-act="go"' + attr(i.a) + '>' + esc(i.l) + '</button>').join('') + '</div></div>';
+  }
+  return '';
+}
+
+/* ---------------- progress sheet (visual only; state already changed) ---------------- */
+function runProgress(title, steps, summary) {
+  const sh = { kind: 'progress', title, steps: steps.map((s) => Object.assign({ st: 'wait' }, s)), done: false, summary };
+  S.ui.sheet = sh; let i = 0;
+  const tick = () => {
+    if (S.ui.sheet !== sh) return;
+    if (i > 0 && sh.steps[i - 1]) sh.steps[i - 1].st = sh.steps[i - 1].warn ? 'warn' : 'ok';
+    if (i < sh.steps.length) { sh.steps[i].st = 'run'; i++; render(); setTimeout(tick, 420); }
+    else { sh.done = true; render(); }
+  };
+  if (IS_BROWSER) setTimeout(tick, 200); else { sh.steps.forEach((s) => { s.st = 'ok'; }); sh.done = true; }
+}
+function activationSteps(res) {
+  const out = res.rows.map((r) => ({ repo: r.repo, text: (r.role === 'ticket' ? 'switched to ' : 'baseline ') + r.branch + (S.tk_stash && S.tk_stash[r.repo] ? '' : '') }));
+  res.records.filter((r) => r.stash).forEach((r) => out.push({ repo: r.repo, text: 'local changes stashed as “' + r.label + '”' }));
+  if (res.overlay) { out.push({ repo: res.overlay.repo, text: 'composer path repository → ../' + res.overlay.provider + ', constraint “*”' }); out.push({ repo: res.overlay.repo, text: 'composer update, rebuild build-ui' }); }
+  return out;
+}
+
+/* ---------------- action dispatcher ---------------- */
+function startActivation(key, choice) {
+  const r = activate(key, choice);
+  if (r.needBaseline) { S.ui.sheet = { kind: 'baseline', key, choice: 'production' }; return; }
+  if (!r.ok) { S.ui.sheet = { kind: 'errors', title: 'Cannot activate ' + key, errors: r.errors }; return; }
+  runProgress('Activating ' + key, activationSteps(r), 'Active. The touched repos are on their ticket branches; the rest are on their baseline.');
+  S.ui.route = { name: 'ticket', key, tab: 'test' };
+}
+function startDeactivate(key) {
+  const r = deactivate(key, 'parked');
+  if (!r.ok) { toast(r.errors[0], 'bad'); return; }
+  const steps = []; if (r.overlayReverted) steps.push({ repo: r.overlayReverted.repo, text: 'overlay reverted: composer.json and composer.lock restored, composer install' });
+  r.restored.forEach((x) => steps.push({ repo: x.repo, text: 'back on ' + x.to + (x.stash ? ', stash popped' : '') }));
+  runProgress('Parking ' + key, steps, key + ' is parked. Your repos are exactly as you left them.');
+}
+function suggestionAct(s) {
+  const a = s.act;
+  switch (a.do) {
+    case 'sync': return ACT.sync();
+    case 'claim': claim(a.key); toast('Claimed ' + a.key, 'ok'); return;
+    case 'startReview': startReview(a.key); S.ui.route = { name: 'ticket', key: a.key, tab: 'review' }; return;
+    case 'markReviewed': markReviewed(a.key); return;
+    case 'activate': return startActivation(a.key, null);
+    case 'park': return startDeactivate(a.key);
+    case 'prepare': prepare(a.key); S.ui.route = { name: 'ticket', key: a.key, tab: 'ship' }; return;
+    case 'pushAsk': return askPush(a.key);
+    case 'composeDraft': composeDraft(a.key); S.ui.route = { name: 'ticket', key: a.key, tab: 'ship' }; return;
+    case 'postAsk': return askPostDraft(a.key, a.draft);
+    case 'transitionAsk': return askTransition(a.key);
+    case 'approveAsk': return askApprove(a.key, a.repo, a.pr);
+    case 'rerunAsk': return askRerun(a.key, a.repo);
+    case 'reclaim': reclaim(a.key); toast(a.key + ' claimed again', 'ok'); return;
+    case 'settings': S.ui.route = { name: 'settings' }; return;
+    case 'open': return ACT.go({ name: 'ticket', key: a.key, tab: a.tab });
+  }
+}
+const ACT = {
+  go(d) {
+    const name = d.name; const route = { name };
+    if (name === 'tickets') route.group = d.group || 'all';
+    if (name === 'ticket') { route.key = d.key; route.tab = d.tab || 'overview'; const t = tk(d.key); if (t && route.tab === 'overview') { S.ui.seenSnap = S.ui.seenSnap || {}; if (S.ui.route.key !== d.key || S.ui.route.tab !== 'overview') { S.ui.seenSnap[d.key] = t.seenN; markSeen(d.key); } } }
+    S.ui.route = route; S.ui.sheet = null; S.ui.left = false;
+  },
+  sync() {
+    const r = syncStart(); if (!r.ok) return;
+    if (IS_BROWSER) setTimeout(() => { const f = syncFinish(); toast(f.ok ? 'Sync finished' : 'Sync failed: cache kept', f.ok ? 'ok' : 'bad'); render(); }, 1300);
+    else syncFinish();
+  },
+  sug(d) { const s = suggest().find((x) => x.id === d.id); if (s) suggestionAct(s); },
+  dismissSug(d) { dismiss(d.id); },
+  snoozeSug(d) { snooze(d.id, Number(d.m)); },
+  undoSug(d) { delete S.responses[d.id]; },
+  toggleAllSug() { S.ui.showAllSug = !S.ui.showAllSug; },
+  claim(d) { claim(d.key); toast('Claimed ' + d.key, 'ok'); },
+  startReview(d) { startReview(d.key); S.ui.route = { name: 'ticket', key: d.key, tab: 'review' }; },
+  markReviewed(d) { markReviewed(d.key); toast('Marked reviewed', 'ok'); },
+  activate(d) { startActivation(d.key, null); },
+  activateWith(d) { const c = S.ui.sheet && S.ui.sheet.choice; S.ui.sheet = null; startActivation(d.key, c); },
+  pickBaseline(d, el) { if (S.ui.sheet) S.ui.sheet.choice = el.value; },
+  parkAsk(d) { startDeactivate(d.key); },
+  choose(d) { setLink(d.key, d.repo, d.branch); },
+  toggleChk(d) { toggleChecklist(d.key, Number(d.i)); },
+  addChk(d) { const v = S.ui.drafts['chk:' + d.key]; addChecklist(d.key, v); S.ui.drafts['chk:' + d.key] = ''; },
+  prepare(d) { const r = prepare(d.key); if (!r.ok) toast(r.error, 'bad'); },
+  pushAsk(d) { askPush(d.key); },
+  rerunAsk(d) { askRerun(d.key, d.repo); },
+  composeDraft(d) { composeDraft(d.key); },
+  postAsk(d) { askPostDraft(d.key, d.draft); },
+  transitionAsk(d) { askTransition(d.key); },
+  approveAsk(d) { askApprove(d.key, d.repo, Number(d.pr)); },
+  reqAsk(d) { askRequestChanges(d.key, Number(d.pr)); },
+  commentAsk(d) { askComment(d.key); },
+  selPr(d) { S.ui.prSel[d.key] = Number(d.pr); S.ui.inline = null; },
+  selFile(d) { S.ui.fileSel[d.key + ':' + d.pr] = Number(d.i); S.ui.inline = null; },
+  inlineOpen(d) { S.ui.inline = { key: d.key, pr: Number(d.pr), file: d.file, line: d.line }; },
+  inlineCancel() { S.ui.inline = null; },
+  inlineAsk() { askInline(S.ui.route.key); },
+  runConfirm() { runConfirm(); },
+  closeSheet() { S.ui.sheet = null; },
+  goSettings() { S.ui.sheet = null; S.ui.route = { name: 'settings' }; },
+  stopAsk() { askStop(); },
+  startWs() { S.ws.up = true; audit('workspace.start', null); toast('Workspace started', 'ok'); },
+  provider(d) { SIM.bkt !== undefined && (d.k === 'bkt' ? SIM.bkt(d.v === '1') : SIM.jira(d.v === '1')); toast((d.k === 'bkt' ? 'bkt' : 'acli') + (d.v === '1' ? ' signed in (fake)' : ' signed out (simulated)'), d.v === '1' ? 'ok' : 'warn'); },
+  recheck() { toast('Providers re-checked', 'info'); },
+  diagnose() { S.ui.sheet = { kind: 'diagnose' }; },
+  resetCache() { toast('Cache reset. The next sync rebuilds it (state.db is untouched).', 'info'); },
+  resetDemo() { const keep = S.ui; S = newState(); script.length = 0; syncScript().forEach((e) => script.push(e)); S.ui.dev = keep.dev; toast('Demo reset', 'info'); },
+  toggleLeft() { S.ui.left = !S.ui.left; },
+  toggleRight() { S.ui.right = !S.ui.right; },
+  toggleDev() { S.ui.dev = !S.ui.dev; },
+  palette() { S.ui.sheet = { kind: 'palette', q: '' }; },
+  sim(d) {
+    const k = d.k; const key = d.key;
+    const map = {
+      mention: () => SIM.mention(key), signOff: () => SIM.signOff(key), returned: () => SIM.returned(key), backToReview: () => SIM.backToReview(key), newCommits: () => SIM.newCommits(key),
+      offline: () => SIM.toggle('offline', !S.sim.offline), conflict: () => SIM.toggle('conflict', S.sim.conflict ? null : 'web'), leak: () => SIM.toggle('leak', S.sim.leak ? null : 'api-client'),
+      uatMoved: () => SIM.toggle('uatMoved', !S.sim.uatMoved), failDeploy: () => SIM.toggle('failDeploy', S.sim.failDeploy ? null : 'web'), bkt: () => SIM.bkt(!S.providers.bkt.ready), jira: () => SIM.jira(!S.providers.jira.ready),
+      advance: () => { advance(9000); }, sync: () => { syncNow(); },
+    };
+    if (map[k]) map[k]();
+  },
+};
+const TEXTINPUT = (name, val) => {
+  const [k, a, b] = name.split(':');
+  if (k === 'cmt') S.ui.drafts['cmt:' + a] = val;
+  else if (k === 'inl') S.ui.drafts['inl:0'] = val;
+  else if (k === 'chk') S.ui.drafts['chk:' + a] = val;
+  else if (k === 'notes') tk(a).notes = val;
+  else if (k === 'draft') { const d = tk(a).drafts.find((x) => x.id === b); if (d) d.body = val; }
+  else if (k === 'typed' && S.ui.sheet) S.ui.sheet.typed = val;
+  else if (k === 'palq' && S.ui.sheet) S.ui.sheet.q = val;
+};
+
+/* ---------------- simulate drawer ---------------- */
+function devPanel() {
+  if (!S.ui.dev) return '';
+  const on = (v) => (v ? 'p' : '');
+  const act = activeTicket();
+  const anyInt = S.tickets.find((t) => status(t) === 'integrated' && t.merges.length) || S.tickets.find((t) => status(t) === 'integrated');
+  const key = anyInt ? anyInt.key : 'PROJ-142';
+  return '<aside class="dev"><div class="row sb"><b>Simulate</b><button class="icon" data-act="toggleDev">×</button></div><div class="faint small">Make the outside world do things. Nothing here is real.</div>' +
+    '<div class="lab">Environment</div><div class="row wrap">' +
+    btn('Offline', 'sim', { k: 'offline' }, on(S.sim.offline) + ' sm') + btn('bkt signed out', 'sim', { k: 'bkt' }, on(!S.providers.bkt.ready) + ' sm') + btn('acli signed out', 'sim', { k: 'jira' }, on(!S.providers.jira.ready) + ' sm') + '</div>' +
+    '<div class="lab">Next integration</div><div class="row wrap">' + btn('uat conflict', 'sim', { k: 'conflict' }, on(S.sim.conflict) + ' sm') + btn('overlay leak', 'sim', { k: 'leak' }, on(S.sim.leak) + ' sm') + btn('uat moves before push', 'sim', { k: 'uatMoved' }, on(S.sim.uatMoved) + ' sm') + btn('web deploy fails', 'sim', { k: 'failDeploy' }, on(S.sim.failDeploy) + ' sm') + '</div>' +
+    '<div class="lab">Jira events on <span class="key">' + key + '</span></div><div class="row wrap">' + btn('Mention me', 'sim', { k: 'mention', key }, 'sm') + btn('Signed off (Done)', 'sim', { k: 'signOff', key }, 'sm') + btn('Returned', 'sim', { k: 'returned', key }, 'sm') + btn('Back to Review', 'sim', { k: 'backToReview', key }, 'sm') + btn('New commits', 'sim', { k: 'newCommits', key }, 'sm') + '</div>' +
+    '<div class="lab">Time</div><div class="row wrap">' + btn('Skip 9s (pipelines)', 'sim', { k: 'advance' }, 'sm') + btn('Run a sync', 'sim', { k: 'sync' }, 'sm') + '</div>' +
+    '<div class="lab">Try this</div><ol class="try"><li>Next → <b>Start review</b> on PROJ-142, open Review, <b>Mark reviewed</b>.</li><li>Activate, tick the checklist, <b>Prepare integration</b>, then <b>Review &amp; push</b> and type the key.</li><li>Watch the pipelines; draft, post, transition.</li><li>Then Simulate <b>Signed off</b> and approve.</li><li>Try the conflict, leak and uat-moves switches before pushing.</li></ol></aside>';
+}
+
+/* ---------------- render ---------------- */
+function toasts() { return '<div class="toasts">' + S.ui.toasts.slice(-4).map((t) => '<div class="toast ' + t.kind + '">' + esc(t.msg) + '</div>').join('') + '</div>'; }
+function layout() {
+  return '<div class="app ' + (S.ui.right ? '' : 'noright ') + (S.ui.left ? 'showleft' : '') + '"><aside class="left">' + leftNav() + '</aside><div class="center">' + topBar() + nowBar() + '<main class="content">' + mainView() + '</main></div><aside class="right">' + rightPanel() + '</aside></div>' +
+    (S.ui.sheet ? '<div class="scrim" data-act="scrim"></div>' + sheetBody() : '') + devPanel() + toasts();
+}
+function sig() { const r = S.ui.route; return r.name + ':' + (r.key || '') + ':' + (r.tab || '') + ':' + (r.group || ''); }
+let lastSig = '';
+function render() {
+  if (!IS_BROWSER) return;
+  const root = document.getElementById('root'); const q = (s) => root.querySelector(s);
+  const keep = { c: q('.content') && q('.content').scrollTop, l: q('.left') && q('.left').scrollTop, r: q('.right') && q('.right').scrollTop };
+  const ae = document.activeElement; const focusId = ae && ae.id; const selStart = ae && ae.selectionStart;
+  root.innerHTML = layout();
+  const same = sig() === lastSig; lastSig = sig();
+  if (q('.content')) q('.content').scrollTop = same ? keep.c || 0 : 0;
+  if (q('.left') && keep.l) q('.left').scrollTop = keep.l; if (q('.right') && keep.r && same) q('.right').scrollTop = keep.r;
+  if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); try { el.setSelectionRange(selStart, selStart); } catch (e) { /* not a text field */ } } }
+  else if (S.ui.sheet && S.ui.sheet.kind === 'palette') { const p = document.getElementById('palq'); if (p) p.focus(); }
+}
+
+/* ---------------- boot ---------------- */
+function boot() {
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
+    const act = el.getAttribute('data-act');
+    if (act === 'scrim') { S.ui.sheet = null; render(); return; }
+    if (el.tagName === 'INPUT' && el.type === 'radio') return;   // handled on change
+    if (el.tagName === 'A') e.preventDefault();
+    if (el.tagName === 'INPUT' && el.type === 'checkbox') return; // handled on change
+    const d = {}; for (const a of el.attributes) if (a.name.startsWith('data-') && a.name !== 'data-act') d[a.name.slice(5)] = a.value;
+    if (ACT[act]) { ACT[act](d, el); render(); }
+  });
+  document.addEventListener('change', (e) => {
+    const el = e.target.closest('[data-act]'); if (!el) return;
+    if (el.type === 'checkbox' || el.type === 'radio') { const act = el.getAttribute('data-act'); const d = {}; for (const a of el.attributes) if (a.name.startsWith('data-') && a.name !== 'data-act') d[a.name.slice(5)] = a.value; if (ACT[act]) { ACT[act](d, el); render(); } }
+  });
+  document.addEventListener('input', (e) => {
+    const el = e.target; const b = el.getAttribute && el.getAttribute('data-bind'); if (!b) return;
+    TEXTINPUT(b, el.value);
+    if (b.startsWith('typed:')) { const sh = S.ui.sheet; const btnEl = document.getElementById('confirmBtn'); if (btnEl && sh) btnEl.disabled = !(sh.typed.trim().toLowerCase() === sh.need.toLowerCase()); }
+    if (b.startsWith('palq:')) render();
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); S.ui.sheet = { kind: 'palette', q: '' }; render(); return; }
+    if (e.key === 'Escape' && S.ui.sheet) { S.ui.sheet = null; render(); return; }
+    if (e.key === 'Enter' && S.ui.sheet && S.ui.sheet.kind === 'palette') { const f = document.querySelector('.pal-l .pi'); if (f) f.click(); }
+    if (e.key === 'Enter' && e.target && e.target.id === 'chkadd') { const key = S.ui.route.key; ACT.addChk({ key }); render(); }
+  });
+  render();
+  setInterval(() => {
+    advance(500);
+    const ae = document.activeElement; const typing = ae && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && ae.type !== 'checkbox' && ae.type !== 'radio'));
+    if (!typing && !(S.ui.sheet && S.ui.sheet.kind === 'progress')) render();
+  }, 500);
+}
+if (IS_BROWSER) boot();
+else Object.assign(globalThis.__DE, { render: () => layout(), ACT, S_get: () => S, mainView, TEXTINPUT, askPush, runConfirm, startActivation, suggestionAct, openConfirm });
+
+})();
+</script>
