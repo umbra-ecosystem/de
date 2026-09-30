@@ -880,6 +880,8 @@ pub struct SyncState {
     pub report: Vec<(bool, String, String)>,
     pub script: usize,
     pub finish_at: Option<i64>,
+    /// No successful sync is on record (a real store that has never synced).
+    pub never: bool,
 }
 
 #[derive(Clone, Debug, Default)]

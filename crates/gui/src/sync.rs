@@ -78,6 +78,13 @@ pub fn sync_real(now: i64) -> SyncDone {
     }
 }
 
+/// Whole minutes since Jira last synced completely, from the cache; `None` when it never has.
+pub fn last_sync_minutes_ago(now: i64) -> Option<i64> {
+    let cache = Store::open_default(Kind::Cache).ok()?;
+    let state = de_core::store::sync_state::get(&cache, de_core::store::sync_state::JIRA).ok()??;
+    Some(((now - state.last_ok_at?).max(0)) / 60)
+}
+
 /// Read the cached tickets without syncing (what the app shows at start, offline or not).
 pub fn load_cached() -> eyre::Result<Vec<Ticket>> {
     let config = Config::load()?;

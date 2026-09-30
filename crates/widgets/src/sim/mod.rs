@@ -132,6 +132,7 @@ impl Sim {
         let failed = report.iter().any(|r| !r.0);
         if !failed {
             self.sync.last_ok = self.ms;
+            self.sync.never = false;
         }
         self.sync.last_error = failed.then(|| "partial".to_string());
         let text = report
@@ -151,6 +152,25 @@ impl Sim {
             },
             &text,
         );
+    }
+
+    /// The last successful sync was `minutes` ago, or there has been none. The real store seeds this at start;
+    /// the simulation starts with two minutes.
+    pub fn set_last_sync_minutes_ago(&mut self, minutes: Option<i64>) {
+        self.sync.never = minutes.is_none();
+        let ms = minutes.unwrap_or(0) * MS_PER_MIN;
+        self.sync.last_ok = self.ms - ms;
+        self.sync.last_attempt = self.ms - ms;
+    }
+
+    /// The status bar's words for a sync `minutes` minutes old: nothing under a minute is worth counting.
+    pub fn synced_text(minutes: i64) -> String {
+        match minutes {
+            m if m < 1 => "Synced now".to_string(),
+            m if m < 60 => format!("Synced {m}m ago"),
+            m if m < 24 * 60 => format!("Synced {}h ago", m / 60),
+            m => format!("Synced {}d ago", m / (24 * 60)),
+        }
     }
 
     pub fn set_jira_ready(&mut self, ready: bool) {
@@ -251,5 +271,36 @@ impl Sim {
                     Some(Local::Claimed | Local::Reviewing | Local::Active)
                 )
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_sync_age_reads_now_under_a_minute_then_minutes_hours_days() {
+        assert_eq!(Sim::synced_text(0), "Synced now");
+        assert_eq!(Sim::synced_text(1), "Synced 1m ago");
+        assert_eq!(Sim::synced_text(59), "Synced 59m ago");
+        assert_eq!(Sim::synced_text(60), "Synced 1h ago");
+        assert_eq!(Sim::synced_text(23 * 60 + 59), "Synced 23h ago");
+        assert_eq!(Sim::synced_text(2 * 24 * 60), "Synced 2d ago");
+    }
+
+    #[test]
+    fn the_status_bar_follows_the_last_sync() {
+        let mut sim = Sim::new();
+        sim.set_last_sync_minutes_ago(Some(0));
+        assert_eq!(crate::Store::status(&sim).sync_text, "Synced now");
+        sim.set_last_sync_minutes_ago(Some(5));
+        assert_eq!(crate::Store::status(&sim).sync_text, "Synced 5m ago");
+        sim.set_last_sync_minutes_ago(None);
+        assert_eq!(crate::Store::status(&sim).sync_text, "Not synced yet");
+        // A sync that completes clears "never" and reads as now.
+        sim.sync_began();
+        assert_eq!(crate::Store::status(&sim).sync_text, "Syncing…");
+        sim.sync_ended(vec![(true, "Jira (acli)".into(), "ok".into())]);
+        assert_eq!(crate::Store::status(&sim).sync_text, "Synced now");
     }
 }

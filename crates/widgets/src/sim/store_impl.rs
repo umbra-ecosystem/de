@@ -945,11 +945,10 @@ impl Store for Sim {
             ("Syncing…".to_string(), Tone::Accent)
         } else if let Some(e) = &self.sync.last_error {
             (e.clone(), Tone::Warn)
+        } else if self.sync.never {
+            ("Not synced yet".to_string(), Tone::Neutral)
         } else {
-            (
-                format!("Synced {}m ago", self.mins_ago(self.sync.last_ok)),
-                Tone::Neutral,
-            )
+            (Self::synced_text(self.mins_ago(self.sync.last_ok)), Tone::Neutral)
         };
         StatusVm {
             active: active.map(|t| ActiveChip {

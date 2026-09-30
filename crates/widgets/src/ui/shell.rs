@@ -443,7 +443,19 @@ pub fn status_bar(ui: &Ui, s: &StatusVm) -> Div {
                         .cursor_pointer()
                         .text_color(pal.tone(s.sync_tone))
                         .on_click(ui.on_click(Intent::Do(Command::Sync)))
-                        .child(format!("{} ↻", s.sync_text)),
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .child(s.sync_text.clone())
+                        // The icon turns while a sync runs, and is the plain refresh mark otherwise.
+                        .child(if s.sync_running {
+                            gpui_kit::component::spinner::Spinner::new()
+                                .xsmall()
+                                .color(pal.tone(s.sync_tone))
+                                .into_any_element()
+                        } else {
+                            div().child("↻").into_any_element()
+                        }),
                 ),
         )
 }

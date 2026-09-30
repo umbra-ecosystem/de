@@ -10,15 +10,26 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use de_core::config::Config;
 use de_core::synclog;
 use de_widgets::sim::Sim;
+use de_widgets::sim::model::MS_PER_MIN;
 use de_widgets::vm::*;
 use de_widgets::{Outcome, ReviewSel, Store};
 
 use crate::{logs, mapping};
-use crate::sync::{SyncDone, load_cached, sync_real};
+use crate::sync::{SyncDone, last_sync_minutes_ago, load_cached, sync_real};
 
 pub struct CoreStore {
     sim: Sim,
     running: Option<Receiver<SyncDone>>,
+    /// Real milliseconds not yet turned into simulated ones (see [`CoreStore::tick`]).
+    carry_ms: i64,
+}
+
+/// Real milliseconds (plus what was carried over) as simulated milliseconds, and what is left over. A real minute
+/// is `MS_PER_MIN` simulated milliseconds.
+fn to_sim_ms(carry: i64, real: i64) -> (i64, i64) {
+    let per_sim_ms = 60_000 / MS_PER_MIN;
+    let total = carry + real;
+    (total / per_sim_ms, total % per_sim_ms)
 }
 
 fn now() -> i64 {
@@ -32,9 +43,12 @@ impl CoreStore {
     /// Starts from the cached tickets and looks for new ones right away.
     pub fn open() -> Self {
         let cached = load_cached().unwrap_or_default();
+        let mut sim = Sim::with_tickets(cached);
+        sim.set_last_sync_minutes_ago(last_sync_minutes_ago(now()));
         let mut store = Self {
-            sim: Sim::with_tickets(cached),
+            sim,
             running: None,
+            carry_ms: 0,
         };
         store.begin_sync();
         store
@@ -233,7 +247,29 @@ impl Store for CoreStore {
     }
     fn tick(&mut self, millis: i64) -> Vec<(String, ToastKind)> {
         let mut toasts = self.poll();
-        toasts.extend(self.sim.tick(millis));
+        // The simulation runs a minute in `MS_PER_MIN` simulated milliseconds (four real seconds in the
+        // showcase). Here a minute is a real minute, so real time is scaled down to it: otherwise "Synced 1m
+        // ago" would come every four seconds.
+        let (sim_ms, carry) = to_sim_ms(self.carry_ms, millis);
+        self.carry_ms = carry;
+        toasts.extend(self.sim.tick(sim_ms));
         toasts
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_real_minute_is_one_simulated_minute_however_it_is_ticked() {
+        let (mut carry, mut sim) = (0, 0);
+        // 120 real seconds in half-second ticks.
+        for _ in 0..240 {
+            let (ms, left) = to_sim_ms(carry, 500);
+            sim += ms;
+            carry = left;
+        }
+        assert_eq!(sim / MS_PER_MIN, 2, "two minutes, not 30 (four seconds each)");
     }
 }
