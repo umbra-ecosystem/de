@@ -96,7 +96,14 @@ fn elements(doc: Value, keys: &[&str]) -> Option<Vec<Value>> {
 pub fn parse_search(output: &str, site: Option<&str>) -> ProviderResult<Vec<RemoteTicket>> {
     const WHAT: &str = "search results";
     let mut tickets = Vec::new();
-    for doc in json_documents(output, WHAT)? {
+    let documents = json_documents(output, WHAT)?;
+    // A search that finds nothing prints `[]` (verified against a real acli). No document at
+    // all is a run that did not answer; taking it for "no tickets" would make sync drop
+    // everything cached.
+    if documents.is_empty() {
+        return Err(parse_error(WHAT, "empty output", output));
+    }
+    for doc in documents {
         let items = if doc.get("key").is_some() {
             vec![doc]
         } else {

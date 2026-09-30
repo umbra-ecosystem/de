@@ -598,6 +598,17 @@ fn errors_are_classified() {
         ),
         ("404 Not Found", ProviderErrorKind::NotFound),
         ("something else", ProviderErrorKind::Command),
+        // Numbers that are ids, not statuses: never "not logged in" or "gone".
+        (
+            "Error: 500 Internal Server Error loading pull request 401",
+            ProviderErrorKind::Command,
+        ),
+        (
+            "Error: 502 Bad Gateway for /pullrequests/404 (pipeline 404)",
+            ProviderErrorKind::Command,
+        ),
+        ("Error: status 401", ProviderErrorKind::NotAuthenticated),
+        ("Error: request failed (404)", ProviderErrorKind::NotFound),
         (
             "command supports Bitbucket Cloud contexts only",
             ProviderErrorKind::Unsupported,

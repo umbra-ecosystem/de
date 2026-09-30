@@ -141,9 +141,16 @@ fn spawn_error(e: &eyre::Report) -> ProviderError {
     }
 }
 
-fn has_token(text: &str, token: &str) -> bool {
-    text.split(|c: char| !c.is_ascii_alphanumeric())
-        .any(|t| t == token)
+/// Whether `code` (an HTTP status) appears as a word of its own and not as part of a ticket
+/// key or a number (`PROJ-401`, `#404`, a path segment, `v1.401`).
+fn has_status_code(text: &str, code: &str) -> bool {
+    text.match_indices(code).any(|(i, _)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + code.len()..].chars().next();
+        !before
+            .is_some_and(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '#' | '/' | '_' | '.'))
+            && !after.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+    })
 }
 
 /// Turns a failed `acli` run into the error sync can act on. Matches on wording because
@@ -169,7 +176,7 @@ fn classify_failure(output: &CommandOutput) -> ProviderError {
         "auth login",
         "session expired",
         "invalid credentials",
-    ]) || has_token(&lower, "401")
+    ]) || has_status_code(&lower, "401")
     {
         ProviderError::not_authenticated(TOOL, snippet(detail, 300))
     } else if any(&[
@@ -185,7 +192,7 @@ fn classify_failure(output: &CommandOutput) -> ProviderError {
         ProviderError::Network(snippet(detail, 300))
     } else if (any(&["does not exist", "do not have permission", "not found"])
         && !any(&["command not found"]))
-        || has_token(&lower, "404")
+        || has_status_code(&lower, "404")
     {
         ProviderError::NotFound(snippet(detail, 300))
     } else {
