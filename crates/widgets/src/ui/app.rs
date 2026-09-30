@@ -46,11 +46,6 @@ fn needs(vm: &AppVm) -> Vec<Need> {
                     true,
                     "Add a comment to Jira…",
                 );
-                add(
-                    Field::Notes(o.key.clone()),
-                    true,
-                    "Private notes, saved locally…",
-                );
             }
             TicketBody::Test(TestVm::Active { .. }) => {
                 if let Route::Ticket { key, .. } = &vm.route {

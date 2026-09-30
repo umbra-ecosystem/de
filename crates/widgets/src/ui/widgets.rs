@@ -247,6 +247,8 @@ pub fn tab_bar(
     let ui = ui.clone();
     TabBar::new(id)
         .underline()
+        // The bar runs edge to edge; this keeps the first tab in line with the content's margin.
+        .prefix(div().w_6())
         .selected_index(selected)
         .children(items.into_iter().map(move |(label, dot_on)| {
             let t = Tab::new().label(label);

@@ -15,37 +15,44 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
         .flex()
         .flex_col()
         .flex_none()
-        .gap_3()
-        .px_6()
-        .pt_4()
         .child(
             div()
                 .flex()
-                .items_center()
+                .flex_col()
                 .gap_3()
-                .child(key_text(ui, &h.key))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .text_lg()
-                        .child(h.title.clone()),
-                )
+                .px_6()
+                .pt_4()
+                .pb_2()
                 .child(
                     div()
                         .flex()
                         .items_center()
-                        .gap_1()
-                        .flex_none()
-                        .child(pill(pal, &h.jira))
-                        .when_some(h.local.clone(), |d, b| d.child(pill(pal, &b)))
-                        .when(h.hotfix, |d| d.child(hotfix_pill(pal)))
-                        .when_some(h.uat_flag.clone(), |d, b| d.child(pill(pal, &b))),
+                        .gap_3()
+                        .child(key_text(ui, &h.key))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_lg()
+                                .child(h.title.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .flex_none()
+                                .child(pill(pal, &h.jira))
+                                .when_some(h.local.clone(), |d, b| d.child(pill(pal, &b)))
+                                .when(h.hotfix, |d| d.child(hotfix_pill(pal)))
+                                .when_some(h.uat_flag.clone(), |d, b| d.child(pill(pal, &b))),
+                        )
+                        .child(buttons(ui, &h.actions)),
                 )
-                .child(buttons(ui, &h.actions)),
+                .child(stepper(pal, &h.stepper)),
         )
-        .child(stepper(pal, &h.stepper))
+        // The tab bar is full width (its underline and the review toolbar's line meet the panel edges).
         .child(tab_bar(
             ui,
             "ticket-tabs",
@@ -103,13 +110,14 @@ pub fn ticket(
             .min_h_0()
             .overflow_y_scroll()
             .px_6()
-            .py_4()
+            .pt_3()
+            .pb_4()
             .child(
                 div()
                     .flex()
                     .flex_col()
                     .gap_4()
-                    .child(notices)
+                    .when(!h.banners.is_empty(), |d| d.child(notices))
                     .child(match other {
                         TicketBody::Overview(o) => overview::overview(ui, cx, inputs, o),
                         TicketBody::Test(t) => test_tab::test(ui, cx, inputs, &h.key, t),

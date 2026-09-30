@@ -218,11 +218,11 @@ pub fn overview(ui: &Ui, cx: &App, inputs: &Inputs, o: &OverviewVm) -> Div {
                     }),
                 )),
             )
-        })
-        .child(
-            section(pal, "Your notes")
-                .child(inputs.area(&Field::Notes(o.key.clone())))
-                .child(faint(pal, "Private, saved locally.")),
-        );
-    div().flex().gap_6().items_start().child(left).child(right)
+        });
+    div()
+        .flex()
+        .gap_6()
+        .items_start()
+        .child(left)
+        .when(!o.attachments.is_empty(), |d| d.child(right))
 }
