@@ -89,6 +89,19 @@ impl Inputs {
         }
     }
 
+    /// A single-line input with no border or fill and right-aligned text, so a settings row keeps the look of a
+    /// plain value (label left, value right) and is still editable in place.
+    pub fn flat(&self, field: &Field) -> AnyElement {
+        match self.map.get(field) {
+            Some(TextBox::Line(e)) => Input::new(e)
+                .appearance(false)
+                .text_right()
+                .h(px(28.0))
+                .into_any_element(),
+            _ => div().into_any_element(),
+        }
+    }
+
     /// The search field of a list strip: a search icon, a little taller than a plain input. The strip is 48px tall
     /// so it has some air; the caller caps its width.
     pub fn search(&self, field: &Field) -> AnyElement {

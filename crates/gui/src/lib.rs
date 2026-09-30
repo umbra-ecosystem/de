@@ -11,6 +11,7 @@
 #![allow(clippy::result_large_err)]
 
 pub mod logs;
+pub mod mapping;
 pub mod store;
 pub mod sync;
 pub mod tickets;

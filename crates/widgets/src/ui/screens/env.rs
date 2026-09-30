@@ -25,6 +25,9 @@ fn strip(pal: &Pal) -> Div {
 }
 
 /// A flush row: hairline below, edge to edge.
+/// Height of a row of the settings page, so a row of chips and a row with an editable value line up.
+const SETTING_ROW_H: f32 = 40.0;
+
 fn row(pal: &Pal) -> Div {
     div()
         .flex()
@@ -272,7 +275,7 @@ pub fn logs(ui: &Ui, cx: &App, v: &LogsVm) -> Div {
     div().flex().size_full().child(list).child(viewer)
 }
 
-pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
+pub fn settings(ui: &Ui, inputs: &Inputs, v: &SettingsVm) -> Div {
     let pal = &ui.pal;
     let kv_row = |k: &str, val: String| {
         row(pal)
@@ -356,6 +359,7 @@ pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
                 .border_color(pal.border.opacity(0.4))
                 .child(
                     row(pal)
+                        .h(px(SETTING_ROW_H))
                         .justify_between()
                         .child(
                             div()
@@ -369,7 +373,20 @@ pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
                             }),
                         )),
                 )
-                .children(v.mapping.iter().map(|(k, val)| kv_row(k, val.clone()))),
+                .children(v.mapping.iter().map(|r| {
+                    row(pal)
+                        .h(px(SETTING_ROW_H))
+                        .justify_between()
+                        .child(
+                            div()
+                                .flex_none()
+                                .w(px(200.0))
+                                .text_sm()
+                                .text_color(pal.muted)
+                                .child(r.key.label()),
+                        )
+                        .child(div().flex_1().min_w_0().child(inputs.flat(&Field::Mapping(r.key))))
+                })),
         ))
         .child(band(
             pal,

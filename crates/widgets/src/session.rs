@@ -287,6 +287,23 @@ impl Session {
     fn submit(&mut self, field: Field) {
         let text = self.text(&field);
         match field {
+            Field::Mapping(key) => {
+                let mut text = text.trim().to_string();
+                // Typing the default back means "not set".
+                if key.literal_default() == Some(text.as_str()) {
+                    text.clear();
+                }
+                let stored = self
+                    .store
+                    .settings()
+                    .mapping
+                    .into_iter()
+                    .find(|r| r.key == key)
+                    .map(|r| r.value);
+                if stored.as_deref() != Some(text.as_str()) {
+                    self.run(Command::SetMapping { key, text });
+                }
+            }
             Field::Checklist(key) => {
                 if !text.trim().is_empty() {
                     self.local(Command::AddChecklist {
@@ -337,6 +354,18 @@ impl Session {
     }
 
     fn go(&mut self, route: Route) {
+        if route == Route::Settings {
+            // The fields start from what is stored, or from the default when that is a plain value, so an unset
+            // field reads like a set one.
+            for row in self.store.settings().mapping {
+                let text = if row.value.is_empty() {
+                    row.key.literal_default().unwrap_or_default().to_string()
+                } else {
+                    row.value
+                };
+                self.set_text(Field::Mapping(row.key), text);
+            }
+        }
         if route == Route::Logs
             && self.log_view.is_none()
             && let Some(first) = self.store.logs().0.first()
@@ -1658,6 +1687,66 @@ mod tests {
         assert!(s.view().right.is_empty());
         s.handle(Intent::Go(Route::Settings));
         assert!(!s.view().right.is_empty());
+    }
+
+    fn mapping_value(s: &Session, key: MappingKey) -> String {
+        s.store()
+            .settings()
+            .mapping
+            .into_iter()
+            .find(|r| r.key == key)
+            .unwrap()
+            .value
+    }
+
+    #[test]
+    fn a_mapping_field_starts_from_the_stored_value_and_saves_when_submitted() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Settings));
+        let f = Field::Mapping(MappingKey::AccountId);
+        assert_eq!(s.text(&f), "acct-0001", "seeded from the store");
+
+        s.handle(Intent::SetText(f.clone(), "  acct-9  ".into()));
+        assert_eq!(mapping_value(&s, MappingKey::AccountId), "acct-0001", "typing alone saves nothing");
+        s.handle(Intent::Submit(f.clone()));
+        assert_eq!(mapping_value(&s, MappingKey::AccountId), "acct-9");
+        assert!(s.view().toasts.iter().any(|t| t.text.contains("Saved")));
+
+        // Clearing it puts the default back.
+        s.handle(Intent::SetText(f.clone(), String::new()));
+        s.handle(Intent::Submit(f));
+        assert_eq!(mapping_value(&s, MappingKey::AccountId), "");
+    }
+
+    #[test]
+    fn an_unset_status_shows_its_default_as_text_and_typing_it_back_unsets_it() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Settings));
+        let f = Field::Mapping(MappingKey::ReviewStatus);
+        assert_eq!(s.text(&f), "In Review");
+        assert_eq!(mapping_value(&s, MappingKey::ReviewStatus), "");
+
+        // Submitting the untouched default changes nothing and says nothing.
+        let before = s.view().toasts.len();
+        s.handle(Intent::Submit(f.clone()));
+        assert_eq!(s.view().toasts.len(), before);
+
+        s.handle(Intent::SetText(f.clone(), "Code Review".into()));
+        s.handle(Intent::Submit(f.clone()));
+        assert_eq!(mapping_value(&s, MappingKey::ReviewStatus), "Code Review");
+
+        s.handle(Intent::SetText(f.clone(), "In Review".into()));
+        s.handle(Intent::Submit(f));
+        assert_eq!(mapping_value(&s, MappingKey::ReviewStatus), "");
+    }
+
+    #[test]
+    fn submitting_an_unchanged_mapping_field_says_nothing() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Settings));
+        let before = s.view().toasts.len();
+        s.handle(Intent::Submit(Field::Mapping(MappingKey::ReviewJql)));
+        assert_eq!(s.view().toasts.len(), before);
     }
 
     #[test]

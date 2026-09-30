@@ -13,7 +13,7 @@ use de_widgets::sim::Sim;
 use de_widgets::vm::*;
 use de_widgets::{Outcome, ReviewSel, Store};
 
-use crate::logs;
+use crate::{logs, mapping};
 use crate::sync::{SyncDone, load_cached, sync_real};
 
 pub struct CoreStore {
@@ -51,6 +51,26 @@ impl CoreStore {
         self.running = Some(rx);
         self.sim.sync_began();
         Outcome::ok()
+    }
+
+    /// Write one mapping setting to `config.toml`, then re-read the tickets so renamed statuses show right away.
+    fn save_mapping(&mut self, key: MappingKey, text: &str) -> Outcome {
+        match mapping::save(key, text) {
+            Ok(_) => {
+                if let Ok(fresh) = load_cached() {
+                    self.sim.replace_tickets(fresh);
+                }
+                Outcome::ok().with_toast(
+                    format!("Saved {}. {}", key.label().to_lowercase(), mapping::effect(key)),
+                    ToastKind::Ok,
+                    None,
+                )
+            }
+            Err(e) => Outcome::fail(format!(
+                "Could not save {} to config.toml: {e:#}. Check that the file is writable.",
+                key.label().to_lowercase()
+            )),
+        }
     }
 
     /// Apply a finished sync, if there is one.
@@ -145,7 +165,11 @@ impl Store for CoreStore {
         self.sim.audit()
     }
     fn settings(&self) -> SettingsVm {
-        self.sim.settings()
+        let mut v = self.sim.settings();
+        if let Ok(config) = Config::load() {
+            v.mapping = mapping::rows(&config);
+        }
+        v
     }
     fn logs(&self) -> (Vec<LogRunVm>, String) {
         match (synclog::default_dir(), Config::load()) {
@@ -182,6 +206,7 @@ impl Store for CoreStore {
     fn dispatch(&mut self, command: LocalCommand) -> Outcome {
         match command.command() {
             Command::Sync => self.begin_sync(),
+            Command::SetMapping { key, text } => self.save_mapping(*key, text),
             _ => self.sim.dispatch(command),
         }
     }

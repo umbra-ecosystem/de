@@ -81,6 +81,11 @@ fn needs(vm: &AppVm) -> Vec<Need> {
     if matches!(vm.screen, ScreenVm::Tickets(_) | ScreenVm::OnUat(_)) {
         add(Field::TicketFilter, false, "Search tickets…");
     }
+    if let ScreenVm::Settings(v) = &vm.screen {
+        for r in &v.mapping {
+            add(Field::Mapping(r.key), false, r.key.placeholder());
+        }
+    }
     match &vm.sheet {
         Some(SheetVm::Confirm { preview, .. }) if preview.type_key.is_some() => {
             add(Field::TypedKey, false, "type the key");
@@ -277,6 +282,8 @@ impl AppView {
                         this.on_text(field.clone(), text, cx);
                     }
                     InputEvent::PressEnter { .. } => this.on_enter(&field, cx),
+                    // Leaving a settings field saves it.
+                    InputEvent::Blur => this.on_enter(&field, cx),
                     _ => {}
                 },
             ));
@@ -296,7 +303,9 @@ impl AppView {
     fn on_enter(&mut self, field: &Field, cx: &mut Context<Self>) {
         match field {
             Field::TypedKey => self.session.handle(Intent::ConfirmSheet),
-            Field::Checklist(_) => self.session.handle(Intent::Submit(field.clone())),
+            Field::Checklist(_) | Field::Mapping(_) => {
+                self.session.handle(Intent::Submit(field.clone()))
+            }
             Field::Palette => {
                 if let Some(SheetVm::Palette { items, .. }) = self.session.view().sheet
                     && let Some(first) = items.first()
@@ -367,7 +376,7 @@ impl AppView {
             ScreenVm::Workspace(v) => env::workspace(ui, v).into_any_element(),
             ScreenVm::Audit(rows) => env::audit(ui, rows).into_any_element(),
             ScreenVm::Logs(v) => env::logs(ui, cx, v).into_any_element(),
-            ScreenVm::Settings(v) => env::settings(ui, v).into_any_element(),
+            ScreenVm::Settings(v) => env::settings(ui, &self.inputs, v).into_any_element(),
             ScreenVm::Missing(msg) => div().p_8().child(msg.clone()).into_any_element(),
         }
     }

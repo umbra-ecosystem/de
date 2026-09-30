@@ -1335,20 +1335,13 @@ impl Store for Sim {
                     )
                 })
                 .collect(),
-            mapping: vec![
-                ("Review status".into(), JiraStatus::InReview.label().into()),
-                (
-                    "Alpha status".into(),
-                    JiraStatus::AlphaTesting.label().into(),
-                ),
-                ("Returned".into(), JiraStatus::Returned.label().into()),
-                ("Signed off".into(), JiraStatus::Done.label().into()),
-                (
-                    "Review JQL".into(),
-                    "project = PROJ AND status = \"In Review\"".into(),
-                ),
-                ("My account id".into(), "acct-0001".into()),
-            ],
+            mapping: MappingKey::LIST
+                .iter()
+                .map(|k| MappingRow {
+                    key: *k,
+                    value: self.mapping.get(k).cloned().unwrap_or_default(),
+                })
+                .collect(),
             repos: self
                 .repos
                 .iter()
@@ -1645,6 +1638,18 @@ impl Sim {
             Command::SetWaitMinutes(m) => {
                 self.wait_min = *m;
                 Outcome::ok()
+            }
+            Command::SetMapping { key, text } => {
+                if text.trim().is_empty() {
+                    self.mapping.remove(key);
+                } else {
+                    self.mapping.insert(*key, text.trim().to_string());
+                }
+                Outcome::ok().with_toast(
+                    format!("Saved {}", key.label().to_lowercase()),
+                    ToastKind::Ok,
+                    None,
+                )
             }
             Command::StartWorkspace => {
                 self.ws.up = true;

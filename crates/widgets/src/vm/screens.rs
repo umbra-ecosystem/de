@@ -598,7 +598,7 @@ pub struct SettingsVm {
     pub appearance: Vec<(String, bool, Intent)>,
     pub providers: Vec<ProviderVm>,
     pub wait_options: Vec<(String, bool, Btn)>,
-    pub mapping: Vec<(String, String)>,
+    pub mapping: Vec<MappingRow>,
     pub repos: Vec<[String; 4]>,
     pub data: Vec<(String, String)>,
     pub reset: Btn,

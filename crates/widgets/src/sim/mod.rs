@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 
 use model::*;
 
-use crate::vm::{Branch, RepoName, TicketKey, ToastKind};
+use crate::vm::{Branch, MappingKey, RepoName, TicketKey, ToastKind};
 
 pub struct Sim {
     pub(crate) ms: i64,
@@ -31,6 +31,8 @@ pub struct Sim {
     pub(crate) sims: Sims,
     pub(crate) ws: Workspace,
     pub(crate) wait_min: u32,
+    /// The editable Jira mapping; a key that is absent is unset.
+    pub(crate) mapping: BTreeMap<MappingKey, String>,
     pub(crate) tickets: Vec<Ticket>,
     pub(crate) audit: Vec<AuditEntry>,
     pub(crate) responses: Responses,
@@ -74,6 +76,13 @@ impl Sim {
                 up: true,
             },
             wait_min: 30,
+            mapping: [
+                (MappingKey::ReviewJql, "project = PROJ AND status = \"In Review\""),
+                (MappingKey::AccountId, "acct-0001"),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k, v.to_string()))
+            .collect(),
             tickets: data::seed_tickets(),
             audit: Vec::new(),
             responses: Responses::new(),

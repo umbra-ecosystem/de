@@ -3,7 +3,7 @@
 //! `Intent` is UI state (navigation, selections, sheets). `Command` is a request to the [`Store`](crate::Store):
 //! the thing the engine will eventually do. A command the store previews is confirmed in a sheet first.
 
-use super::common::{Group, Phase, Route, ThemeChoice, TicketTab};
+use super::common::{Group, MappingKey, Phase, Route, ThemeChoice, TicketTab};
 use super::ids::*;
 use super::screens::{TicketFilter, TicketSort};
 
@@ -181,6 +181,11 @@ pub enum Command {
         ready: bool,
     },
     SetWaitMinutes(u32),
+    /// Save one Jira mapping setting; empty text clears it back to its default.
+    SetMapping {
+        key: MappingKey,
+        text: String,
+    },
     StartWorkspace,
     StopWorkspace,
     ResetDemo,
@@ -223,6 +228,8 @@ pub enum Field {
     NextFilter,
     /// The search box of the ticket table.
     TicketFilter,
+    /// One of the editable Jira mapping fields on the settings page.
+    Mapping(MappingKey),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -407,6 +414,7 @@ mod tests {
             | Command::MarkSeen(_)
             | Command::SetProvider { .. }
             | Command::SetWaitMinutes(_)
+            | Command::SetMapping { .. }
             | Command::StartWorkspace
             | Command::StopWorkspace
             | Command::ResetDemo
@@ -460,6 +468,10 @@ mod tests {
                 also_return: false,
             },
             Command::Sync,
+            Command::SetMapping {
+                key: MappingKey::ReviewStatus,
+                text: String::new(),
+            },
             Command::Claim(key.clone()),
             Command::Park(key.clone()),
             Command::BreakLock("web".into()),

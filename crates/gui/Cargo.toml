@@ -13,6 +13,7 @@ de-widgets = { path = "../widgets" }
 eyre.workspace = true
 
 [dev-dependencies]
+toml.workspace = true
 de-core = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 

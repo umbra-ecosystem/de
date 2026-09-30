@@ -223,6 +223,87 @@ pub enum StepState {
     Bad,
 }
 
+/// A setting of the Jira mapping that can be edited on the settings page. An empty text means "not set": the
+/// default applies, and the field shows it as its placeholder.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum MappingKey {
+    ReviewStatus,
+    AlphaStatus,
+    UatStatus,
+    ReturnedStatus,
+    /// Comma-separated.
+    DoneStatuses,
+    /// Comma-separated.
+    SignedOffStatuses,
+    ReviewJql,
+    AccountId,
+}
+
+impl MappingKey {
+    pub const LIST: [MappingKey; 8] = [
+        MappingKey::ReviewStatus,
+        MappingKey::AlphaStatus,
+        MappingKey::UatStatus,
+        MappingKey::ReturnedStatus,
+        MappingKey::DoneStatuses,
+        MappingKey::SignedOffStatuses,
+        MappingKey::ReviewJql,
+        MappingKey::AccountId,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            MappingKey::ReviewStatus => "Review status",
+            MappingKey::AlphaStatus => "Alpha testing status",
+            MappingKey::UatStatus => "UAT status",
+            MappingKey::ReturnedStatus => "Returned status",
+            MappingKey::DoneStatuses => "Done statuses",
+            MappingKey::SignedOffStatuses => "Signed-off statuses",
+            MappingKey::ReviewJql => "Review query (JQL)",
+            MappingKey::AccountId => "My account id",
+        }
+    }
+
+    /// What applies while the field is empty.
+    pub fn placeholder(self) -> &'static str {
+        match self {
+            MappingKey::ReviewStatus => "In Review",
+            MappingKey::AlphaStatus => "Alpha Testing",
+            MappingKey::UatStatus => "UAT",
+            MappingKey::ReturnedStatus => "Returned",
+            MappingKey::DoneStatuses => "Done",
+            MappingKey::SignedOffStatuses => "same as the done statuses",
+            MappingKey::ReviewJql => "status = \"In Review\" AND updated >= -30d",
+            MappingKey::AccountId => "not set: mentions of you are not flagged",
+        }
+    }
+
+    /// The default when it is a plain value the field can show as real text (so an unset field reads like a set
+    /// one). `None` for a default that is an explanation rather than a value.
+    pub fn literal_default(self) -> Option<&'static str> {
+        match self {
+            MappingKey::ReviewStatus
+            | MappingKey::AlphaStatus
+            | MappingKey::UatStatus
+            | MappingKey::ReturnedStatus
+            | MappingKey::DoneStatuses => Some(self.placeholder()),
+            MappingKey::SignedOffStatuses | MappingKey::ReviewJql | MappingKey::AccountId => None,
+        }
+    }
+
+    /// Whether the text is a comma-separated list.
+    pub fn is_list(self) -> bool {
+        matches!(self, MappingKey::DoneStatuses | MappingKey::SignedOffStatuses)
+    }
+}
+
+/// One editable row: the value as stored (empty when unset).
+#[derive(Clone, Debug, PartialEq)]
+pub struct MappingRow {
+    pub key: MappingKey,
+    pub value: String,
+}
+
 /// One sync run's log file, as the list shows it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LogRunVm {
