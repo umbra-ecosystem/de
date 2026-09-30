@@ -1147,7 +1147,7 @@ impl Store for Sim {
                     .and_then(|a| a.overlay.as_ref())
                     .is_some_and(|o| o.repo == r.name)
                 {
-                    badges.push(Badge::new("⚡ overlay", Tone::Warn));
+                    badges.push(Badge::new("overlay", Tone::Neutral));
                 }
                 let mut break_lock = None;
                 if let Some(l) = self.locks.get(&r.name) {

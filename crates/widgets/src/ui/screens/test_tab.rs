@@ -52,12 +52,9 @@ fn env_table(ui: &Ui, rows: &[EnvRow]) -> Div {
         }))
 }
 
+/// The test overlay is part of activating, not a problem: one faint line, no box, no warning colour.
 fn overlay_note(ui: &Ui, text: &str) -> Div {
-    warn_box(
-        &ui.pal,
-        Tone::Warn,
-        [div().child(format!("⚡ {text}")).into_any_element()],
-    )
+    faint(&ui.pal, text.to_string())
 }
 
 pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &TicketKey, t: &TestVm) -> Div {
@@ -90,10 +87,10 @@ pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &TicketKey, t: &TestVm) ->
                                 .map(|e| div().child(e.clone()).into_any_element()),
                         ))
                     })
-                    .when_some(overlay.clone(), |d, o| d.child(overlay_note(ui, &o)))
                     .when_some(activate.clone(), |d, a| {
                         d.child(div().flex().child(button(ui, &a)))
-                    })),
+                    })
+                    .when_some(overlay.clone(), |d, o| d.child(overlay_note(ui, &o)))),
             ))
             .child(band(pal, false, "If you activate now", env_table(ui, plan))),
         TestVm::Active {
