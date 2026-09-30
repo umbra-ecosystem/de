@@ -107,6 +107,7 @@ struct JiraState {
     failure: Option<ProviderError>,
     fail_search: Option<ProviderError>,
     fail_keys: HashMap<TicketKey, ProviderError>,
+    warnings: Vec<String>,
     next_id: u64,
 }
 
@@ -191,6 +192,12 @@ impl FakeJira {
         self
     }
 
+    /// Scripts the notes `take_warnings` returns once (as a truncating adapter would).
+    pub fn set_warnings(&self, warnings: Vec<String>) -> &Self {
+        lock(&self.state).warnings = warnings;
+        self
+    }
+
     pub fn set_health(&self, health: Health) -> &Self {
         lock(&self.state).health = Some(health);
         self
@@ -258,6 +265,10 @@ impl TicketProvider for FakeJira {
             .get(key)
             .cloned()
             .unwrap_or_default())
+    }
+
+    fn take_warnings(&self) -> Vec<String> {
+        std::mem::take(&mut lock(&self.state).warnings)
     }
 }
 

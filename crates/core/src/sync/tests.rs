@@ -254,6 +254,22 @@ fn missing_review_jql_is_a_note_and_never_deletes() {
     assert!(w.jira.log().calls().is_empty());
 }
 
+#[test]
+fn provider_warnings_such_as_truncated_comments_become_report_notes() {
+    let w = World::new();
+    w.jira
+        .on_search(POOL_JQL, vec![ticket("PROJ-1", "In Review")]);
+    w.jira
+        .set_warnings(vec!["PROJ-1: acli returned 2 of 40 comments".into()]);
+    let report = sync_jira(&w.ctx(1000, false), &w.jira);
+    assert_eq!(report.outcome, SourceOutcome::Synced);
+    assert!(
+        report.notes.iter().any(|n| n.contains("2 of 40")),
+        "{:?}",
+        report.notes
+    );
+}
+
 // ------------------------------------------------------------- freshness
 
 #[test]

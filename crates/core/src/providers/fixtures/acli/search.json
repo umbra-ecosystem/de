@@ -1,0 +1,73 @@
+[
+  {
+    "changelog": null,
+    "editmeta": null,
+    "expand": "operations,versionedRepresentations,editmeta,changelog,customfield_10010.requestTypePractice,renderedFields",
+    "fields": {
+      "assignee": {
+        "accountId": "acct-0001",
+        "accountType": "atlassian",
+        "active": true,
+        "displayName": "Jane Doe",
+        "emailAddress": "jane.doe@example.com",
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=acct-0001"
+      },
+      "issuetype": {"id": "10001", "name": "Story", "subtask": false, "self": "https://example.atlassian.net/rest/api/3/issuetype/10001"},
+      "priority": {"id": "2", "name": "High", "self": "https://example.atlassian.net/rest/api/3/priority/2"},
+      "status": {
+        "id": "10003",
+        "name": "In Review",
+        "self": "https://example.atlassian.net/rest/api/3/status/10003",
+        "statusCategory": {"id": 4, "key": "indeterminate", "name": "In Progress", "colorName": "yellow"}
+      },
+      "summary": "Fix login redirect"
+    },
+    "fieldsToInclude": null,
+    "id": "10101",
+    "key": "PROJ-123",
+    "names": null,
+    "operations": null,
+    "properties": null,
+    "renderedFields": null,
+    "schema": null,
+    "self": "https://example.atlassian.net/rest/api/3/issue/10101",
+    "transitions": null,
+    "versionedRepresentations": null
+  },
+  {
+    "changelog": null,
+    "editmeta": null,
+    "expand": "operations,versionedRepresentations,editmeta,changelog,customfield_10010.requestTypePractice,renderedFields",
+    "fields": {
+      "assignee": null,
+      "issuetype": {"id": "10002", "name": "Bug", "subtask": false},
+      "priority": {"id": "3", "name": "Medium"},
+      "status": {"id": "10004", "name": "Returned", "statusCategory": {"id": 2, "key": "new", "name": "To Do"}},
+      "summary": "Unassigned bug"
+    },
+    "fieldsToInclude": null,
+    "id": "10102",
+    "key": "PROJ-124",
+    "names": null,
+    "operations": null,
+    "properties": null,
+    "renderedFields": null,
+    "schema": null,
+    "self": "https://example.atlassian.net/rest/api/3/issue/10102",
+    "transitions": null,
+    "versionedRepresentations": null
+  },
+  {
+    "changelog": null,
+    "expand": "operations",
+    "fields": {
+      "assignee": {"accountId": "acct-0002", "displayName": "John Roe"},
+      "priority": null,
+      "status": {"name": "Done", "statusCategory": {"id": 3, "key": "done", "name": "Done"}},
+      "summary": "Third ticket"
+    },
+    "id": "10103",
+    "key": "PROJ-125",
+    "self": "https://example.atlassian.net/rest/api/3/issue/10103"
+  }
+]

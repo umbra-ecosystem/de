@@ -47,6 +47,13 @@ pub trait TicketProvider: Send {
 
     /// All comments of a ticket, oldest first, with the account ids each one mentions.
     fn comments(&self, key: &TicketKey) -> ProviderResult<Vec<RemoteComment>>;
+
+    /// Human-readable notes accumulated by earlier calls that succeeded but were lossy
+    /// (for example a comment list the tool truncated), cleared by this call. Sync surfaces
+    /// them as report notes. The default is none.
+    fn take_warnings(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// Read access to the code host (Bitbucket): pull requests and pipelines.
