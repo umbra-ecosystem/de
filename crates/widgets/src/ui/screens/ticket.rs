@@ -95,7 +95,8 @@ pub fn ticket(
             .flex_1()
             .min_h_0()
             .when(!h.banners.is_empty(), |d| {
-                d.child(div().px_4().py_2().child(notices))
+                // Same gap under the tab strip as on the other tabs (pt_3).
+                d.child(div().px_4().pt_3().pb_2().child(notices))
             })
             .child(
                 div()
