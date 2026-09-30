@@ -477,7 +477,7 @@ impl Render for AppView {
 /// Open the showcase window and run until it closes.
 pub fn run() {
     gpui_kit::application()
-        .with_assets(gpui_kit::assets::Assets)
+        .with_assets(super::assets::AppAssets)
         .run(|cx| {
             gpui_kit::init(cx);
             Theme::sync_system_appearance(None, cx);

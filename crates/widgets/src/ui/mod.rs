@@ -2,6 +2,7 @@
 //! except the text inputs owned by [`app::AppView`].
 
 pub mod app;
+pub mod assets;
 pub mod ctx;
 pub mod filter_menu;
 pub mod panels;
