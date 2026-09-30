@@ -119,7 +119,12 @@ pub struct SuggestionCard {
     /// Where clicking the row goes (the ticket, at the tab that matters). `None`: the row is not clickable.
     pub open: Option<Intent>,
     pub title: String,
+    /// What the row's first line says instead of `title`: a claim row is about the ticket, so it carries the
+    /// ticket's own title.
+    pub headline: Option<String>,
     pub reason: String,
+    /// What the second line says instead of `reason` (a claim row: the ticket's type and assignee).
+    pub meta: Option<String>,
     /// Short facts shown in place of the reason when there are any.
     pub chips: Vec<Badge>,
     pub level: Level,

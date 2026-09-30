@@ -791,6 +791,7 @@ impl Session {
                 if !q.is_empty() {
                     n.cards.retain(|c| {
                         c.title.to_lowercase().contains(&q)
+                            || c.headline.as_ref().is_some_and(|h| h.to_lowercase().contains(&q))
                             || c.reason.to_lowercase().contains(&q)
                             || c.ticket
                                 .as_ref()
@@ -1676,12 +1677,40 @@ mod tests {
         // The sentence is still there for search, and other kinds of row keep showing it.
         assert!(card.reason.contains("Review column"));
         assert!(n.cards.iter().any(|c| c.chips.is_empty()));
+        // A claim row is about the ticket: its own title on the first line, type and assignee on the second.
+        let t = Session::demo();
+        let demo_ticket = t.store().tab_info(&"PROJ-139".into()).expect("ticket");
+        assert_eq!(card.headline.as_deref(), Some(demo_ticket.title.as_str()));
+        assert!(card.meta.as_deref().is_some_and(|m| !m.is_empty()));
+        // Other rows keep their own title and sentence.
+        assert!(n.cards.iter().any(|c| c.headline.is_none() && c.meta.is_none()));
         // Only a high priority gets the mark.
         assert!(n.cards.iter().all(|c| c
             .priority
             .as_ref()
             .is_none_or(|p| p.text == "High" || p.text == "Highest")));
         assert!(n.cards.iter().any(|c| c.priority.is_some()));
+    }
+
+    #[test]
+    fn searching_the_home_list_finds_a_claim_row_by_its_ticket_title() {
+        let mut s = Session::demo();
+        let title = {
+            let ScreenVm::Next(n) = s.view().screen else {
+                panic!()
+            };
+            n.cards
+                .iter()
+                .find(|c| c.title == "Claim PROJ-139")
+                .and_then(|c| c.headline.clone())
+                .unwrap()
+        };
+        let word = title.split_whitespace().next().unwrap().to_string();
+        s.handle(Intent::SetText(Field::NextFilter, word.to_lowercase()));
+        let ScreenVm::Next(n) = s.view().screen else {
+            panic!()
+        };
+        assert!(n.cards.iter().any(|c| c.title == "Claim PROJ-139"));
     }
 
     #[test]

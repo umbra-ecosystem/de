@@ -60,6 +60,13 @@ fn audit_row(a: &AuditEntry) -> AuditRow {
 }
 
 impl Sim {
+    /// The ticket of a claim suggestion: only those rows are laid out around the ticket itself.
+    fn claim_ticket(&self, s: &Sug) -> Option<&Ticket> {
+        (s.rule == super::rules::Rule::ClaimNew)
+            .then(|| s.ticket.as_ref().and_then(|k| self.tk(k)))
+            .flatten()
+    }
+
     fn card(&self, s: &Sug) -> SuggestionCard {
         let primary = Btn::new(act_label(&s.act), s.act.clone())
             .primary_if(s.level == Level::External || !s.info);
@@ -80,7 +87,16 @@ impl Sim {
                 .zip(s.rule.tab())
                 .map(|(k, tab)| Intent::go_ticket(k, tab)),
             title: s.title.clone(),
+            headline: self.claim_ticket(s).map(|t| t.title.clone()),
             reason: s.reason.clone(),
+            meta: self.claim_ticket(s).map(|t| {
+                [t.kind, t.assignee]
+                    .iter()
+                    .filter(|x| !x.is_empty())
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(" \u{b7} ")
+            }),
             chips: s.chips.clone(),
             level: s.level,
             state: s.state,

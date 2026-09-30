@@ -61,6 +61,31 @@ fn icon_button(id: impl Into<ElementId>, icon: IconName, tip: &'static str) -> B
     Button::new(id).ghost().small().icon(icon).tooltip(tip)
 }
 
+/// The mark in the leading column of a row: a hotfix, else a high priority, else nothing.
+fn urgency_mark(ui: &Ui, s: &SuggestionCard) -> Option<Stateful<Div>> {
+    let pal = &ui.pal;
+    if s.hotfix {
+        return Some(icon_tip(
+            SharedString::from(format!("hot-{}", s.id)),
+            IconName::TriangleAlert,
+            pal.hot,
+            "Hotfix",
+        ));
+    }
+    s.priority.as_ref().map(|p| {
+        icon_tip(
+            SharedString::from(format!("prio-{}", s.id)),
+            IconName::TriangleAlert,
+            pal.tone(p.tone),
+            if p.text == "Highest" {
+                "Highest priority"
+            } else {
+                "High priority"
+            },
+        )
+    })
+}
+
 /// One suggestion as a list row.
 pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
     let pal = &ui.pal;
@@ -68,17 +93,6 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
     let group = SharedString::from(format!("row-{}", s.id));
 
     let mut marks: Vec<AnyElement> = Vec::new();
-    if s.hotfix {
-        marks.push(
-            icon_tip(
-                SharedString::from(format!("hot-{}", s.id)),
-                IconName::TriangleAlert,
-                pal.hot,
-                "Hotfix",
-            )
-            .into_any_element(),
-        );
-    }
     match s.level {
         Level::External => {
             marks.push(
@@ -132,23 +146,13 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
             )
         })
         .when_some(s.ticket.clone(), |d, k| d.child(key_text(ui, &k)))
-        .when_some(s.priority.clone(), |d, p| {
-            d.child(icon_tip(
-                SharedString::from(format!("prio-{}", s.id)),
-                IconName::TriangleAlert,
-                pal.tone(p.tone),
-                if p.text == "Highest" {
-                    "Highest priority"
-                } else {
-                    "High priority"
-                },
-            ))
-        })
         .child(
             div()
                 .truncate()
                 .when(s.attention, |d| d.font_weight(FontWeight::BOLD))
-                .child(s.title.clone()),
+                // A claim row is about the ticket, so it reads as the ticket's own title; the action is the
+                // button on hover.
+                .child(s.headline.clone().unwrap_or_else(|| s.title.clone())),
         )
         .when(s.state == SugState::Resurfaced, |d| {
             d.child(dot(pal.accent))
@@ -242,6 +246,8 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
                 .hover(|d| d.bg(pal.hover))
                 .on_click(ui.on_click(open))
         })
+        // A fixed column, so keys line up whether or not a row is urgent: a hotfix, else a high priority.
+        .child(div().flex_none().w(px(18.0)).children(urgency_mark(ui, s)))
         .child(
             div()
                 .flex()
@@ -250,22 +256,25 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
                 .min_w_0()
                 .gap_0p5()
                 .child(title)
-                .child(if s.chips.is_empty() {
+                .child(
                     div()
                         .truncate()
                         .text_xs()
                         .text_color(pal.muted)
-                        .child(s.reason.clone())
-                } else {
-                    // Facts as chips, so a column of similar rows can be scanned for what differs.
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        .overflow_hidden()
-                        .children(s.chips.iter().map(|c| pill(pal, c)))
-                }),
+                        .child(s.meta.clone().unwrap_or_else(|| s.reason.clone())),
+                ),
         )
+        // What is off about the ticket, at the right end, where a column of them can be scanned.
+        .when(!s.chips.is_empty(), |d| {
+            d.child(
+                div()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap_1()
+                    .children(s.chips.iter().map(|c| pill(pal, c))),
+            )
+        })
         .child(
             div()
                 .opacity(if dim { 1.0 } else { 0.0 })
