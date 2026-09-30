@@ -2,18 +2,18 @@
 
 Status: **design only, nothing built.** This is the outline for milestones M7 (menubar app) and M8 (in-app review). Wireframes are ASCII on purpose: they fix structure and flow, not visuals. Every screen names the core data it renders, so the outline can be checked against what already exists.
 
-> A clickable prototype with fake data, fake sync and fake pipelines lives in [`prototype/`](prototype/README.md).
+> A clickable prototype with fake data, fake sync and fake Actions runs lives in [`prototype/`](prototype/README.md).
 > It covers every flow below and adds a few changes proposed after the first outline: a persistent ticket stepper,
 > a pinned "now" bar with the overlay warning, an "On uat" screen, "since I last looked" markers, a right sidebar for
 > Jira facts, and an overlap warning before a push. Where this outline and the prototype differ, the prototype is newer.
 
 ## 1. Principles
 
-1. **Thin client.** The GUI renders `de next --json` and calls `de-core`. It has no rules of its own, never builds a command from a string, and never talks to Jira, Bitbucket or a git remote directly.
-2. **Suggestions first.** The default view is "what should I do now?", not a database browser. Tickets, PRs and pipelines are reached from a suggestion or from the ticket list.
+1. **Thin client.** The GUI renders `de next --json` and calls `de-core`. It has no rules of its own, never builds a command from a string, and never talks to Jira, GitHub or a git remote directly.
+2. **Suggestions first.** The default view is "what should I do now?", not a database browser. Tickets, PRs and Actions runs are reached from a suggestion or from the ticket list.
 3. **Every external write is a previewed, confirmed action.** The GUI shows the gateway's exact preview (`ActionPreview`) and calls `Draft::confirm()` **only from a real click**. There is no "don't ask again", no bulk confirm, no auto-post.
 4. **One active ticket.** The UI makes the active ticket impossible to miss and makes switching a deliberate act (park, then activate).
-5. **Honest freshness.** Everything from Jira or Bitbucket is cached data. Every list shows how old it is and whether the last sync failed. Offline is a normal state, not an error.
+5. **Honest freshness.** Everything from Jira or GitHub is cached data. Every list shows how old it is and whether the last sync failed. Offline is a normal state, not an error.
 6. **Reasons, not just buttons.** Each suggestion shows why it exists (`reason`), so a wrong one can be dismissed with confidence.
 
 ## 2. Surfaces
@@ -52,7 +52,7 @@ Icon states:   ●  idle, nothing to do        ◐  syncing
 │ NEXT                                          │
 │ ▸ Integrate PROJ-142 to uat                   │
 │   checklist complete (6/6)          [ Open ]  │
-│ ▸ PROJ-139 pipeline failed on web             │
+│ ▸ PROJ-139 deploy failed on web               │
 │   deploy step failed, run #482    [ Re-run…]  │
 │ ▸ Claim PROJ-150 (High)                       │
 │   in Review, not yet yours         [ Claim ]  │
@@ -86,7 +86,7 @@ Icon states:   ●  idle, nothing to do        ◐  syncing
 │  Services     │                                                            │
 │  Repos        │                                                            │
 │               │                                                            │
-│ ⚠ bkt signed  │                                                            │
+│ ⚠ gh signed  │                                                             │
 │   out         │                                                            │
 └───────────────┴────────────────────────────────────────────────────────────┘
 ```
@@ -103,7 +103,7 @@ Icon states:   ●  idle, nothing to do        ◐  syncing
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ① ● HOTFIX  PROJ-139  Deploy failed on web                                 │
 │    The deploy step of run #482 failed after your push to uat.              │
-│    [ View pipeline ]  [ Re-run… ]                    Snooze ▾  Dismiss     │
+│    [ View run ]  [ Re-run… ]                    Snooze ▾  Dismiss          │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ②   PROJ-142  Integrate to uat                                             │
 │    Active ticket, checklist complete (6 of 6). 2 repos touched.            │
@@ -135,7 +135,7 @@ Suggestion card anatomy (reused everywhere):
 | `local_one_click` | a button | asks a light confirm (what will change locally), then runs the core executor |
 | `confirmed_external` | a button labelled with an ellipsis | opens the Confirm sheet (S9); nothing is sent until the user confirms there |
 
-`informational: true` cards have links only (open ticket, open pipeline, resolve conflict guidance). Dismiss and Snooze write `suggestion_responses`; a changed facts hash resurfaces a dismissed card (state `resurfaced`, marked with a small dot).
+`informational: true` cards have links only (open ticket, open run, resolve conflict guidance). Dismiss and Snooze write `suggestion_responses`; a changed facts hash resurfaces a dismissed card (state `resurfaced`, marked with a small dot).
 
 ### S4. Tickets list
 
@@ -174,7 +174,7 @@ Suggestion card anatomy (reused everywhere):
 │  [ + link repo ]   [ exclude ]   ⚠ web: 2 candidate branches, choose one    │
 │                                                                              │
 │ NEXT FOR THIS TICKET                                                        │
-│  ▸ Wait: pipeline running for web (#482)                                    │
+│  ▸ Wait: Actions run in progress for web (#482)                             │
 │                                                                              │
 │ NOTES                                                                       │
 │  (free text, autosaved)                                                     │
@@ -221,27 +221,26 @@ A single vertical stepper: each step shows its state and the one thing to do nex
 │    ⚠ nothing is pushed until you confirm                                    │
 │    [ Refresh preparation ]                       [ Review & push to uat… ]   │
 │                                                                              │
-│ ② Pipelines               ◐ waiting                                        │
+│ ② GitHub Actions               ◐ waiting                                   │
 │    api-client   ● deployed to alpha   run #311                              │
 │    web          ◐ running             run #482   step "Deploy alpha"        │
 │                                                                              │
-│ ③ Deploy comment          ─ available when all repos are deployed           │
+│ ③ Announce               ─ available when all repos are deployed           │
 │    Draft preview (editable):                                                │
 │      Deployed to alpha:                                                     │
-│      • api-client PR #212 · pipeline #311 · https://…                       │
-│      • web        PR #488 · pipeline #482 · https://…                       │
-│    [ Post to Jira… ]                                                        │
+│      • api-client PR #212 · run #311 · https://…                            │
+│      • web        PR #488 · run #482 · https://…                            │
+│      Tested locally:  ☑ Retry keeps the same key  ☑ No second charge …     │
+│      Comments while testing:  > Jane Doe (today 10:12): …                   │
+│    [ Post and move to Alpha Testing… ]      one confirm, comment + move     │
 │                                                                              │
-│ ④ Move ticket             ─ after the comment is posted                     │
-│    In Review → Alpha Testing                     [ Transition… ]            │
-│                                                                              │
-│ ⑤ After alpha             ─ tracks sign-off; new commits → “re-merge”       │
+│ ④ After alpha             ─ tracks sign-off; new commits → “re-merge”       │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - Data: `IntegrationPrep` (`RepoOutcome`: Ready, UpToDate, AlreadyPushed, Conflict, Blocked), `deploy_status`, `drafts` (Draft, Posted, Discarded), configured alpha status.
 - Blocked and conflicting repos show the reason inline (conflicting files, overlay leak with commit and line, diverged local `uat`, invalid remote or branch name). The push button stays disabled while any repo is blocked.
-- Steps ①, ③, ④ end in the Confirm sheet (S9). "Re-run pipeline" on a failed run also does.
+- Steps ①, ③, ④ end in the Confirm sheet (S9). "Re-run workflow" on a failed run also does.
 - A resumed finalize (pushes done, restore incomplete) shows a banner and a single `Finish` action that never pushes again.
 
 ### S8. Sheets for local operations
@@ -290,7 +289,7 @@ Rules for this sheet:
 
 - Shows the **literal payload** from `ActionPreview` (comment body verbatim, transition target, exact git refspecs). If the payload differs at execute time the gateway refuses; the sheet then reports "changed since preview, nothing was sent".
 - `Risk::High` (push `uat`) requires typing the ticket key. `Medium` and `Low` need one explicit click. No default-focused destructive button; Escape cancels.
-- Calls `ensure_available` first: if the writer's tool is missing or signed out, the sheet is replaced by "Cannot send: `bkt` is signed out" with the fix, before anyone is asked to confirm.
+- Calls `ensure_available` first: if the writer's tool is missing or signed out, the sheet is replaced by "Cannot send: `gh` is signed out" with the fix, before anyone is asked to confirm.
 - After sending: result (per-repo `Pushed`, `AlreadyPushed`, `Rejected`, `Blocked`, `Failed`), audit id, and any `audit_warnings`. A rejected push (uat moved) offers `Prepare again`, never a blind retry.
 - Comment posts show the draft in an editable field **before** the sheet; the sheet itself is read-only.
 
@@ -317,7 +316,7 @@ Rules for this sheet:
 
 - The diff is the **PR's own**: source against the PR's *destination* branch (develop normally, master/main for a hotfix), computed from local git objects with three-dot semantics (`GitRepo::diff`), so nothing is checked out.
 - One tab per touched repo. "Viewed" state is local. Marking the ticket reviewed (`ticket_reviews`) is a local one-click.
-- Inline comment: click a line, write, the Confirm sheet shows the comment and its anchor (path, line, side). If `bkt` cannot post inline for a case it fails loudly and never posts a general comment instead.
+- Inline comment: click a line, write, the Confirm sheet shows the comment and its anchor (path, line, side). If `gh` cannot post inline for a case it fails loudly and never posts a general comment instead.
 - **Approve is disabled until the ticket is in a signed-off status** (config `signed_off`, default the Done statuses), with the reason shown next to the button.
 - Own diff renderer (Zed's diff code is GPL-3, `de` is MIT). Syntax highlighting from Tree-sitter via the editor component.
 
@@ -357,11 +356,11 @@ Rules for this sheet:
 ```
 Providers                          Jira mapping                    Data
  acli   ● ready   v1.3.39           review status  [ In Review ]    state.db   …/state.db   [ reveal ]
- bkt    ⚠ signed out                alpha status   [ Alpha Testing ] cache.db   …/cache.db   [ reset cache ]
-        run: bkt auth login         returned       [ Returned ]     audit log  view / export
-        then: bkt context use …     signed off     [ Done ]
+ gh     ⚠ signed out                alpha status   [ Alpha Testing ] cache.db   …/cache.db   [ reset cache ]
+        run: gh auth login          returned       [ Returned ]     audit log  view / export
+                                    signed off     [ Done ]
  [ Re-check ]  [ Diagnose… ]        review JQL     [ …………… ]         Repos
-                                    my account id  [ …………… ]         per repo: Bitbucket repo, base/prod/uat
+                                    my account id  [ …………… ]         per repo: GitHub repo, base/prod/uat
                                                                       branches, composer overlay, checks
 ```
 
@@ -411,7 +410,7 @@ flowchart TD
     J -->|yes| K[Show reason, resolve in repo, prepare again]
     K --> I
     J -->|no| L[Confirm sheet: push uat]
-    L --> M[Pipelines running: waiting]
+    L --> M[Actions running: waiting]
     M --> N{All repos deployed?}
     N -->|failed| O[Confirm sheet: re-run] --> M
     N -->|yes| P[Draft comment, edit]

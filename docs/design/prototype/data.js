@@ -1,7 +1,7 @@
 'use strict';
 /* ============================ fake data ============================
    Everything here is invented. Mirrors the shapes the real core serves:
-   tickets (Jira mirror + local tracking), PRs with source/destination, pipeline runs, audit log. */
+   tickets (Jira mirror + local tracking), PRs with source/destination, GitHub Actions runs, audit log. */
 
 const ME = 'You';
 const JIRA = { review: 'In Review', alpha: 'Alpha Testing', returned: 'Returned', signed: ['Done'] };
@@ -10,10 +10,10 @@ const PRIORITY_RANK = { Highest: 0, High: 1, Medium: 2, Low: 3 };
 /* Workspace repos. `base` is the fallback branch, `prod` the production branch (hotfix PRs target it).
    web consumes api-client through a composer path overlay while testing. */
 const REPOS = {
-  'api-client': { base: 'develop', prod: 'master', host: 'acme/api-client', services: 3, overlayConsumer: false },
-  web:          { base: 'develop', prod: 'main',   host: 'acme/web',        services: 2, overlayConsumer: true, consumes: 'api-client' },
-  worker:       { base: 'develop', prod: 'master', host: 'acme/worker',     services: 1, overlayConsumer: false },
-  docs:         { base: 'master',  prod: 'master', host: 'acme/docs',       services: 0, overlayConsumer: false },
+  'api-client': { base: 'develop', prod: 'master', host: 'acme/api-client', services: 3, overlayConsumer: false, checks: ['Unit tests pass', 'Lint clean'] },
+  web:          { base: 'develop', prod: 'main',   host: 'acme/web',        services: 2, overlayConsumer: true, consumes: 'api-client', checks: ['Unit tests pass', 'Build succeeds'] },
+  worker:       { base: 'develop', prod: 'master', host: 'acme/worker',     services: 1, overlayConsumer: false, checks: ['Unit tests pass'] },
+  docs:         { base: 'master',  prod: 'master', host: 'acme/docs',       services: 0, overlayConsumer: false, checks: [] },
 };
 
 const P  = (x) => ({ t: 'p', x });
@@ -28,7 +28,7 @@ function seedTickets() {
   const tickets = [];
   const add = (t) => { tickets.push(Object.assign({
     local: null, reviewed: false, reviewedSeq: null, checklist: [], notes: '', act: null, timeMs: 0,
-    merges: [], deploy: {}, drafts: [], prep: null, link: {}, excl: {}, seenN: 0, viewedAt: null,
+    merges: [], deploy: {}, drafts: [], prep: null, pre: {}, link: {}, excl: {}, seenN: 0, viewedAt: null,
     newCommits: false, handledN: 0, cands: {}, prs: [], attachments: [], links: [], subtasks: [], ac: [],
     labels: [], components: [], comments: [],
   }, t)); };
@@ -88,7 +88,7 @@ function seedTickets() {
             L('add', null, 11, '    assert_eq!(url.path(), user().landing().path());'), L('add', null, 12, '}'),
           ] },
         ],
-        threads: [{ id: 'th1', file: 'src/redirect.rs', line: 'n42', author: 'Jane Doe', text: 'Should we log when we reject a next value? Security asked for that.', resolved: false, replies: [] }],
+        threads: [{ id: 'th1', file: 'src/redirect.rs', line: 'n42', author: 'Jane Doe', text: 'Should we log when we reject a next value? Security asked for that.', resolved: true, replies: [] }],
       },
       { repo: 'web', id: 488, title: 'PROJ-142 Pass next to the login call', src: 'feature/PROJ-142-web', dst: 'develop', updatedSeq: 1,
         reviewers: [{ name: 'Jane Doe', approved: false }, { name: ME, approved: false }],
@@ -136,7 +136,7 @@ function seedTickets() {
           L('ctx', 8, 8, 'export function Header() {'), L('del', 9, null, '  return <nav className="header">'),
           L('add', null, 9, '  return <nav className="header" aria-label="Main">'), L('ctx', 10, 10, '    <Logo />'),
         ] },
-      ], threads: [] }],
+      ], threads: [{ id: 'th2', file: 'src/header.css', line: 'n12', author: 'Marta Lind', text: 'flex-wrap breaks the logo alignment on tablets. Can we keep the logo on its own row?', resolved: false, replies: [] }] }],
   });
 
   add({
@@ -210,7 +210,7 @@ function seedTickets() {
     desc: [P('Set SameSite=Lax on the session cookie and document the cross-site flows that need None.'), UL('api-client sets the attribute', 'web forwards it on redirects')],
     ac: ['Cookie carries SameSite=Lax', 'Docs list the exceptions'],
     comments: [
-      { n: 1, who: 'Priya Nair', at: 'yesterday 15:10', body: [P('Deployed to alpha.'), P('api-client: pipeline #311 https://ci.example/acme/api-client/311'), P('web: pipeline #398 https://ci.example/acme/web/398')] },
+      { n: 1, who: 'Priya Nair', at: 'yesterday 15:10', body: [P('Deployed to alpha.'), P('api-client: run #311 https://github.com/acme/api-client/actions/runs/311'), P('web: run #398 https://github.com/acme/web/actions/runs/398')] },
     ],
     attachments: [], links: [{ rel: 'relates to', key: 'PROJ-142', title: 'Fix login redirect after session expiry', status: 'In Review' }], subtasks: [],
     cands: { 'api-client': ['feature/PROJ-127-samesite'], web: ['feature/PROJ-127-samesite'] },
@@ -240,6 +240,18 @@ function seedTickets() {
       files: [{ path: 'getting-started.md', adds: 4, dels: 3, lines: [L('ctx', 1, 1, '# Getting started'), L('del', 2, null, 'Welcome aboard.'), L('add', null, 2, 'Welcome to Acme. Here is how to get going in ten minutes.')] }], threads: [] }],
   });
 
+  add({
+    key: 'PROJ-163', type: 'Story', priority: 'Medium', title: 'Export button missing on the reports page',
+    jira: JIRA.review, assignee: 'Priya Nair', reporter: 'Jane Doe', sprint: 'Sprint 41', epic: 'Reporting',
+    fixVersion: '2.14.0', estimate: '2 pts', created: 'today 08:50', updated: 'today 09:20',
+    labels: ['reports'], components: ['web'],
+    desc: [P('The CSV export button disappeared from the reports page after the toolbar refactor. It should sit next to the date filter again.')], ac: ['Export button visible on /reports', 'Export respects the date filter'],
+    comments: [{ n: 1, who: 'Priya Nair', at: 'today 09:20', body: [P('Branch is pushed, I will open the PR after lunch.')] }],
+    cands: { web: ['feature/PROJ-163-export'] },
+    checklist: [{ text: 'Button visible next to the date filter', done: false }, { text: 'Export respects the filter', done: false }],
+    prs: [],
+  });
+
   return tickets;
 }
 
@@ -260,9 +272,23 @@ function syncScript() {
           files: [{ path: 'src/toast.css', adds: 2, dels: 1, lines: [L('ctx', 5, 5, '.toast {'), L('del', 6, null, '  bottom: 0;'), L('add', null, 6, '  bottom: 64px;'), L('ctx', 7, 7, '}')] }], threads: [] }],
       }));
     } },
+    { text: 'PROJ-163: a pull request was opened in web', apply(S) { openFakePrs(S.tickets.find((x) => x.key === 'PROJ-163')); } },
     { text: 'PROJ-150 got a new comment that mentions you', apply(S) {
       const t = S.tickets.find((x) => x.key === 'PROJ-150');
       t.comments.push({ n: 3, who: 'Marta Lind', at: 'just now', body: [P('@[you] can you check the header on iPad landscape too?')] });
     } },
   ];
+}
+
+/* what a freshly opened PR looks like (used by sync arrivals and the Simulate panel) */
+function openFakePrs(t) {
+  if (!t) return;
+  for (const repo of Object.keys(t.cands)) {
+    if (t.prs.some((p) => p.repo === repo)) continue;
+    const src = (t.link && t.link[repo]) || t.cands[repo][0];
+    t.prs.push({ repo, id: 500 + t.prs.length + Math.floor(Math.random() * 40), title: t.key + ' ' + t.title, src, dst: REPOS[repo].base, updatedSeq: 1,
+      reviewers: [{ name: t.reporter, approved: false }, { name: ME, approved: false }],
+      files: [{ path: 'src/reports.rs', adds: 3, dels: 1, lines: [L('ctx', 12, 12, 'fn toolbar() -> Toolbar {'), L('del', 13, null, '    Toolbar::new()'), L('add', null, 13, '    Toolbar::new()'), L('add', null, 14, '        .with_filter(date_filter())'), L('add', null, 15, '        .with_export(csv_export())'), L('ctx', 14, 16, '}')] }],
+      threads: [] });
+  }
 }

@@ -43,7 +43,7 @@ function stepper(t) {
   return '<ol class="stepper">' + STEPS.map((s, i) => '<li class="' + (i < idx ? 'done' : i === Math.floor(idx) || (idx % 1 && i === Math.ceil(idx)) ? 'now' : '') + '"><i></i><span>' + s + '</span></li>').join('') + '</ol>';
 }
 
-/* ---------------- left sidebar (fixed) ---------------- */
+/* ---------------- left panel ---------------- */
 const groupOf = {
   pool: (t) => !t.local && t.jira === JIRA.review,
   mine: (t) => ['claimed', 'reviewing'].includes(status(t)) && t.jira !== JIRA.returned,
@@ -59,39 +59,62 @@ const count = (g) => S.tickets.filter(groupOf[g]).length;
 
 function leftNav() {
   const r = S.ui.route; const sug = visibleSuggestions().filter((s) => !s.info || s.level !== 'auto').length;
-  const it = (label, route, n, extra) => '<a href="#" class="nav ' + ((r.name === route.name && (route.group ? r.group === route.group : true) && (route.name !== 'ticket')) ? 'on' : '') + '" data-act="go"' + attr({ name: route.name, group: route.group || '' }) + '><span>' + label + '</span>' + (n != null ? '<b>' + n + '</b>' : '') + (extra || '') + '</a>';
-  const health = (name, ok) => '<div class="hp"><i class="dot ' + (ok ? 'ok' : 'warn') + '"></i><span>' + name + '</span><em>' + (ok ? 'ready' : 'signed out') + '</em></div>';
-  const act = activeTicket();
-  return '<div class="brand"><span class="logo">de</span><span class="proto">prototype</span></div>' +
-    it('Next', { name: 'next' }, sug) +
-    '<div class="grp">Tickets</div>' + ['pool', 'mine', 'active', 'parked', 'awaiting', 'returned', 'done'].map((g) => it(GROUP_LABEL[g], { name: 'tickets', group: g }, count(g))).join('') +
-    '<div class="grp">Environment</div>' + it('On uat', { name: 'env' }, null) + it('Workspace', { name: 'workspace' }, null) +
-    '<div class="grp">System</div>' + it('Audit log', { name: 'audit' }, S.audit.length) + it('Settings', { name: 'settings' }, null) + it('Change ideas', { name: 'ideas' }, null) +
-    '<div class="spacer"></div>' +
-    '<div class="prov">' + health('acli · Jira', S.providers.jira.ready) + health('bkt · Bitbucket', S.providers.bkt.ready) +
-    '<div class="fresh">' + (S.sync.running ? 'Syncing…' : S.sync.lastError ? '<span class="warn-t">Last sync: ' + esc(S.sync.lastError) + '</span>' : 'Synced ' + minsAgo(S.sync.lastOk) + ' min ago') + '</div></div>';
+  const it = (label, route, n) => '<a href="#" class="nav ' + ((r.name === route.name && (route.group ? r.group === route.group : true) && (route.name !== 'ticket')) ? 'on' : '') + '" data-act="go"' + attr({ name: route.name, group: route.group || '' }) + '><span>' + label + '</span>' + (n ? '<b>' + n + '</b>' : '') + '</a>';
+  return '<div class="ph">Tickets</div>' + it('Next', { name: 'next' }, sug) +
+    ['pool', 'mine', 'active', 'parked', 'awaiting', 'returned', 'done'].map((g) => it(GROUP_LABEL[g], { name: 'tickets', group: g }, count(g))).join('') +
+    '<div class="ph">Environment</div>' + it('On uat', { name: 'env' }) + it('Workspace', { name: 'workspace' }) +
+    '<div class="ph">System</div>' + it('Audit log', { name: 'audit' }) + it('Settings', { name: 'settings' });
 }
 
-/* ---------------- top bar and now bar ---------------- */
+/* ---------------- title bar, tab bar, status bar ---------------- */
 function crumb() {
   const r = S.ui.route;
-  if (r.name === 'ticket') { const t = tk(r.key); return '<a href="#" data-act="go" data-name="tickets" data-group="all">Tickets</a><i>/</i><b class="key">' + esc(r.key) + '</b><span class="ct">' + esc(t ? t.title : '') + '</span>'; }
-  const L = { next: 'Next', tickets: GROUP_LABEL[r.group] || 'Tickets', env: 'On uat', workspace: 'Workspace', audit: 'Audit log', settings: 'Settings', ideas: 'Change ideas' };
-  return '<b>' + esc(L[r.name] || '') + '</b>';
+  if (r.name === 'ticket') { const t = tk(r.key); return '<span class="key">' + esc(r.key) + '</span><span class="ct">' + esc(t ? t.title : '') + '</span>'; }
+  const L = { next: 'Next', tickets: GROUP_LABEL[r.group] || 'Tickets', env: 'On uat', workspace: 'Workspace', audit: 'Audit log', settings: 'Settings' };
+  return '<span>' + esc(L[r.name] || '') + '</span>';
 }
-function topBar() {
-  return '<div class="top"><button class="icon mob" data-act="toggleLeft" aria-label="Menu">☰</button><div class="crumb">' + crumb() + '</div><span class="sp"></span>' +
-    '<button class="search" data-act="palette">⌕ <span>Search or jump</span> <kbd>⌘K</kbd></button>' +
-    '<button class="btn" data-act="sync"' + (S.sync.running ? ' disabled' : '') + '>' + (S.sync.running ? '<span class="spin"></span> Syncing' : '↻ Sync') + '</button>' +
-    '<button class="btn ' + (S.ui.dev ? 'p' : '') + '" data-act="toggleDev">Simulate</button>' +
-    '<button class="icon" data-act="toggleRight" aria-label="Toggle details" title="Toggle right sidebar">▤</button></div>';
+function titleBar() {
+  return '<div class="tb"><div class="lights"><i></i><i></i><i></i></div><button class="icon mob" data-act="toggleLeft" aria-label="Menu">☰</button><span class="tt-name">de</span><span class="sp"></span>' +
+    '<button class="search" data-act="palette"><span>Go to…</span><kbd>⌘K</kbd></button><span class="sp"></span>' +
+    '<button class="icon attnb' + (S.ui.attn ? ' on' : '') + '" data-act="toggleAttn">Needs attention' + (attention().length ? ' <b class="bdg">' + attention().length + '</b>' : '') + '</button>' +
+    '<button class="icon' + (S.ui.dev ? ' on' : '') + '" data-act="toggleDev" title="Simulate">Simulate</button>' +
+    '<button class="icon" data-act="toggleRight" aria-label="Toggle details" title="Toggle right panel">▥</button></div>';
 }
-function nowBar() {
-  const t = activeTicket(); if (!t) return '';
-  const ov = t.act && t.act.overlay;
-  return '<div class="now"><span class="pill acc">▶ ACTIVE</span><a href="#" class="key" data-act="go" data-name="ticket" data-key="' + t.key + '" data-tab="test">' + t.key + '</a><span class="nt">' + esc(t.title) + '</span><span class="mono mute">' + fmtDur(durationMs(t)) + '</span>' +
-    (ov ? '<span class="pill warn" title="composer path repository in ' + ov.repo + '. Must be reverted before anything is pushed.">⚡ overlay on ' + ov.repo + '</span>' : '') +
-    '<span class="sp"></span>' + btn('Open', 'go', { name: 'ticket', key: t.key, tab: 'test' }, 'sm') + btn('Park…', 'parkAsk', { key: t.key }, 'sm') + '</div>';
+/* ---------------- open tickets as tabs (preview tab is replaced until pinned) ---------------- */
+function syncTabs() {
+  const r = S.ui.route; S.ui.tabs = S.ui.tabs || [];
+  if (r.name !== 'ticket') { S.ui.screen = r; return; }
+  let t = S.ui.tabs.find((x) => x.key === r.key);
+  if (!t) {
+    t = { key: r.key, pinned: false, tab: r.tab || 'overview' };
+    const pv = S.ui.tabs.findIndex((x) => !x.pinned);
+    if (pv >= 0) S.ui.tabs[pv] = t; else S.ui.tabs.push(t);
+  }
+  t.tab = r.tab || 'overview';
+}
+function tabBar() {
+  const r = S.ui.route; const scr = S.ui.screen || { name: 'next' };
+  const L = { next: 'Next', tickets: GROUP_LABEL[scr.group] || 'Tickets', env: 'On uat', workspace: 'Workspace', audit: 'Audit log', settings: 'Settings' };
+  const first = '<a href="#" class="tab ' + (r.name !== 'ticket' ? 'on' : '') + '" data-act="go" data-name="' + scr.name + '" data-group="' + (scr.group || '') + '">' + esc(L[scr.name] || '') + '</a>';
+  const act = activeTicket();
+  const tabs = (S.ui.tabs || []).map((x) => {
+    const t = tk(x.key); if (!t) return '';
+    const bad = anyFailed(t).length || uatConflicts(t).length || prWaitExpired(t) || thWaitExpired(t); const un = unseenCount(t) > 0 && !(r.name === 'ticket' && r.key === x.key);
+    const mark = act && act.key === x.key ? '<span class="tplay">▶</span>' : bad ? '<i class="dot bad"></i>' : un ? '<i class="dot" style="background:var(--accent)"></i>' : '';
+    return '<span class="tab ' + (r.name === 'ticket' && r.key === x.key ? 'on' : '') + (x.pinned ? '' : ' pv') + '" data-act="go" data-name="ticket" data-key="' + x.key + '" data-tab="' + x.tab + '" data-dbl="1" data-mid="1">' + mark + '<span class="key">' + x.key + '</span><span class="ct">' + esc(t.title.length > 18 ? t.title.slice(0, 17) + '…' : t.title) + '</span><button class="x" data-act="closeTab" data-key="' + x.key + '" aria-label="Close ' + x.key + '">×</button></span>';
+  }).join('');
+  return '<div class="tabstrip">' + first + tabs + '</div>';
+}
+function statusBar() {
+  const t = activeTicket(); const ov = t && t.act && t.act.overlay;
+  const health = (name, ok) => '<span class="sbi"><i class="dot ' + (ok ? 'ok' : 'warn') + '"></i>' + name + '</span>';
+  const sync = S.sync.running ? '<span class="spin"></span> Syncing' : S.sync.lastError ? '<span class="warn-t">' + esc(S.sync.lastError) + '</span>' : 'Synced ' + minsAgo(S.sync.lastOk) + 'm ago';
+  return '<div class="status"><span class="sbl">' + 
+    (t ? '<a href="#" class="sbi hl" data-act="go" data-name="ticket" data-key="' + t.key + '" data-tab="test">▶ ' + t.key + ' <span class="mono">' + fmtDur(durationMs(t)) + '</span></a>' : '') +
+    (ov ? '<span class="sbi warnb" title="Must be reverted before anything is pushed">overlay: ' + ov.repo + '</span>' : '') +
+    (t ? '<a href="#" class="sbi" data-act="parkAsk" data-key="' + t.key + '">Park…</a>' : '') +
+    '</span><span class="sp"></span><span class="sbl">' + Object.keys(REPOS).filter((r) => lockOf(r)).map((r) => '<span class="sbi ' + (lockOf(r).kind === 'stale' ? 'badb' : 'warnb') + '" title="' + esc(lockText(lockOf(r))) + '">◼ ' + r + ': ' + (lockOf(r).kind === 'stale' ? 'stale lock' : lockOf(r).kind === 'sync' ? 'fetching' : lockOf(r).kind === 'external' ? esc(lockOf(r).by) : esc(lockOf(r).op)) + '</span>').join('') + Object.keys(S.staleRepos).map((r) => '<span class="sbi warnb" title="' + esc(S.staleRepos[r].by) + '">' + r + ': not refreshed</span>').join('') + Object.keys(S.pending).map((r) => '<span class="sbi" title="' + esc(S.pending[r].by) + '">' + r + ': waiting to fetch</span>').join('') + health('Jira', S.providers.jira.ready) + health('GitHub', S.providers.gh.ready) +
+    '<a href="#" class="sbi" data-act="sync"' + (S.sync.running ? ' disabled' : '') + '>' + sync + ' ↻</a></span></div>';
 }
 
 /* ---------------- right sidebar (contextual) ---------------- */
@@ -102,42 +125,43 @@ function activityFor(key, n) {
   return '<ul class="act">' + rows.map((a) => '<li><span class="mono faint">' + a.at + '</span> <span>' + esc(a.action) + '</span>' + (a.repo ? ' <em>' + esc(a.repo) + '</em>' : '') + (a.outcome === 'failure' ? ' ' + pill('failed', 'bad') : '') + '</li>').join('') + '</ul>';
 }
 function syncCard() {
-  const rep = S.sync.report.length ? '<ul class="rep">' + S.sync.report.map((r) => '<li>' + (r.ok ? '<i class="dot ok"></i>' : '<i class="dot bad"></i>') + '<span><b>' + esc(r.src) + '</b> ' + esc(r.text) + '</span></li>').join('') + '</ul>' : '<div class="faint">No sync yet this session.</div>';
-  return '<section class="rc"><h5>Sync</h5><div class="row sb"><span>' + (S.sync.running ? 'Syncing…' : 'Synced ' + minsAgo(S.sync.lastOk) + ' min ago') + '</span>' + btn('↻ Sync now', 'sync', {}, 'sm', { disabled: S.sync.running }) + '</div>' + rep + '<div class="faint small">Fake sync: each run applies the next scripted arrival (a new ticket, a new mention). Sync is read-only and never deletes cache on failure.</div></section>';
+  if (!S.sync.report.length) return '';
+  return '<section class="rc"><h5>Last sync</h5><ul class="rep">' + S.sync.report.map((r) => '<li>' + (r.ok ? '<i class="dot ok"></i>' : '<i class="dot bad"></i>') + '<span><b>' + esc(r.src) + '</b> ' + esc(r.text) + '</span></li>').join('') + '</ul></section>';
 }
 function rightNext() {
   const t = activeTicket();
   const now = t ? '<section class="rc"><h5>Now</h5><div><a href="#" class="key" data-act="go" data-name="ticket" data-key="' + t.key + '" data-tab="test">' + t.key + '</a> ' + esc(t.title) + '</div><div class="mute small">' + fmtDur(durationMs(t)) + ' · ' + t.checklist.filter((c) => c.done).length + '/' + t.checklist.length + ' checked</div><div class="row">' + btn('Open', 'go', { name: 'ticket', key: t.key, tab: 'test' }, 'sm') + '</div></section>'
-    : '<section class="rc"><h5>Now</h5><div class="mute">No active ticket. Activate a reviewed ticket to test it locally.</div></section>';
+    : '';
   const q = S.tickets.filter(groupOf.pool).sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]).slice(0, 4);
   const queue = '<section class="rc"><h5>Claim queue</h5>' + (q.length ? q.map((x) => '<div class="qi"><a href="#" class="key" data-act="go" data-name="ticket" data-key="' + x.key + '" data-tab="overview">' + x.key + '</a> ' + pill(x.priority, prioCls(x.priority)) + (isHotfix(x) ? ' ' + pill('HOTFIX', 'hot') : '') + '<div class="mute small">' + esc(x.title) + '</div></div>').join('') : '<div class="faint">Empty.</div>') + '</section>';
-  return now + syncCard() + queue + '<section class="rc"><h5>Recent activity</h5>' + activityFor(null, 6) + '</section>';
+  const today = S.tickets.filter((x) => durationMs(x) > 0); const total = today.reduce((n, x) => n + durationMs(x), 0);
+  const time = today.length ? '<section class="rc"><h5>Today</h5><div class="kv"><span>Total</span><b>' + fmtDur(total) + '</b></div>' + today.map((x) => '<div class="kv"><span><a href="#" class="key" data-act="go" data-name="ticket" data-key="' + x.key + '" data-tab="overview">' + x.key + '</a></span><b>' + fmtDur(durationMs(x)) + '</b></div>').join('') + '</section>' : '';
+  return now + time + syncCard() + queue + '<section class="rc"><h5>Recent activity</h5>' + activityFor(null, 6) + '</section>';
 }
 function rightTicket(t) {
   const hot = isHotfix(t); const st = status(t);
   const prs = t.prs.map((p) => { const d = t.deploy[p.repo]; const ap = p.reviewers.filter((r) => r.approved).length;
-    return '<div class="qi"><div class="row sb"><span class="mono">' + esc(p.repo) + ' #' + p.id + '</span>' + pill('open', '') + '</div><div class="mute small">' + esc(p.src) + ' → ' + pill(p.dst, p.dst === REPOS[p.repo].prod && REPOS[p.repo].prod !== REPOS[p.repo].base ? 'hot' : '') + '</div><div class="small">' + ap + '/' + p.reviewers.length + ' approvals' + (d ? ' · pipeline #' + d.run + ' ' + pill(d.state, d.state === 'deployed' ? 'ok' : d.state === 'failed' ? 'bad' : 'warn') : '') + '</div></div>'; }).join('');
+    return '<div class="qi"><div class="row sb"><span class="mono">' + esc(p.repo) + ' #' + p.id + '</span>' + pill('open', '') + '</div><div class="mute small">' + esc(p.src) + ' → ' + pill(p.dst, p.dst === REPOS[p.repo].prod && REPOS[p.repo].prod !== REPOS[p.repo].base ? 'hot' : '') + '</div><div class="small">' + ap + '/' + p.reviewers.length + ' approvals' + (d ? ' · run #' + d.run + ' ' + pill(d.state, d.state === 'deployed' ? 'ok' : d.state === 'failed' ? 'bad' : 'warn') : '') + '</div></div>'; }).join('');
   return '<section class="rc"><h5>Status</h5>' + kv('Jira', pill(t.jira, jiraCls(t.jira))) + kv('Local', st ? pill(LOCAL_LABEL[st], localCls(st)) : pill('not claimed', '')) + kv('Kind', hot ? pill('HOTFIX', 'hot') : 'Normal') + kv('Time', fmtDur(durationMs(t))) + kv('Reviewed', t.reviewed ? pill('yes', 'ok') : 'no') + '</section>' +
     '<section class="rc"><h5>Details</h5>' + kv('Type', esc(t.type)) + kv('Priority', pill(t.priority, prioCls(t.priority))) + kv('Assignee', esc(t.assignee)) + kv('Reporter', esc(t.reporter)) + kv('Sprint', esc(t.sprint)) + kv('Epic', esc(t.epic)) + kv('Fix version', esc(t.fixVersion)) + kv('Estimate', esc(t.estimate)) +
     kv('Components', t.components.map((c) => pill(c)).join(' ')) + kv('Labels', t.labels.map((c) => pill(c)).join(' ') || '–') + kv('Created', esc(t.created)) + kv('Updated', esc(t.updated)) + '</section>' +
-    '<section class="rc"><h5>Pull requests</h5>' + prs + '</section>' +
+    '<section class="rc"><h5>Pull requests</h5>' + (prs || '<div class="faint">' + (hasPrGap(t) ? esc(gapText(t)) : 'None.') + '</div>') + '</section>' +
     (t.links.length ? '<section class="rc"><h5>Linked issues</h5>' + t.links.map((l) => '<div class="qi"><span class="faint small">' + esc(l.rel) + '</span> ' + (tk(l.key) ? link('<span class="key">' + esc(l.key) + '</span>', 'go', { name: 'ticket', key: l.key, tab: 'overview' }) : '<span class="key">' + esc(l.key) + '</span>') + ' ' + pill(l.status, jiraCls(l.status)) + '<div class="mute small">' + esc(l.title) + '</div></div>').join('') + '</section>' : '') +
     '<section class="rc"><h5>Activity</h5>' + activityFor(t.key, 8) + '</section>';
 }
-function rightPlain(name) {
-  const hints = {
-    tickets: 'Ordered by Jira priority, then your own order. Open a ticket to see its description, comments, PRs and pipelines.',
-    env: 'Shows what is on uat in each repo right now, and which tickets could collide. uat accumulates tickets, so this is the picture to check before pushing.',
-    workspace: 'Start and stop keep the CLI meaning: dependency order, with a guard for uncommitted or unpushed work.',
-    audit: 'Every external write is audited before it happens (an "attempted" entry) and after (the outcome). Append-only.',
-    settings: 'The app never stores tokens. Each tool keeps its own login.',
-    ideas: 'Proposals for changing the design. Ones marked built are already in this prototype.',
-  };
-  return '<section class="rc"><h5>About this screen</h5><div class="mute">' + hints[name] + '</div></section>' + syncCard() + '<section class="rc"><h5>Recent activity</h5>' + activityFor(null, 6) + '</section>';
+function rightPlain() {
+  return syncCard() + '<section class="rc"><h5>Activity</h5>' + activityFor(null, 8) + '</section>';
 }
 function rightPanel() {
   const r = S.ui.route;
   if (r.name === 'ticket' && tk(r.key)) return rightTicket(tk(r.key));
   if (r.name === 'next') return rightNext();
-  return rightPlain(r.name);
+  return rightPlain();
+}
+
+function attnPanel() {
+  if (!S.ui.attn) return '';
+  const items = attention();
+  const row = (s) => '<div class="ai"><div class="row sb"><span class="row">' + (s.hotfix ? pill('HOTFIX', 'hot') : '') + (s.ticket ? '<a href="#" class="key" data-act="go" data-name="ticket" data-key="' + s.ticket + '" data-tab="overview">' + s.ticket + '</a>' : '') + '<b>' + esc(s.title) + '</b></span>' + btn(ACT_LABEL[s.act.do] || 'Do', 'sug', { id: s.id }, 'sm' + (s.level === 'external' ? ' p' : '')) + '</div><div class="mute small">' + esc(s.reason) + '</div></div>';
+  return '<div class="attn-scrim" data-act="toggleAttn"></div><aside class="attnp"><div class="sh-h"><span>Needs attention</span><span class="row">' + btn('All next actions', 'go', { name: 'next' }, 'g sm') + '</span></div>' + (items.length ? items.map(row).join('') : '<div class="ai faint">Nothing needs you right now.</div>') + '</aside>';
 }
