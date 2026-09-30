@@ -1,17 +1,17 @@
 //! What `acli ... --json` prints, as tolerant serde structs, and the conversions to the
 //! provider model.
 //!
-//! UNVERIFIED: Atlassian's ACLI documentation does not show the JSON shape of `view`,
-//! `search` or `comment list`. These structs assume the Jira REST shape (`key`, `fields`
-//! with `summary`/`status`/`priority`/`assignee`/`updated`; comments with `id`, `author`,
-//! `body`, `created`) and tolerate: unknown fields, flat (un-nested) fields, a bare array or
-//! an object wrapping the array, several JSON documents in one output (one per page), and
-//! status/priority/assignee as either a string or an object. `de providers probe` output
-//! is how to verify this on a real install.
+//! Verified against a real `acli 1.3.39-stable`: `search` prints a top-level JSON array of
+//! Jira-REST-like issues (`key`, `fields{summary,status,priority,assignee}` plus many keys
+//! that are `null`); `view` prints one such object; `view --fields comment` nests the
+//! comments under `fields.comment` with author account ids, ADF bodies and Jira
+//! timestamps. The parsers stay tolerant (unknown fields, flat fields, an object wrapping
+//! the array, several documents in one output, string-or-object status/priority/assignee).
 
 use serde::Deserialize;
 use serde_json::Value;
 
+use super::UPDATED_UNKNOWN;
 use super::adf::body_to_text;
 use super::time::parse_timestamp;
 use crate::domain::TicketKey;
@@ -205,7 +205,7 @@ fn ticket_from(
     let updated = f.updated.as_ref().or(flat.updated.as_ref());
     let updated_at = match updated {
         Some(v) => timestamp_of(v, what, output)?,
-        None => 0,
+        None => UPDATED_UNKNOWN,
     };
     Ok(RemoteTicket {
         url: browse_url(&key, site, issue.self_url.as_deref()),
@@ -218,20 +218,62 @@ fn ticket_from(
     })
 }
 
-/// Comments of a `comment list` output, oldest first.
-pub fn parse_comments(output: &str, ticket: &TicketKey) -> ProviderResult<Vec<RemoteComment>> {
+/// Comments of a `view --fields comment` output, oldest first, plus the `total` Jira
+/// reports (so the caller can tell a truncated list). Shape:
+/// `{"fields": {"comment": {"comments": [...], "total": N, "maxResults": M, "startAt": 0}}}`.
+/// A `null` or missing comment field is no comments.
+pub fn parse_comment_field(
+    output: &str,
+    ticket: &TicketKey,
+) -> ProviderResult<(Vec<RemoteComment>, Option<usize>)> {
     const WHAT: &str = "comments";
-    let mut comments = Vec::new();
-    for doc in json_documents(output, WHAT)? {
-        let items = elements(doc, &["comments", "values", "results"])
-            .ok_or_else(|| parse_error(WHAT, "expected an array of comments", output))?;
-        for item in items {
-            comments.push(comment_from(item, ticket, WHAT, output)?);
+    let docs = json_documents(output, WHAT)?;
+    let Some(doc) = docs.into_iter().next() else {
+        return Err(parse_error(WHAT, "empty output", output));
+    };
+    let doc = match doc {
+        Value::Array(items) => items.into_iter().next().unwrap_or(Value::Null),
+        other => other,
+    };
+    // Refuse other shapes (notably the flat `comment list` output, which has no `fields`)
+    // instead of reading them as "no comments".
+    if !doc.get("fields").is_some_and(Value::is_object) {
+        return Err(parse_error(
+            WHAT,
+            "expected a work item object with `fields`",
+            output,
+        ));
+    }
+    let container = doc
+        .pointer("/fields/comment")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let total = container
+        .get("total")
+        .and_then(Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok());
+    let items = match container {
+        Value::Null => Vec::new(),
+        Value::Object(mut map) => match map.remove("comments") {
+            Some(Value::Array(items)) => items,
+            Some(Value::Null) | None => Vec::new(),
+            Some(_) => return Err(parse_error(WHAT, "`comments` is not an array", output)),
+        },
+        _ => {
+            return Err(parse_error(
+                WHAT,
+                "`fields.comment` is not an object",
+                output,
+            ));
         }
+    };
+    let mut comments = Vec::with_capacity(items.len());
+    for item in items {
+        comments.push(comment_from(item, ticket, WHAT, output)?);
     }
     // Stable: comments with equal timestamps keep the order acli gave.
     comments.sort_by_key(|c| c.created_at);
-    Ok(comments)
+    Ok((comments, total))
 }
 
 /// One comment object (the result of `comment create`).

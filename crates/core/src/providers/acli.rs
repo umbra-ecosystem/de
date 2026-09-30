@@ -7,29 +7,42 @@
 //!
 //! # Commands used, and where each comes from
 //!
-//! Documentation: <https://developer.atlassian.com/cloud/acli/reference/commands/>.
-//! **VERIFIED** means the command and flag are in that reference; **UNVERIFIED** means they
-//! are assumed. Nothing here was run against a real `acli` (none was available).
+//! Verified against a real `acli 1.3.39-stable` (read commands only). Writes cannot be
+//! verified without changing real Jira, so they stay as documented.
 //!
 //! | Purpose | Invocation | Status |
 //! |---|---|---|
-//! | version | `acli --version` | UNVERIFIED (the docs never show a version command; cobra convention) |
-//! | auth check | `acli jira auth status` | VERIFIED (`jira-auth-status`); output and exit code when logged out UNVERIFIED |
-//! | search | `acli jira workitem search --jql Q --paginate --json --fields ...` | VERIFIED flags (`--jql`, `--paginate`, `--json`, `--fields`, `--limit`) |
-//! | view | `acli jira workitem view KEY --json --fields ...` | VERIFIED |
-//! | comments | `acli jira workitem comment list --key KEY --paginate --json` | VERIFIED (`comment list`: `--key`, `--json`, `--paginate`, `--limit`, `--order`) |
-//! | add comment | `acli jira workitem comment create --key KEY --body TEXT --json` | VERIFIED flags (`--key`, `--body`, `--json`); the JSON it prints UNVERIFIED |
-//! | transition | `acli jira workitem transition --key KEY --status NAME --yes --json` | VERIFIED (`-k/--key`, `-s/--status`, `-y/--yes`, `--json`) |
+//! | version | `acli --version` (prints `acli version 1.3.39-stable`) | VERIFIED |
+//! | auth check | `acli jira auth status` (exit 0 and `Authenticated` when logged in) | VERIFIED logged in; logged-out wording UNVERIFIED |
+//! | search | `acli jira workitem search --jql Q --paginate --json --fields key,summary,status,priority,assignee` | VERIFIED. `updated` is **rejected** by search (`field 'updated' is not allowed`); an unbounded JQL (only an `order by`) is rejected too |
+//! | view | `acli jira workitem view KEY --json --fields key,summary,status,priority,assignee,updated` | VERIFIED; the only path that offers `updated` |
+//! | comments | `acli jira workitem view KEY --json --fields comment` | VERIFIED: `fields.comment.comments[]` with author account ids, ADF bodies and timestamps |
+//! | add comment | `acli jira workitem comment create --key KEY --body TEXT --json` | flags documented; the JSON it prints UNVERIFIED |
+//! | transition | `acli jira workitem transition --key KEY --status NAME --yes --json` | flags documented; UNVERIFIED |
 //!
-//! The JSON shapes of `view`, `search` and `comment list` are not documented at all; see
-//! [`wire`]. `--fields` values for search/view are documented (comma-separated field names);
-//! that `updated` is a valid field name is standard Jira. `acli` has **no** command to list
-//! the transitions available for a work item, so [`AcliJiraWriter::transition`] cannot
-//! enumerate them (it reports acli's own error instead).
+//! `acli jira workitem comment list` is **not used**: it prints only
+//! `{author: "<display name>", body: "<plain text>", id, visibility}`, with no account id,
+//! no timestamp and no mention data, so it cannot answer "was I @mentioned?".
 //!
-//! `acli` 1.3.4 (19 September 2025) is the release that introduced `comment list`
-//! (<https://developer.atlassian.com/cloud/acli/changelog/>), which sync cannot work
-//! without, hence [`MIN_ACLI_VERSION`].
+//! `acli` has no command to list the transitions available for a work item, so
+//! [`AcliJiraWriter::transition`] cannot enumerate them (it reports acli's own error).
+//!
+//! # `updated_at` from search
+//!
+//! Search cannot return `updated`, so [`RemoteTicket::updated_at`] is
+//! [`UPDATED_UNKNOWN`] (`0`) for search results and real for [`TicketProvider::get`]. Sync
+//! does not store or compare it (the Jira cache has no such column).
+//!
+//! # Errors
+//!
+//! `acli` prints errors as `✗ Error: ...`, on stderr for most commands but on **stdout**
+//! for `comment list` (with a generic line on stderr). Any non-zero exit is an error and
+//! its classification looks at both streams; an exit 0 whose stdout starts with `✗` is also
+//! treated as an error. `Issue does not exist or you do not have permission to see it.`
+//! is [`ProviderError::NotFound`].
+//!
+//! `acli` 1.3.4 (19 September 2025) introduced `comment list`; [`MIN_ACLI_VERSION`] is kept
+//! at that floor.
 
 mod adf;
 mod time;
@@ -37,6 +50,7 @@ mod wire;
 
 use std::io;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use serde_json::Value;
 
@@ -58,9 +72,18 @@ pub const MIN_ACLI_VERSION: &str = "1.3.4";
 
 const PROGRAM: &str = "acli";
 
-/// Fields requested from search and view. UNVERIFIED that every name is accepted by
-/// `--fields`, but they are plain Jira field ids.
-const TICKET_FIELDS: &str = "key,summary,status,priority,assignee,updated";
+/// Fields requested from search. Verified against a real acli: `updated` is NOT allowed
+/// here, and `--fields key` alone yields nulls, so `summary` is always included.
+const SEARCH_FIELDS: &str = "key,summary,status,priority,assignee";
+
+/// Fields requested from view, where `updated` is allowed.
+const VIEW_FIELDS: &str = "key,summary,status,priority,assignee,updated";
+
+/// Field requested to read comments.
+const COMMENT_FIELDS: &str = "comment";
+
+/// The value of [`RemoteTicket::updated_at`] when the source cannot say.
+pub const UPDATED_UNKNOWN: i64 = 0;
 
 // ---- the shared command layer ---------------------------------------------------------
 
@@ -84,7 +107,8 @@ impl<R: CommandRunner> Acli<R> {
     /// the environmental failures are mapped to distinct [`ProviderError`]s.
     fn run(&self, args: &[&str]) -> ProviderResult<CommandOutput> {
         let output = self.run_raw(args)?;
-        if output.success {
+        // Some acli failures print `✗ Error: ...` and still exit 0.
+        if output.success && !output.stdout.trim_start().starts_with('✗') {
             Ok(output)
         } else {
             Err(classify_failure(&output))
@@ -125,7 +149,11 @@ fn has_token(text: &str, token: &str) -> bool {
 /// Turns a failed `acli` run into the error sync can act on. Matches on wording because
 /// `acli` documents no exit codes (UNVERIFIED): auth first, then network, then not found.
 fn classify_failure(output: &CommandOutput) -> ProviderError {
-    let detail = if output.stderr.trim().is_empty() {
+    // `acli` prints the real message on stdout for some commands and only a generic line
+    // on stderr; prefer whichever stream carries the message.
+    let detail = if output.stderr.trim().is_empty()
+        || (output.stderr.contains("command execution failed") && !output.stdout.trim().is_empty())
+    {
         output.stdout.trim()
     } else {
         output.stderr.trim()
@@ -155,7 +183,8 @@ fn classify_failure(output: &CommandOutput) -> ProviderError {
         "temporary failure in name resolution",
     ]) {
         ProviderError::Network(snippet(detail, 300))
-    } else if (any(&["does not exist", "not found"]) && !any(&["command not found"]))
+    } else if (any(&["does not exist", "do not have permission", "not found"])
+        && !any(&["command not found"]))
         || has_token(&lower, "404")
     {
         ProviderError::NotFound(snippet(detail, 300))
@@ -208,6 +237,8 @@ fn output_says_logged_out(text: &str) -> bool {
 /// spawns nothing.
 pub struct AcliJira<R = ProcessRunner> {
     inner: Acli<R>,
+    /// Notes for the caller (a truncated comment list); drained by `take_warnings`.
+    warnings: Mutex<Vec<String>>,
 }
 
 impl AcliJira<ProcessRunner> {
@@ -221,6 +252,7 @@ impl<R: CommandRunner + Send + Sync> AcliJira<R> {
     pub fn with_runner(runner: R, site: Option<String>) -> Self {
         Self {
             inner: Acli { runner, site },
+            warnings: Mutex::new(Vec::new()),
         }
     }
 }
@@ -313,7 +345,7 @@ impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
             "--paginate",
             "--json",
             "--fields",
-            TICKET_FIELDS,
+            SEARCH_FIELDS,
         ])?;
         wire::parse_search(&out.stdout, self.inner.site.as_deref())
     }
@@ -326,7 +358,7 @@ impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
             key.as_str(),
             "--json",
             "--fields",
-            TICKET_FIELDS,
+            VIEW_FIELDS,
         ])?;
         wire::parse_view(&out.stdout, self.inner.site.as_deref())?
             .ok_or_else(|| ProviderError::NotFound(format!("{key} was not returned by acli")))
@@ -336,14 +368,34 @@ impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
         let out = self.inner.run(&[
             "jira",
             "workitem",
-            "comment",
-            "list",
-            "--key",
+            "view",
             key.as_str(),
-            "--paginate",
             "--json",
+            "--fields",
+            COMMENT_FIELDS,
         ])?;
-        wire::parse_comments(&out.stdout, key)
+        let (comments, total) = wire::parse_comment_field(&out.stdout, key)?;
+        if let Some(total) = total
+            && total > comments.len()
+        {
+            self.warnings
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(format!(
+                    "{key}: acli returned {} of {total} comments; some are missing",
+                    comments.len()
+                ));
+        }
+        Ok(comments)
+    }
+
+    fn take_warnings(&self) -> Vec<String> {
+        std::mem::take(
+            &mut *self
+                .warnings
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
     }
 }
 
@@ -494,7 +546,7 @@ pub struct ProbeResult {
 }
 
 /// Runs only read-only commands (version, auth status, a one-result search, and, for
-/// `sample_key`, view and a comment list) and returns their raw output so it can be pasted
+/// `sample_key`, view and view of the comment field) and returns their raw output so it can be pasted
 /// into a bug report or fixture. Never fails: a command that cannot start is a result with
 /// `exit_code: None` and the reason in `stderr`. No comment or transition command is here.
 pub fn probe(runner: &dyn CommandRunner, sample_key: Option<&TicketKey>) -> Vec<ProbeResult> {
@@ -506,12 +558,13 @@ pub fn probe(runner: &dyn CommandRunner, sample_key: Option<&TicketKey>) -> Vec<
             "workitem",
             "search",
             "--jql",
-            "order by updated DESC",
+            // Unbounded JQL (only an `order by`) is rejected by acli.
+            "assignee = currentUser() order by updated DESC",
             "--limit",
             "1",
             "--json",
             "--fields",
-            TICKET_FIELDS,
+            SEARCH_FIELDS,
         ]
         .map(String::from)
         .to_vec(),
@@ -526,14 +579,20 @@ pub fn probe(runner: &dyn CommandRunner, sample_key: Option<&TicketKey>) -> Vec<
                 key,
                 "--json",
                 "--fields",
-                TICKET_FIELDS,
+                VIEW_FIELDS,
             ]
             .map(String::from)
             .to_vec(),
         );
         commands.push(
             [
-                "jira", "workitem", "comment", "list", "--key", key, "--limit", "5", "--json",
+                "jira",
+                "workitem",
+                "view",
+                key,
+                "--json",
+                "--fields",
+                COMMENT_FIELDS,
             ]
             .map(String::from)
             .to_vec(),

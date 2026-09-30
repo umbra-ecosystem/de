@@ -1,0 +1,21 @@
+{
+  "changelog": null,
+  "editmeta": null,
+  "expand": "operations,versionedRepresentations,editmeta,changelog,customfield_10010.requestTypePractice,renderedFields",
+  "fields": {
+    "assignee": {"accountId": "acct-0001", "displayName": "Jane Doe", "emailAddress": "jane.doe@example.com"},
+    "priority": {"id": "2", "name": "High"},
+    "status": {"id": "10003", "name": "UAT", "statusCategory": {"id": 4, "key": "indeterminate", "name": "In Progress"}},
+    "summary": "Fix login redirect",
+    "updated": "2026-01-15T09:30:45.123+0000"
+  },
+  "id": "10101",
+  "key": "PROJ-123",
+  "names": null,
+  "operations": null,
+  "properties": null,
+  "renderedFields": null,
+  "schema": null,
+  "self": "https://example.atlassian.net/rest/api/3/issue/10101",
+  "transitions": null
+}

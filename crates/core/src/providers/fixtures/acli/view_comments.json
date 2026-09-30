@@ -1,0 +1,80 @@
+{
+  "changelog": null,
+  "editmeta": null,
+  "expand": "operations,versionedRepresentations,editmeta,changelog,customfield_10010.requestTypePractice,renderedFields",
+  "fields": {
+    "comment": {
+      "comments": [
+        {
+          "id": "30002",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10101/comment/30002",
+          "author": {"accountId": "acct-0002", "accountType": "atlassian", "active": true, "displayName": "John Roe", "emailAddress": "john.roe@example.com"},
+          "updateAuthor": {"accountId": "acct-0002", "displayName": "John Roe"},
+          "created": "2026-01-16T14:05:00.000+0100",
+          "updated": "2026-01-16T14:05:00.000+0100",
+          "jsdPublic": true,
+          "body": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+              {"type": "paragraph", "content": [
+                {"type": "mention", "attrs": {"id": "acct-0001", "text": "@Jane Doe", "accessLevel": "", "localId": "aaaa-1111"}},
+                {"type": "text", "text": " could you "},
+                {"type": "text", "text": "re-check", "marks": [{"type": "strong"}]},
+                {"type": "text", "text": " this?"},
+                {"type": "hardBreak"},
+                {"type": "text", "text": "Thanks "},
+                {"type": "emoji", "attrs": {"shortName": ":smile:", "id": "1f604", "text": "😄"}},
+                {"type": "mention", "attrs": {"id": "acct-0003", "text": "@Sam Poe", "accessLevel": "", "localId": "aaaa-2222"}},
+                {"type": "mention", "attrs": {"id": "acct-0001", "text": "@Jane Doe", "accessLevel": "", "localId": "aaaa-3333"}}
+              ]},
+              {"type": "bulletList", "content": [
+                {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "first point"}]}]},
+                {"type": "listItem", "content": [{"type": "paragraph", "content": [
+                  {"type": "text", "text": "see "},
+                  {"type": "inlineCard", "attrs": {"url": "https://example.atlassian.net/browse/PROJ-999"}}
+                ]}]}
+              ]},
+              {"type": "mediaSingle", "attrs": {"layout": "center"}, "content": [
+                {"type": "media", "attrs": {"id": "media-0001", "type": "file", "collection": "", "width": 100, "height": 50}}
+              ]},
+              {"type": "file", "attrs": {"id": "file-0001"}},
+              {"type": "table", "attrs": {"isNumberColumnEnabled": false, "layout": "default"}, "content": [
+                {"type": "tableRow", "content": [
+                  {"type": "tableCell", "attrs": {}, "content": [{"type": "paragraph", "content": [{"type": "text", "text": "cell"}]}]}
+                ]}
+              ]},
+              {"type": "futureWidget", "attrs": {"anything": 1}, "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "inside unknown"}]}
+              ]}
+            ]
+          }
+        },
+        {
+          "id": "30001",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10101/comment/30001",
+          "author": {"accountId": "acct-0001", "displayName": "Jane Doe", "emailAddress": "jane.doe@example.com"},
+          "updateAuthor": {"accountId": "acct-0001", "displayName": "Jane Doe"},
+          "created": "2026-01-15T10:00:00.000+0000",
+          "updated": "2026-01-15T10:00:00.000+0000",
+          "jsdPublic": true,
+          "body": {"type": "doc", "version": 1, "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "Ready for review."}]}
+          ]}
+        }
+      ],
+      "maxResults": 2,
+      "startAt": 0,
+      "total": 2
+    }
+  },
+  "id": "10101",
+  "key": "PROJ-123",
+  "names": null,
+  "operations": null,
+  "properties": null,
+  "renderedFields": null,
+  "schema": null,
+  "self": "https://example.atlassian.net/rest/api/3/issue/10101",
+  "transitions": null
+}

@@ -1,0 +1,10 @@
+{
+  "comments": [
+    {"author": "Jane Doe", "body": "Ready for review.", "id": "30001", "visibility": "All Users"},
+    {"author": "John Roe", "body": "@Jane Doe could you re-check this?", "id": "30002", "visibility": "All Users"}
+  ],
+  "isLast": true,
+  "maxResults": 50,
+  "startAt": 0,
+  "total": 2
+}

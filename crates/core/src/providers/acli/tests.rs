@@ -1,5 +1,6 @@
-//! Tests for the acli adapter. Fixtures under `providers/fixtures/acli/` are derived from
-//! documentation, NOT captured from a real install.
+//! Tests for the acli adapter. Fixtures under `providers/fixtures/acli/` have the structure
+//! of a real `acli 1.3.39-stable` with invented values (see the README there). The `live_`
+//! tests at the bottom run the real installed acli, read-only, and are `#[ignore]`d.
 
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -7,9 +8,10 @@ use std::sync::{Arc, Mutex};
 use super::*;
 use crate::providers::ProviderErrorKind;
 
-const PAGE1: &str = include_str!("../fixtures/acli/search_page1.json");
-const PAGE2: &str = include_str!("../fixtures/acli/search_page2.json");
-const COMMENTS: &str = include_str!("../fixtures/acli/comments.json");
+const SEARCH: &str = include_str!("../fixtures/acli/search.json");
+const VIEW: &str = include_str!("../fixtures/acli/view.json");
+const VIEW_COMMENTS: &str = include_str!("../fixtures/acli/view_comments.json");
+const COMMENT_LIST_FLAT: &str = include_str!("../fixtures/acli/comment_list_flat.json");
 
 enum Reply {
     Out(Option<i32>, String, String),
@@ -77,7 +79,7 @@ impl CommandRunner for Shared {
 fn reader(fake: Fake) -> (AcliJira<Shared>, Arc<Fake>) {
     let fake = Arc::new(fake);
     (
-        AcliJira::with_runner(Shared(fake.clone()), Some("acme.atlassian.net".into())),
+        AcliJira::with_runner(Shared(fake.clone()), Some("example.atlassian.net".into())),
         fake,
     )
 }
@@ -104,9 +106,17 @@ fn search_argv(jql: &str) -> Vec<&str> {
         "--paginate",
         "--json",
         "--fields",
-        TICKET_FIELDS,
+        SEARCH_FIELDS,
     ]
 }
+
+fn view_argv<'a>(k: &'a str, fields: &'a str) -> Vec<&'a str> {
+    vec!["jira", "workitem", "view", k, "--json", "--fields", fields]
+}
+
+/// What the real acli prints for a missing key (`view`): stderr only, exit 1.
+const MISSING_ERR: &str =
+    "✗ Error: Issue does not exist or you do not have permission to see it.\n";
 
 fn assert_send<T: Send>() {}
 
@@ -125,15 +135,15 @@ fn adapters_are_send_and_construction_does_not_spawn() {
 fn health_ready() {
     let (jira, _) = reader(
         Fake::default()
-            .on(&["--version"], ok("acli version 1.3.15-stable\n"))
+            .on(&["--version"], ok("acli version 1.3.39-stable\n"))
             .on(
                 &["jira", "auth", "status"],
-                ok("Logged in as ada@acme.test\n"),
+                ok("✓ Authenticated\n  Site: example.atlassian.net\n  Email: jane.doe@example.com\n  Authentication Type: api_token\n"),
             ),
     );
     let h = jira.health();
     assert!(h.is_ready(), "{h:?}");
-    assert_eq!(h.version.as_deref(), Some("1.3.15"));
+    assert_eq!(h.version.as_deref(), Some("1.3.39"));
 }
 
 #[test]
@@ -194,6 +204,15 @@ fn version_parsing() {
         Some((1, 3, 15))
     );
     assert_eq!(parse_version("v2.0"), Some((2, 0, 0)));
+    // The real output: `acli version 1.3.39-stable`.
+    assert_eq!(
+        parse_version("acli version 1.3.39-stable\n"),
+        Some((1, 3, 39))
+    );
+    assert!(
+        parse_version("acli version 1.3.39-stable").unwrap()
+            >= parse_version(MIN_ACLI_VERSION).unwrap()
+    );
     assert_eq!(parse_version("nothing"), None);
     assert!(parse_version(MIN_ACLI_VERSION).is_some());
 }
@@ -202,26 +221,70 @@ fn version_parsing() {
 
 #[test]
 fn search_combines_pages_and_maps_fields() {
-    let two_docs = format!("{PAGE1}\n{PAGE2}");
-    let (jira, fake) = reader(Fake::default().on(&search_argv("project = APP"), ok(&two_docs)));
-    let found = jira.search("project = APP").unwrap();
+    let (jira, fake) = reader(Fake::default().on(&search_argv("project = PROJ"), ok(SEARCH)));
+    let found = jira.search("project = PROJ").unwrap();
     let keys: Vec<&str> = found.iter().map(|t| t.key.as_str()).collect();
-    assert_eq!(keys, ["APP-1", "APP-2", "APP-3"]);
+    assert_eq!(keys, ["PROJ-123", "PROJ-124", "PROJ-125"]);
     let first = &found[0];
-    assert_eq!(first.title, "Fix login");
+    assert_eq!(first.title, "Fix login redirect");
     assert_eq!(first.status, "In Review");
     assert_eq!(first.priority.as_deref(), Some("High"));
-    assert_eq!(first.assignee.as_deref(), Some("Ada Lovelace"));
+    assert_eq!(first.assignee.as_deref(), Some("Jane Doe"));
     assert_eq!(
         first.url.as_deref(),
-        Some("https://acme.atlassian.net/browse/APP-1")
+        Some("https://example.atlassian.net/browse/PROJ-123")
     );
-    assert_eq!(first.updated_at, 1_714_558_530);
     assert_eq!(found[1].assignee, None);
-    assert_eq!(found[1].updated_at, 1_714_600_800);
     assert_eq!(found[2].status, "Done");
+    assert_eq!(found[2].priority, None);
+    // Search cannot return `updated`; every result carries the documented sentinel.
+    assert!(found.iter().all(|t| t.updated_at == UPDATED_UNKNOWN));
     // The JQL is one verbatim argv element.
     assert_eq!(fake.calls().len(), 1);
+}
+
+#[test]
+fn search_never_asks_for_updated_which_real_acli_rejects() {
+    // `--fields ...,updated` makes the real acli exit 1: "field 'updated' is not allowed".
+    let fields: Vec<&str> = SEARCH_FIELDS.split(',').collect();
+    assert!(!fields.contains(&"updated"));
+    // `--fields key` alone yields an array of nulls, so summary is always requested.
+    assert!(fields.contains(&"summary") && fields.contains(&"key"));
+    let (jira, fake) = reader(Fake::default().on(&search_argv("q"), ok("[]")));
+    jira.search("q").unwrap();
+    let call = fake.calls().remove(0);
+    assert!(!call.iter().any(|a| a.contains("updated")), "{call:?}");
+    // And the failure the real tool gives for it is an error, not empty results.
+    let (jira, _) = reader(Fake::default().on(
+        &search_argv("q"),
+        fail(1, "✗ Error: field 'updated' is not allowed\n"),
+    ));
+    assert!(jira.search("q").is_err());
+}
+
+#[test]
+fn stdout_errors_and_error_marker_with_exit_zero_are_errors() {
+    // Some acli failures print the message on stdout; a generic line goes to stderr.
+    let (jira, _) = reader(Fake::default().on(
+        &search_argv("q"),
+        Reply::Out(
+            Some(1),
+            "✗ Error: Issue does not exist or you do not have permission to see it.\n".into(),
+            "✗ Error: command execution failed\n".into(),
+        ),
+    ));
+    let e = jira.search("q").unwrap_err();
+    assert_eq!(e.kind(), ProviderErrorKind::NotFound);
+    assert!(e.to_string().contains("does not exist"), "{e}");
+    // Exit 0 but an error marker on stdout is still an error, never a parse of prose.
+    let (jira, _) = reader(Fake::default().on(
+        &search_argv("q"),
+        ok("✗ Error: Unbounded JQL queries are not allowed here.\n"),
+    ));
+    assert_eq!(
+        jira.search("q").unwrap_err().kind(),
+        ProviderErrorKind::Command
+    );
 }
 
 #[test]
@@ -263,113 +326,185 @@ fn malformed_output_is_a_parse_error_with_a_truncated_snippet() {
 }
 
 #[test]
-fn get_maps_one_ticket_and_reports_missing() {
-    let view = |k: &'static str| {
-        vec![
-            "jira",
-            "workitem",
-            "view",
-            k,
-            "--json",
-            "--fields",
-            TICKET_FIELDS,
-        ]
-    };
-    let one = r#"{"key":"APP-1","self":"https://acme.atlassian.net/rest/api/3/issue/1","fields":{"summary":"S","status":{"name":"UAT"}}}"#;
+fn get_maps_one_ticket_with_updated_and_reports_missing() {
+    let view = |k: &'static str| view_argv(k, VIEW_FIELDS);
     let jira = AcliJira::with_runner(
         Shared(Arc::new(
             Fake::default()
-                .on(&view("APP-1"), ok(one))
+                .on(&view("PROJ-123"), ok(VIEW))
+                .on(&view("PROJ-2"), fail(1, MISSING_ERR))
+                .on(&view("PROJ-3"), fail(1, "401 Unauthorized"))
                 .on(
-                    &view("APP-2"),
-                    fail(
-                        1,
-                        "Error: issue does not exist or you do not have permission",
-                    ),
+                    &view("PROJ-4"),
+                    fail(1, "dial tcp: lookup example.atlassian.net: no such host"),
                 )
-                .on(&view("APP-3"), fail(1, "401 Unauthorized"))
-                .on(
-                    &view("APP-4"),
-                    fail(1, "dial tcp: lookup acme.atlassian.net: no such host"),
-                )
-                .on(&view("APP-5"), ok("[]")),
+                .on(&view("PROJ-5"), ok("[]")),
         )),
         None,
     );
-    let t = jira.get(&key("APP-1")).unwrap();
-    assert_eq!((t.status.as_str(), t.title.as_str()), ("UAT", "S"));
+    let t = jira.get(&key("PROJ-123")).unwrap();
+    assert_eq!(
+        (t.status.as_str(), t.title.as_str()),
+        ("UAT", "Fix login redirect")
+    );
+    // `updated` is only available from view: 2026-01-15T09:30:45Z.
+    assert_eq!(t.updated_at, 1_768_469_445);
     // No site configured: the URL is derived from `self`.
     assert_eq!(
         t.url.as_deref(),
-        Some("https://acme.atlassian.net/browse/APP-1")
+        Some("https://example.atlassian.net/browse/PROJ-123")
     );
+    // The real acli says this on stderr (exit 1) for a missing or invisible key.
     assert_eq!(
-        jira.get(&key("APP-2")).unwrap_err().kind(),
+        jira.get(&key("PROJ-2")).unwrap_err().kind(),
         ProviderErrorKind::NotFound
     );
     assert_eq!(
-        jira.get(&key("APP-3")).unwrap_err().kind(),
+        jira.get(&key("PROJ-3")).unwrap_err().kind(),
         ProviderErrorKind::NotAuthenticated
     );
     assert_eq!(
-        jira.get(&key("APP-4")).unwrap_err().kind(),
+        jira.get(&key("PROJ-4")).unwrap_err().kind(),
         ProviderErrorKind::Network
     );
     assert_eq!(
-        jira.get(&key("APP-5")).unwrap_err().kind(),
+        jira.get(&key("PROJ-5")).unwrap_err().kind(),
         ProviderErrorKind::NotFound
     );
 }
 
+#[test]
+fn view_requests_updated_and_search_does_not() {
+    assert!(VIEW_FIELDS.split(',').any(|f| f == "updated"));
+    assert!(!SEARCH_FIELDS.split(',').any(|f| f == "updated"));
+}
+
+// ---- comments come from `view --fields comment` ------------------------------------------
+
 fn comments_argv(k: &str) -> Vec<&str> {
-    vec![
-        "jira",
-        "workitem",
-        "comment",
-        "list",
-        "--key",
-        k,
-        "--paginate",
-        "--json",
-    ]
+    view_argv(k, COMMENT_FIELDS)
 }
 
 #[test]
-fn comments_are_oldest_first_with_mentions() {
-    let (jira, _) = reader(Fake::default().on(&comments_argv("APP-1"), ok(COMMENTS)));
-    let list = jira.comments(&key("APP-1")).unwrap();
+fn comments_come_from_view_fields_comment_oldest_first_with_mentions() {
+    let (jira, fake) = reader(Fake::default().on(&comments_argv("PROJ-123"), ok(VIEW_COMMENTS)));
+    let list = jira.comments(&key("PROJ-123")).unwrap();
+    assert_eq!(
+        fake.calls(),
+        vec![
+            [
+                "jira", "workitem", "view", "PROJ-123", "--json", "--fields", "comment"
+            ]
+            .map(String::from)
+            .to_vec()
+        ]
+    );
     assert_eq!(list.len(), 2);
-    assert_eq!(list[0].id, "20001");
-    assert_eq!(list[0].mentions, ["acc-3"]);
-    assert_eq!(list[0].body_text, "Plain text with @acc-3 mention");
-    assert_eq!(list[1].id, "20002");
-    assert_eq!(list[1].author_account_id, "acc-2");
-    assert_eq!(list[1].author_name, "Grace Hopper");
-    assert_eq!(list[1].mentions, ["acc-1"]);
-    assert_eq!(list[1].body_text, "@Ada Lovelace can you re-check?");
-    assert_eq!(list[1].ticket, key("APP-1"));
+    // Fixture order is newest first; the adapter returns oldest first.
+    assert_eq!(list[0].id, "30001");
+    assert_eq!(list[0].author_account_id, "acct-0001");
+    assert_eq!(list[0].author_name, "Jane Doe");
+    assert_eq!(list[0].body_text, "Ready for review.");
+    assert!(list[0].mentions.is_empty());
+    assert_eq!(list[0].created_at, 1_768_471_200); // 2026-01-15T10:00:00Z
+    assert_eq!(list[0].ticket, key("PROJ-123"));
+    assert_eq!(list[1].id, "30002");
+    assert_eq!(list[1].author_account_id, "acct-0002");
+    assert_eq!(list[1].author_name, "John Roe");
+    // 2026-01-16T14:05:00+01:00 = 13:05:00Z
+    assert_eq!(list[1].created_at, 1_768_568_700);
     assert!(list[0].created_at < list[1].created_at);
+    // Mentions come from ADF `mention` nodes: deduplicated, in order of appearance.
+    assert_eq!(list[1].mentions, ["acct-0001", "acct-0003"]);
+    // No warning: total matches what was returned.
+    assert!(jira.take_warnings().is_empty());
 }
 
 #[test]
-fn comments_bare_array_empty_and_broken() {
-    let arr = r#"[{"id":7,"author":{"accountId":"a","displayName":"A"},"created":"2024-05-01T10:15:30.123+0000","body":"hi"}]"#;
+fn adf_with_unknown_and_media_node_types_never_fails_parsing() {
+    let (jira, _) = reader(Fake::default().on(&comments_argv("PROJ-123"), ok(VIEW_COMMENTS)));
+    let list = jira.comments(&key("PROJ-123")).unwrap();
+    let text = &list[1].body_text;
+    assert!(
+        text.starts_with("@Jane Doe could you re-check this?"),
+        "{text}"
+    );
+    assert!(text.contains("Thanks"), "{text}");
+    assert!(text.contains("- first point"), "{text}");
+    assert!(text.contains("PROJ-999"), "{text}");
+    assert!(text.contains("cell"), "{text}");
+    // The invented `futureWidget` node is rendered from its children, not rejected.
+    assert!(text.contains("inside unknown"), "{text}");
+}
+
+#[test]
+fn comment_list_flat_shape_is_not_used_and_not_accepted() {
+    // The flat `comment list` output has no account ids, timestamps or mention data, so
+    // reads must never run it ...
+    let (jira, fake) = reader(
+        Fake::default()
+            .on(&comments_argv("PROJ-123"), ok(VIEW_COMMENTS))
+            .on(&search_argv("q"), ok(SEARCH))
+            .on(&view_argv("PROJ-123", VIEW_FIELDS), ok(VIEW)),
+    );
+    jira.comments(&key("PROJ-123")).unwrap();
+    jira.search("q").unwrap();
+    jira.get(&key("PROJ-123")).unwrap();
+    for call in fake.calls() {
+        assert!(!call.join(" ").contains("comment list"), "{call:?}");
+    }
+    // ... and if that shape ever shows up where comments are expected it is a parse
+    // error, not "no comments".
+    let (jira, _) = reader(Fake::default().on(&comments_argv("PROJ-123"), ok(COMMENT_LIST_FLAT)));
+    assert_eq!(
+        jira.comments(&key("PROJ-123")).unwrap_err().kind(),
+        ProviderErrorKind::Parse
+    );
+}
+
+#[test]
+fn truncated_comment_lists_are_reported_through_take_warnings() {
+    // total says 40, the container returned 2.
+    let truncated = VIEW_COMMENTS.replace(r#""total": 2"#, r#""total": 40"#);
+    let (jira, _) = reader(Fake::default().on(&comments_argv("PROJ-123"), ok(&truncated)));
+    let list = jira.comments(&key("PROJ-123")).unwrap();
+    assert_eq!(list.len(), 2);
+    let warnings = jira.take_warnings();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0].contains("PROJ-123") && warnings[0].contains("2 of 40"),
+        "{warnings:?}"
+    );
+    // Drained.
+    assert!(jira.take_warnings().is_empty());
+}
+
+#[test]
+fn comments_null_empty_broken_and_missing_key() {
+    let none = r#"{"key":"PROJ-1","fields":{"comment":{"comments":[],"total":0,"maxResults":50,"startAt":0}}}"#;
+    let nulled = r#"{"key":"PROJ-2","fields":{"comment":null}}"#;
+    let no_id = r#"{"fields":{"comment":{"comments":[{"author":{}}],"total":1}}}"#;
     let (jira, _) = reader(
         Fake::default()
-            .on(&comments_argv("APP-1"), ok(arr))
-            .on(&comments_argv("APP-2"), ok(r#"{"comments":[]}"#))
-            .on(&comments_argv("APP-3"), ok(r#"[{"author":{}}]"#))
-            .on(&comments_argv("APP-4"), ok("not json")),
+            .on(&comments_argv("PROJ-1"), ok(none))
+            .on(&comments_argv("PROJ-2"), ok(nulled))
+            .on(&comments_argv("PROJ-3"), ok(no_id))
+            .on(&comments_argv("PROJ-4"), ok("not json"))
+            .on(&comments_argv("PROJ-5"), fail(1, MISSING_ERR)),
     );
-    assert_eq!(jira.comments(&key("APP-1")).unwrap()[0].id, "7");
-    assert!(jira.comments(&key("APP-2")).unwrap().is_empty());
+    assert!(jira.comments(&key("PROJ-1")).unwrap().is_empty());
+    assert!(jira.comments(&key("PROJ-2")).unwrap().is_empty());
     assert_eq!(
-        jira.comments(&key("APP-3")).unwrap_err().kind(),
+        jira.comments(&key("PROJ-3")).unwrap_err().kind(),
         ProviderErrorKind::Parse
     );
     assert_eq!(
-        jira.comments(&key("APP-4")).unwrap_err().kind(),
+        jira.comments(&key("PROJ-4")).unwrap_err().kind(),
         ProviderErrorKind::Parse
+    );
+    assert_eq!(
+        jira.comments(&key("PROJ-5")).unwrap_err().kind(),
+        ProviderErrorKind::NotFound
     );
 }
 
@@ -380,7 +515,10 @@ fn reads_never_issue_write_commands() {
             .on(&["--version"], ok("1.3.4"))
             .on(&["jira", "auth", "status"], ok("ok"))
             .on(&search_argv("q"), ok("[]"))
-            .on(&comments_argv("APP-1"), ok("[]")),
+            .on(
+                &comments_argv("APP-1"),
+                ok(r#"{"fields":{"comment":null}}"#),
+            ),
     );
     jira.health();
     jira.search("q").unwrap();
@@ -544,12 +682,100 @@ fn probe_runs_only_read_only_commands_and_never_fails() {
     assert_eq!(results[1].exit_code, None);
     assert!(results[1].stderr.contains("could not run"));
     assert!(results[2].command.contains("--limit 1"));
+    // The search is bounded (acli rejects a bare `order by`) and never asks for `updated`.
+    assert!(results[2].command.contains("currentUser()"));
+    assert!(
+        !results[2]
+            .command
+            .contains("key,summary,status,priority,assignee,updated")
+    );
+    // The last probe reads the comment field, not the flat `comment list`.
+    assert!(
+        results[4].command.ends_with("--fields comment"),
+        "{}",
+        results[4].command
+    );
     for call in fake.calls() {
         let joined = call.join(" ");
         assert!(
-            !joined.contains("create") && !joined.contains("transition"),
+            !joined.contains("create")
+                && !joined.contains("transition")
+                && !joined.contains("comment list"),
             "{joined}"
         );
     }
     assert_eq!(probe(&Fake::default(), None).len(), 3);
+}
+
+// ---- live (opt-in): cargo test -p de-core -- --ignored live_ ---------------------------
+//
+// These run the real installed `acli`, read-only, against whatever Jira it is logged in to.
+// They print nothing about the data (only counts and lengths).
+
+fn live() -> AcliJira {
+    AcliJira::new(&Config::default()).unwrap()
+}
+
+#[test]
+#[ignore = "runs the real installed acli (read-only)"]
+fn live_health_is_ready() {
+    let h = live().health();
+    assert!(h.installed, "acli is not installed");
+    assert!(
+        h.authenticated && h.meets_minimum && h.is_ready(),
+        "{}",
+        h.detail
+    );
+    assert!(h.version.is_some());
+}
+
+#[test]
+#[ignore = "runs the real installed acli (read-only)"]
+fn live_search_get_and_comments_parse() {
+    let jira = live();
+    let found = jira
+        .search("assignee = currentUser() order by updated DESC")
+        .map(|mut v| {
+            v.truncate(1);
+            v
+        });
+    // `search` returns everything; that is fine for the assignee-bounded query above.
+    let found = found.unwrap_or_else(|e| panic!("search failed: {:?}", e.kind()));
+    assert!(
+        !found.is_empty(),
+        "the logged-in user has no assigned tickets"
+    );
+    let t = &found[0];
+    assert!(!t.key.as_str().is_empty() && !t.title.is_empty() && !t.status.is_empty());
+    assert_eq!(t.updated_at, UPDATED_UNKNOWN);
+
+    let got = jira
+        .get(&t.key)
+        .unwrap_or_else(|e| panic!("get failed: {:?}", e.kind()));
+    assert_eq!(got.key, t.key);
+    assert!(got.updated_at > 0, "view should return `updated`");
+    assert!(!got.title.is_empty() && !got.status.is_empty());
+
+    let comments = jira
+        .comments(&t.key)
+        .unwrap_or_else(|e| panic!("comments failed: {:?}", e.kind()));
+    for c in &comments {
+        assert!(!c.id.is_empty() && c.created_at > 0);
+        assert!(!c.author_account_id.is_empty());
+    }
+    let mentions: usize = comments.iter().map(|c| c.mentions.len()).sum();
+    eprintln!(
+        "live: {} tickets, {} comments, {} mentions, warnings {}",
+        found.len(),
+        comments.len(),
+        mentions,
+        jira.take_warnings().len()
+    );
+}
+
+#[test]
+#[ignore = "runs the real installed acli (read-only)"]
+fn live_missing_key_is_not_found() {
+    let e = live().get(&key("ZZZ-999999")).unwrap_err();
+    assert_eq!(e.kind(), ProviderErrorKind::NotFound);
 }

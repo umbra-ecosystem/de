@@ -134,6 +134,8 @@ fn jira_body(ctx: &SyncContext<'_>, jira: &dyn TicketProvider, c: &mut Collector
         }
     }
 
+    c.notes.extend(jira.take_warnings());
+
     // 5. Stale rows, only when both searches proved what is in the pool.
     if complete {
         let keep_tickets: Vec<TicketKey> = seen

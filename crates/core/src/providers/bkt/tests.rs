@@ -1062,3 +1062,84 @@ fn probe_runs_only_read_only_commands_and_derives_ids() {
     }
     assert!(!cmds.iter().any(|c| c.starts_with("bkt pr comment ")));
 }
+
+// ---- verified against a real bkt 0.32.1 (not logged in) ----
+
+#[test]
+fn version_line_of_the_real_bkt_is_parsed() {
+    assert_eq!(parse_version("bkt version 0.32.1\n"), Some((0, 32, 1)));
+}
+
+#[test]
+fn null_auth_status_is_not_authenticated_and_not_a_parse_error() {
+    // Real output when logged out: exit 0, `{"hosts": null, "contexts": null}`.
+    assert_eq!(
+        fx!("auth_status_null.json").trim(),
+        r#"{"hosts": null, "contexts": null}"#
+    );
+    let f = Arc::new(Fake::default());
+    f.ok(&["--version"], "bkt version 0.32.1\n");
+    f.ok(&AUTH, fx!("auth_status_null.json"));
+    let hl = BktHost::with_runner(Arc::clone(&f)).health();
+    assert!(hl.installed && hl.meets_minimum, "{hl:?}");
+    assert!(!hl.authenticated && !hl.is_ready(), "{hl:?}");
+    assert!(
+        hl.detail.contains("auth login") && !hl.detail.contains("could not parse"),
+        "{}",
+        hl.detail
+    );
+    // A data call takes the same path and is NotAuthenticated, never Parse.
+    let h = BktHost::with_runner(f);
+    assert_eq!(
+        kind(h.list_prs("acme/web", &PrFilter::open())),
+        ProviderErrorKind::NotAuthenticated
+    );
+}
+
+#[test]
+fn no_active_context_is_not_authenticated_with_an_actionable_hint() {
+    let (f, h) = setup();
+    let argv = [
+        "pr",
+        "view",
+        "1",
+        "--workspace",
+        "acme",
+        "--repo",
+        "web",
+        "--json",
+    ];
+    f.fail(
+        &argv,
+        1,
+        "Error: no active context; run `bkt context use <name>`\n",
+    );
+    let err = h.pr("acme/web", 1).unwrap_err();
+    assert_eq!(err.kind(), ProviderErrorKind::NotAuthenticated);
+    assert!(err.is_environmental());
+    let text = err.to_string();
+    assert!(
+        text.contains("bkt auth login") && text.contains("bkt context use"),
+        "{text}"
+    );
+}
+
+// ---- live (opt-in): cargo test -p de-core -- --ignored live_ ----
+
+#[test]
+#[ignore = "runs the real installed bkt (read-only)"]
+fn live_health_reports_installed_but_not_authenticated_without_a_login() {
+    let h = BktHost::with_runner(SystemRunner::new());
+    let hl = h.health();
+    if !hl.installed {
+        eprintln!("bkt is not installed; skipping");
+        return;
+    }
+    if hl.authenticated {
+        eprintln!("a bkt login exists; skipping the logged-out assertions");
+        return;
+    }
+    assert!(hl.meets_minimum, "version {:?}", hl.version);
+    assert!(!hl.is_ready());
+    assert!(!hl.detail.contains("could not parse"), "{}", hl.detail);
+}
