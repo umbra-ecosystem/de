@@ -5,5 +5,7 @@
 mod status;
 mod ticket_key;
 
-pub use status::{AuditOutcome, LocalStatus, ParseEnumError, RepoLinkOrigin, TicketKind};
+pub use status::{
+    AuditOutcome, BaselineChoice, LocalStatus, ParseEnumError, RepoLinkOrigin, TicketKind,
+};
 pub use ticket_key::{ParseTicketKeyError, TicketKey};

@@ -7,7 +7,13 @@ use std::path::Path;
 use eyre::{Context, eyre};
 use git2::BranchType;
 
-use super::repo::{BranchKind, GitRepo};
+use super::repo::{BranchKind, GitRepo, short_sha};
+
+/// What `switch` should end up on.
+enum SwitchTarget<'a> {
+    Branch(&'a str),
+    Commit(&'a str),
+}
 
 /// A stash entry, identified by the commit git made for it plus the label it
 /// was created with. Stash indexes shift as stashes come and go, so they are
@@ -216,6 +222,21 @@ impl GitRepo {
     /// Check out `branch`. A branch that exists only on a remote gets a local
     /// tracking branch. A dirty tree is handled per `on_dirty`.
     pub fn switch(&self, branch: &str, on_dirty: OnDirty) -> eyre::Result<SwitchOutcome> {
+        self.switch_to(SwitchTarget::Branch(branch), on_dirty)
+    }
+
+    /// Detach HEAD at `commit` (a sha or any revision). This restores a checkout that was
+    /// on a detached HEAD before, which [`switch`](Self::switch) cannot express. A dirty tree
+    /// is handled per `on_dirty`; `already_on_branch` is set when HEAD is already detached there.
+    pub fn switch_detached(&self, commit: &str, on_dirty: OnDirty) -> eyre::Result<SwitchOutcome> {
+        self.switch_to(SwitchTarget::Commit(commit), on_dirty)
+    }
+
+    fn switch_to(
+        &self,
+        target: SwitchTarget<'_>,
+        on_dirty: OnDirty,
+    ) -> eyre::Result<SwitchOutcome> {
         let status = self.status()?;
         let mut outcome = SwitchOutcome {
             previous_branch: status.branch.clone(),
@@ -225,29 +246,46 @@ impl GitRepo {
             already_on_branch: false,
         };
 
-        if status.branch.as_deref() == Some(branch) {
-            outcome.already_on_branch = true;
-            return Ok(outcome);
-        }
-
         // Decide how to switch before touching the tree, so a bad name never stashes.
-        let existing = self.logical_branches()?;
-        let logical = existing
-            .iter()
-            .find(|b| b.name == branch)
-            .ok_or_else(|| eyre!("Branch '{branch}' not found locally or on any remote"))?;
-        let remote_ref = if logical.is_local() {
-            None
-        } else {
-            match logical.remotes.as_slice() {
-                [only] => Some(only.refname.clone()),
-                many => {
-                    let names: Vec<_> = many.iter().map(|r| r.refname.as_str()).collect();
-                    return Err(eyre!(
-                        "Branch '{branch}' exists on several remotes ({}); cannot pick one",
-                        names.join(", ")
-                    ));
+        let (name, args): (String, Vec<String>) = match target {
+            SwitchTarget::Branch(branch) => {
+                if status.branch.as_deref() == Some(branch) {
+                    outcome.already_on_branch = true;
+                    return Ok(outcome);
                 }
+
+                let existing = self.logical_branches()?;
+                let logical = existing
+                    .iter()
+                    .find(|b| b.name == branch)
+                    .ok_or_else(|| eyre!("Branch '{branch}' not found locally or on any remote"))?;
+                let args = if logical.is_local() {
+                    vec!["switch".into(), branch.into()]
+                } else {
+                    match logical.remotes.as_slice() {
+                        [only] => vec!["switch".into(), "--track".into(), only.refname.clone()],
+                        many => {
+                            let names: Vec<_> = many.iter().map(|r| r.refname.as_str()).collect();
+                            return Err(eyre!(
+                                "Branch '{branch}' exists on several remotes ({}); cannot pick one",
+                                names.join(", ")
+                            ));
+                        }
+                    }
+                };
+                outcome.created_tracking_branch = !logical.is_local();
+                (format!("'{branch}'"), args)
+            }
+            SwitchTarget::Commit(commit) => {
+                let sha = self.rev_parse(commit)?;
+                if status.detached && status.head.as_deref() == Some(sha.as_str()) {
+                    outcome.already_on_branch = true;
+                    return Ok(outcome);
+                }
+                (
+                    format!("detached {}", short_sha(&sha)),
+                    vec!["switch".into(), "--detach".into(), sha],
+                )
             }
         };
 
@@ -255,38 +293,33 @@ impl GitRepo {
             let label = match on_dirty {
                 OnDirty::Abort => {
                     return Err(eyre!(
-                        "Working tree of {} has uncommitted changes; refusing to switch to '{branch}'",
+                        "Working tree of {} has uncommitted changes; refusing to switch to {name}",
                         self.path().display()
                     ));
                 }
                 OnDirty::StashLabelled(label) => label,
                 OnDirty::Stash => {
-                    format!("de: before switching {} to {branch}", status.head_label())
+                    format!("de: before switching {} to {name}", status.head_label())
                 }
             };
             outcome.stash = self.stash_push(&label)?;
         }
 
-        let runner = self.runner();
-        let switched = match &remote_ref {
-            Some(remote_ref) => runner.run(&["switch", "--track", remote_ref]),
-            None => runner.run(&["switch", branch]),
-        };
-
-        if let Err(err) = switched {
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        if let Err(err) = self.runner().run(&arg_refs) {
+            outcome.created_tracking_branch = false;
             // Put the working tree back the way it was found.
             if let Some(stash) = &outcome.stash
                 && let Err(restore) = self.stash_pop(stash)
             {
                 return Err(err.wrap_err(format!(
-                    "Failed to switch to '{branch}'; changes remain in stash '{}' ({restore})",
+                    "Failed to switch to {name}; changes remain in stash '{}' ({restore})",
                     stash.label
                 )));
             }
-            return Err(err.wrap_err(format!("Failed to switch to '{branch}'")));
+            return Err(err.wrap_err(format!("Failed to switch to {name}")));
         }
 
-        outcome.created_tracking_branch = remote_ref.is_some();
         Ok(outcome)
     }
 

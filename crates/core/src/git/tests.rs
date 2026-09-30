@@ -935,6 +935,64 @@ fn switch_to_missing_branch_does_not_stash() {
 }
 
 #[test]
+fn switch_detached_restores_a_detached_head() {
+    let repo = repo_with_feature_branch();
+    let detached_at = repo.branch_sha("main");
+    repo.git(&["switch", "--detach", &detached_at]);
+    repo.write("a.txt", "dirty\n");
+    let git = repo.open();
+
+    // Leave the detached HEAD for a branch, as activation does.
+    let out = git
+        .switch("feature", OnDirty::StashLabelled("t".into()))
+        .unwrap();
+    assert_eq!(out.previous_branch, None);
+    assert_eq!(out.previous_commit.as_deref(), Some(detached_at.as_str()));
+    let stash = out.stash.expect("stashed");
+    assert!(!git.status().unwrap().detached);
+
+    // ... and come back by sha.
+    let back = git.switch_detached(&detached_at, OnDirty::Abort).unwrap();
+    assert!(!back.already_on_branch);
+    let status = git.status().unwrap();
+    assert!(status.detached);
+    assert_eq!(status.head.as_deref(), Some(detached_at.as_str()));
+
+    git.stash_pop(&stash).unwrap();
+    assert_eq!(repo.read("a.txt"), "dirty\n");
+
+    // Already there: nothing to do.
+    assert!(
+        git.switch_detached(&detached_at, OnDirty::Abort)
+            .unwrap()
+            .already_on_branch
+    );
+}
+
+#[test]
+fn switch_detached_handles_dirty_trees_and_bad_revisions() {
+    let repo = repo_with_feature_branch();
+    let sha = repo.branch_sha("feature");
+    repo.write("a.txt", "dirty\n");
+    let git = repo.open();
+
+    let err = git.switch_detached(&sha, OnDirty::Abort).unwrap_err();
+    assert!(format!("{err:#}").contains("uncommitted"));
+    assert_eq!(git.status().unwrap().branch.as_deref(), Some("main"));
+
+    // An unknown revision fails before anything is stashed.
+    assert!(
+        git.switch_detached("0000000000000000000000000000000000000001", OnDirty::Stash)
+            .is_err()
+    );
+    assert!(git.stash_list().unwrap().is_empty());
+
+    let out = git.switch_detached(&sha, OnDirty::Stash).unwrap();
+    assert!(out.stash.is_some());
+    assert!(git.status().unwrap().detached);
+}
+
+#[test]
 fn switch_to_remote_only_branch_creates_tracking_branch() {
     let (work, origin) = TestRepo::with_origin();
     let other = TestRepo::clone_from(origin.path());

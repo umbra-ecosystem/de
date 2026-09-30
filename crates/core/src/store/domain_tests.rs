@@ -49,7 +49,7 @@ fn numbers(store: &Store) -> Vec<i64> {
 fn migrations_apply_on_a_fresh_database() {
     let s = state();
     let c = cache();
-    assert_eq!(s.schema_version().unwrap(), 2);
+    assert_eq!(s.schema_version().unwrap(), 3);
     assert_eq!(c.schema_version().unwrap(), 2);
 
     let tables = |store: &Store| -> Vec<String> {
@@ -70,6 +70,8 @@ fn migrations_apply_on_a_fresh_database() {
         "notes",
         "time_entries",
         "audit_log",
+        "activation_repos",
+        "overlay_backups",
     ] {
         assert!(state_tables.contains(&t.to_string()), "missing {t}");
     }
@@ -97,7 +99,7 @@ fn upgrading_from_the_previous_schema_keeps_rows() {
     }
 
     let store = Store::open_in(dir.path(), Kind::State).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 2);
+    assert_eq!(store.schema_version().unwrap(), 3);
     let value: String = store
         .conn()
         .query_row("SELECT value FROM app_meta WHERE key = 'probe'", [], |r| {
@@ -107,6 +109,174 @@ fn upgrading_from_the_previous_schema_keeps_rows() {
     assert_eq!(value, "kept");
     // ... and the new tables work.
     tickets::claim(&store, &key("A-1"), 1).unwrap();
+}
+
+#[test]
+fn upgrading_from_schema_2_keeps_tickets_and_adds_the_activation_tables() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+
+    // A database as M2 left it: version 2 with a claimed ticket, a link, a note, a timer.
+    {
+        let mut conn = rusqlite::Connection::open(&path).unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        migrations::for_kind(Kind::State)
+            .to_version(&mut conn, 2)
+            .unwrap();
+        conn.execute_batch(
+            "INSERT INTO tickets (key, status, manual_order, claimed_at, updated_at)
+                 VALUES ('A-1', 'parked', 0, 10, 20);
+             INSERT INTO ticket_repos (ticket_key, repo, branch, origin)
+                 VALUES ('A-1', 'web', 'feature/A-1-x', 'manual');
+             INSERT INTO notes (ticket_key, body, created_at) VALUES ('A-1', 'remember', 30);
+             INSERT INTO time_entries (ticket_key, started_at, ended_at) VALUES ('A-1', 40, 50);",
+        )
+        .unwrap();
+        let tables: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'activation_repos'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(tables, 0, "the tables are new in migration 3");
+    }
+
+    let store = Store::open_in(dir.path(), Kind::State).unwrap();
+    assert_eq!(store.schema_version().unwrap(), 3);
+
+    // Old rows survive untouched.
+    let ticket = tickets::get(&store, &key("A-1")).unwrap().unwrap();
+    assert_eq!(ticket.status, LocalStatus::Parked);
+    assert_eq!(links::list(&store, &key("A-1")).unwrap().len(), 1);
+    assert_eq!(notes::list_notes(&store, &key("A-1")).unwrap().len(), 1);
+    assert_eq!(time::total_seconds(&store, &key("A-1"), 99).unwrap(), 10);
+
+    // The new tables work and cascade from tickets.
+    let record = restore::RestoreRecord {
+        ticket: key("A-1"),
+        repo: "web".into(),
+        position: 0,
+        repo_dir: "/w/web".into(),
+        role: restore::RepoRole::Ticket,
+        branch: "feature/A-1-x".into(),
+        previous_branch: Some("develop".into()),
+        previous_commit: Some("abc".into()),
+        stash: None,
+        created_at: 60,
+    };
+    restore::insert(&store, &record).unwrap();
+    assert_eq!(restore::list(&store, &key("A-1")).unwrap(), [record]);
+}
+
+fn sample_record(ticket: &str, repo: &str, position: i64) -> restore::RestoreRecord {
+    restore::RestoreRecord {
+        ticket: key(ticket),
+        repo: repo.into(),
+        position,
+        repo_dir: format!("/w/{repo}").into(),
+        role: restore::RepoRole::Baseline,
+        branch: "develop".into(),
+        previous_branch: None,
+        previous_commit: Some("0123".into()),
+        stash: Some(crate::git::StashRef {
+            label: format!("de:{ticket}:{repo}"),
+            commit: "beef".into(),
+        }),
+        created_at: 1,
+    }
+}
+
+fn sample_backup(ticket: &str, repo: &str) -> overlays::OverlayBackup {
+    overlays::OverlayBackup {
+        ticket: key(ticket),
+        repo: repo.into(),
+        repo_dir: format!("/w/{repo}").into(),
+        packages: "[]".into(),
+        composer_json: b"{\n  \"a\": 1\n}\n".to_vec(),
+        composer_lock: None,
+        json_after: None,
+        lock_after: None,
+        files_restored: false,
+        created_at: 1,
+    }
+}
+
+#[test]
+fn restore_records_keep_the_whole_stash_and_switch_order() {
+    let store = state_with(&["A-1"]);
+    restore::insert(&store, &sample_record("A-1", "web", 1)).unwrap();
+    restore::insert(&store, &sample_record("A-1", "api", 0)).unwrap();
+
+    let records = restore::list(&store, &key("A-1")).unwrap();
+    assert_eq!(
+        records.iter().map(|r| r.repo.as_str()).collect::<Vec<_>>(),
+        ["api", "web"]
+    );
+    let stash = records[0].stash.as_ref().unwrap();
+    assert_eq!(
+        (stash.label.as_str(), stash.commit.as_str()),
+        ("de:A-1:api", "beef")
+    );
+    assert_eq!(records[0].previous_branch, None);
+
+    // One record per ticket and repo.
+    assert!(restore::insert(&store, &sample_record("A-1", "web", 5)).is_err());
+
+    assert!(restore::delete(&store, &key("A-1"), "api").unwrap());
+    assert!(!restore::delete(&store, &key("A-1"), "api").unwrap());
+    assert_eq!(restore::list_all(&store).unwrap().len(), 1);
+}
+
+#[test]
+fn overlay_backups_store_exact_bytes_and_refuse_a_second_backup() {
+    let store = state_with(&["A-1", "B-2"]);
+    let mut backup = sample_backup("A-1", "web");
+    // Not valid UTF-8 and with a CRLF: bytes must come back untouched.
+    backup.composer_lock = Some(vec![0xff, 0x00, b'\r', b'\n', 0x7f]);
+    overlays::insert(&store, &backup).unwrap();
+
+    let read = overlays::get(&store, &key("A-1"), "web").unwrap().unwrap();
+    assert_eq!(read, backup);
+
+    // Same ticket and repo, or the same checkout for another ticket: refused, original kept.
+    let mut again = sample_backup("A-1", "web");
+    again.composer_json = b"{}".to_vec();
+    assert!(overlays::insert(&store, &again).is_err());
+    let mut other_ticket = sample_backup("B-2", "web");
+    other_ticket.composer_json = b"{}".to_vec();
+    let err = overlays::insert(&store, &other_ticket).unwrap_err();
+    assert!(format!("{err:#}").contains("A-1"), "{err:#}");
+    assert_eq!(
+        overlays::get(&store, &key("A-1"), "web")
+            .unwrap()
+            .unwrap()
+            .composer_json,
+        backup.composer_json
+    );
+
+    overlays::set_after(&store, &key("A-1"), "web", b"after", Some(b"lock")).unwrap();
+    overlays::mark_files_restored(&store, &key("A-1"), "web").unwrap();
+    let read = overlays::get(&store, &key("A-1"), "web").unwrap().unwrap();
+    assert_eq!(read.json_after.as_deref(), Some(&b"after"[..]));
+    assert!(read.files_restored);
+
+    assert!(overlays::delete(&store, &key("A-1"), "web").unwrap());
+    assert!(overlays::list_all(&store).unwrap().is_empty());
+}
+
+#[test]
+fn a_ticket_cannot_be_untracked_while_its_activation_is_recorded() {
+    let store = state_with(&["A-1"]);
+    restore::insert(&store, &sample_record("A-1", "web", 0)).unwrap();
+    assert!(tickets::untrack(&store, &key("A-1")).is_err());
+
+    restore::delete(&store, &key("A-1"), "web").unwrap();
+    overlays::insert(&store, &sample_backup("A-1", "web")).unwrap();
+    assert!(tickets::untrack(&store, &key("A-1")).is_err());
+
+    overlays::delete(&store, &key("A-1"), "web").unwrap();
+    assert!(tickets::untrack(&store, &key("A-1")).unwrap());
 }
 
 #[test]

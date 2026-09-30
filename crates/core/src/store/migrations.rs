@@ -104,8 +104,57 @@ CREATE TABLE jira_tickets (
 ) STRICT;
 ";
 
-static STATE: LazyLock<Migrations<'static>> =
-    LazyLock::new(|| Migrations::new(vec![M::up(APP_META), M::up(STATE_TICKETS)]));
+/// What activating a ticket changed, so deactivating (or recovering from a crash) can put
+/// everything back using nothing but this database.
+const STATE_ACTIVATION: &str = "
+-- One row per repo an activation switched: where it was, so it can be restored.
+CREATE TABLE activation_repos (
+    ticket_key      TEXT NOT NULL REFERENCES tickets (key) ON DELETE CASCADE,
+    repo            TEXT NOT NULL,
+    -- Order the repos were switched in; restoring goes the other way round.
+    position        INTEGER NOT NULL,
+    repo_dir        TEXT NOT NULL,
+    role            TEXT NOT NULL CHECK (role IN ('ticket','baseline')),
+    branch          TEXT NOT NULL,
+    previous_branch TEXT,
+    previous_commit TEXT,
+    -- The stash made for a dirty tree: label and commit together, never an index.
+    stash_label     TEXT,
+    stash_commit    TEXT,
+    created_at      INTEGER NOT NULL,
+    PRIMARY KEY (ticket_key, repo),
+    CHECK ((stash_label IS NULL) = (stash_commit IS NULL))
+) STRICT;
+
+-- The exact bytes of the consumer's composer files before the test overlay touched them.
+CREATE TABLE overlay_backups (
+    ticket_key     TEXT NOT NULL REFERENCES tickets (key) ON DELETE CASCADE,
+    repo           TEXT NOT NULL,
+    repo_dir       TEXT NOT NULL,
+    packages       TEXT NOT NULL CHECK (json_valid(packages)),
+    composer_json  BLOB NOT NULL,
+    -- NULL: composer.lock did not exist before the overlay.
+    composer_lock  BLOB,
+    -- What the overlay left behind, for verification.
+    json_after     BLOB,
+    lock_after     BLOB,
+    -- Set once the files are back, so a retry after a failed `composer install` does not
+    -- overwrite edits made in between.
+    files_restored INTEGER NOT NULL DEFAULT 0 CHECK (files_restored IN (0, 1)),
+    created_at     INTEGER NOT NULL,
+    PRIMARY KEY (ticket_key, repo)
+) STRICT;
+-- A checkout carries at most one overlay at a time, whichever ticket applied it.
+CREATE UNIQUE INDEX overlay_backups_one_per_dir ON overlay_backups (repo_dir);
+";
+
+static STATE: LazyLock<Migrations<'static>> = LazyLock::new(|| {
+    Migrations::new(vec![
+        M::up(APP_META),
+        M::up(STATE_TICKETS),
+        M::up(STATE_ACTIVATION),
+    ])
+});
 
 static CACHE: LazyLock<Migrations<'static>> =
     LazyLock::new(|| Migrations::new(vec![M::up(APP_META), M::up(CACHE_JIRA)]));

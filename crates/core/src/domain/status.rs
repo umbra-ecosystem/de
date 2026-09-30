@@ -141,6 +141,21 @@ string_enum! {
     }
 }
 
+string_enum! {
+    /// Which branch untouched repos fall back to when a ticket is activated.
+    ///
+    /// Normal tickets always use `Base`; for a hotfix the user is asked each time and the
+    /// answer is used for that activation only (nothing stores a default).
+    BaselineChoice, "baseline", {
+        /// The repo's configured base branch (`develop` by default).
+        Base => "base",
+        /// The repo's production branch (`master` or `main`).
+        Production => "production",
+        /// The repo's integration branch (`uat` by default).
+        Uat => "uat",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

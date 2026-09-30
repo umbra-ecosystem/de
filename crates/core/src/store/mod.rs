@@ -13,6 +13,8 @@ pub mod jira_cache;
 pub mod links;
 mod migrations;
 pub mod notes;
+pub mod overlays;
+pub mod restore;
 mod sql;
 pub mod tickets;
 pub mod time;

@@ -50,7 +50,21 @@ pub fn claim(store: &Store, key: &TicketKey, now: i64) -> eyre::Result<TicketTra
 }
 
 /// Stops tracking `key`, deleting its links, checklist, notes and time entries. Audit entries stay.
+///
+/// Refuses while an activation of the ticket is still recorded (restore points or an applied
+/// overlay): deleting those rows would strand the repos on the ticket's branch and make the
+/// test overlay permanent.
 pub fn untrack(store: &Store, key: &TicketKey) -> eyre::Result<bool> {
+    let pending: i64 = store.conn().query_row(
+        "SELECT (SELECT COUNT(*) FROM activation_repos WHERE ticket_key = ?1)
+              + (SELECT COUNT(*) FROM overlay_backups WHERE ticket_key = ?1)",
+        params![key],
+        |r| r.get(0),
+    )?;
+    if pending > 0 {
+        bail!("{key} still has an activation to undo; deactivate it before untracking");
+    }
+
     let removed = store
         .conn()
         .execute("DELETE FROM tickets WHERE key = ?1", params![key])
