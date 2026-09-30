@@ -356,11 +356,15 @@ impl WPipeline {
         if self.uuid.is_empty() {
             return Err("pipeline without a uuid".into());
         }
-        let branch = [&self.target.ref_name, &self.target.ref_obj.name, &self.target.source]
-            .into_iter()
-            .find(|s| !s.is_empty())
-            .cloned()
-            .unwrap_or_default();
+        let branch = [
+            &self.target.ref_name,
+            &self.target.ref_obj.name,
+            &self.target.source,
+        ]
+        .into_iter()
+        .find(|s| !s.is_empty())
+        .cloned()
+        .unwrap_or_default();
         // UNVERIFIED: the web URL is built from the documented Bitbucket Cloud pattern;
         // the API's pipeline object carries only `links.self` (an API URL).
         let url = match self.build_number {
@@ -511,7 +515,11 @@ pub fn parse_version(text: &str) -> Option<(u64, u64, u64)> {
     let bytes = text.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i].is_ascii_digit() && (i == 0 || !bytes[i - 1].is_ascii_alphanumeric()) {
+        if bytes[i].is_ascii_digit()
+            && (i == 0
+                || !bytes[i - 1].is_ascii_alphanumeric()
+                || matches!(bytes[i - 1], b'v' | b'V'))
+        {
             let rest = &text[i..];
             let end = rest
                 .find(|c: char| !(c.is_ascii_digit() || c == '.'))
@@ -543,7 +551,9 @@ pub fn parse_rfc3339(text: &str) -> Option<i64> {
     }
     let mut rest = &t[19..];
     if let Some(frac) = rest.strip_prefix('.') {
-        let end = frac.find(|c: char| !c.is_ascii_digit()).unwrap_or(frac.len());
+        let end = frac
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(frac.len());
         rest = &frac[end..];
     }
     let offset = match rest {

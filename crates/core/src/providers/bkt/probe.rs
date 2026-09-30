@@ -64,39 +64,108 @@ pub fn probe(runner: &dyn CommandRunner, repo: Option<&str>) -> Vec<ProbeResult>
 
     let listed = run(
         runner,
-        &["pr", "list", "--workspace", ws, "--repo", slug, "--state", "OPEN", "--limit", "3", "--json"],
+        &[
+            "pr",
+            "list",
+            "--workspace",
+            ws,
+            "--repo",
+            slug,
+            "--state",
+            "OPEN",
+            "--limit",
+            "3",
+            "--json",
+        ],
         &mut out,
     );
     if let Some(id) = listed.as_deref().and_then(first_pr_id) {
         let id = id.to_string();
-        run(runner, &["pr", "view", &id, "--workspace", ws, "--repo", slug, "--json"], &mut out);
-        run(runner, &["pr", "comments", &id, "--workspace", ws, "--repo", slug, "--json"], &mut out);
+        run(
+            runner,
+            &[
+                "pr",
+                "view",
+                &id,
+                "--workspace",
+                ws,
+                "--repo",
+                slug,
+                "--json",
+            ],
+            &mut out,
+        );
+        run(
+            runner,
+            &[
+                "pr",
+                "comments",
+                &id,
+                "--workspace",
+                ws,
+                "--repo",
+                slug,
+                "--json",
+            ],
+            &mut out,
+        );
     }
 
     // The CLI's own pipeline list (to show what it drops) and the raw REST list the adapter uses.
     run(
         runner,
-        &["pipeline", "list", "--workspace", ws, "--repo", slug, "--limit", "3", "--json"],
+        &[
+            "pipeline",
+            "list",
+            "--workspace",
+            ws,
+            "--repo",
+            slug,
+            "--limit",
+            "3",
+            "--json",
+        ],
         &mut out,
     );
     let base = format!("/repositories/{ws}/{slug}");
     let pipelines = run(
         runner,
-        &["api", &format!("{base}/pipelines/"), "--param", "pagelen=3", "--param", "sort=-created_on"],
+        &[
+            "api",
+            &format!("{base}/pipelines/"),
+            "--param",
+            "pagelen=3",
+            "--param",
+            "sort=-created_on",
+        ],
         &mut out,
     );
     if let Some(uuid) = pipelines.as_deref().and_then(first_pipeline_uuid) {
         let enc = uuid.replace('{', "%7B").replace('}', "%7D");
-        run(runner, &["api", &format!("{base}/pipelines/{enc}")], &mut out);
         run(
             runner,
-            &["api", &format!("{base}/pipelines/{enc}/steps/"), "--param", "pagelen=100"],
+            &["api", &format!("{base}/pipelines/{enc}")],
+            &mut out,
+        );
+        run(
+            runner,
+            &[
+                "api",
+                &format!("{base}/pipelines/{enc}/steps/"),
+                "--param",
+                "pagelen=100",
+            ],
             &mut out,
         );
     }
     run(
         runner,
-        &["api", &format!("{base}/environments"), "--param", "pagelen=100"],
+        &[
+            "api",
+            &format!("{base}/environments"),
+            "--param",
+            "pagelen=100",
+        ],
         &mut out,
     );
     out

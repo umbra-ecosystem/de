@@ -292,7 +292,10 @@ impl<R: BktRunner> Client<R> {
                 h.version = Some(format!("{}.{}.{}", v.0, v.1, v.2));
                 h.meets_minimum = parse_version(MIN_BKT_VERSION).is_some_and(|min| v >= min);
                 if !h.meets_minimum {
-                    h.detail = format!("bkt {}.{}.{} is older than {MIN_BKT_VERSION}", v.0, v.1, v.2);
+                    h.detail = format!(
+                        "bkt {}.{}.{} is older than {MIN_BKT_VERSION}",
+                        v.0, v.1, v.2
+                    );
                     return h;
                 }
             }
@@ -337,7 +340,16 @@ impl<R: BktRunner> Client<R> {
         for st in states {
             let up = st.as_str().to_ascii_uppercase();
             let o = self.exec(args([
-                "pr", "list", "--workspace", w, "--repo", s, "--state", &up, "--limit", "0",
+                "pr",
+                "list",
+                "--workspace",
+                w,
+                "--repo",
+                s,
+                "--state",
+                &up,
+                "--limit",
+                "0",
                 "--json",
             ]))?;
             let v: Value = Self::parse("pull request list", &o.stdout)?;
@@ -350,7 +362,10 @@ impl<R: BktRunner> Client<R> {
                     .ok_or_else(|| ProviderError::Parse {
                         tool: TOOL.into(),
                         what: "pull request list".into(),
-                        detail: format!("no `pull_requests` array; output began: {}", snippet(&o.stdout)),
+                        detail: format!(
+                            "no `pull_requests` array; output began: {}",
+                            snippet(&o.stdout)
+                        ),
                     })?,
             };
             for item in items {
@@ -377,7 +392,16 @@ impl<R: BktRunner> Client<R> {
     fn pr(&self, repo: &str, id: u64) -> ProviderResult<Pr> {
         let (w, s) = split_repo(repo)?;
         self.ensure_cloud()?;
-        let o = self.exec(args(["pr", "view", &id.to_string(), "--workspace", w, "--repo", s, "--json"]))?;
+        let o = self.exec(args([
+            "pr",
+            "view",
+            &id.to_string(),
+            "--workspace",
+            w,
+            "--repo",
+            s,
+            "--json",
+        ]))?;
         let v: Value = Self::parse("pull request", &o.stdout)?;
         let inner = v.get("pull_request").cloned().unwrap_or(v);
         let wp: WPr = serde_json::from_value(inner).map_err(|e| ProviderError::Parse {
@@ -391,7 +415,16 @@ impl<R: BktRunner> Client<R> {
     fn pr_comments(&self, repo: &str, id: u64) -> ProviderResult<Vec<PrComment>> {
         let (w, s) = split_repo(repo)?;
         self.ensure_cloud()?;
-        let o = self.exec(args(["pr", "comments", &id.to_string(), "--workspace", w, "--repo", s, "--json"]))?;
+        let o = self.exec(args([
+            "pr",
+            "comments",
+            &id.to_string(),
+            "--workspace",
+            w,
+            "--repo",
+            s,
+            "--json",
+        ]))?;
         let v: Value = Self::parse("pull request comments", &o.stdout)?;
         let items = match &v {
             Value::Array(a) => a.clone(),
@@ -411,7 +444,11 @@ impl<R: BktRunner> Client<R> {
             if wc.deleted {
                 continue;
             }
-            out.push(Self::convert("pull request comment", &o.stdout, wc.into_comment(id))?);
+            out.push(Self::convert(
+                "pull request comment",
+                &o.stdout,
+                wc.into_comment(id),
+            )?);
         }
         out.sort_by_key(|c| (c.created_at, c.id));
         Ok(out)
@@ -433,11 +470,14 @@ impl<R: BktRunner> Client<R> {
         let limit = filter.limit.unwrap_or(DEFAULT_PIPELINE_LIMIT).max(1);
         let filtered = filter.branch.is_some() || filter.commit.is_some();
         let pagelen = if filtered { 100 } else { limit.min(100) };
-        let max_pages = if filtered { MAX_SCAN_PAGES } else { limit.div_ceil(pagelen) };
+        let max_pages = if filtered { MAX_SCAN_PAGES } else { MAX_PAGES };
         let path = format!("/repositories/{w}/{s}/pipelines/");
         let mut out: Vec<PipelineRun> = Vec::new();
         for page in 1..=max_pages {
-            let mut params = vec![("pagelen", pagelen.to_string()), ("sort", "-created_on".into())];
+            let mut params = vec![
+                ("pagelen", pagelen.to_string()),
+                ("sort", "-created_on".into()),
+            ];
             if page > 1 {
                 params.push(("page", page.to_string()));
             }
@@ -515,7 +555,8 @@ impl<R: BktRunner> Client<R> {
                     if page > 1 {
                         params.push(("page", page.to_string()));
                     }
-                    let o = self.api_get(&format!("/repositories/{w}/{s}/environments"), &params)?;
+                    let o =
+                        self.api_get(&format!("/repositories/{w}/{s}/environments"), &params)?;
                     let p: WPage<WEnvironment> = Self::parse("deployment environments", &o.stdout)?;
                     all.extend(p.values);
                     if p.next.is_empty() {
@@ -560,7 +601,9 @@ impl<R: BktRunner> Client<R> {
     fn add_pr_comment(&self, repo: &str, id: u64, c: &NewPrComment) -> ProviderResult<PrComment> {
         let (w, s) = split_repo(repo)?;
         if c.body.trim().is_empty() {
-            return Err(ProviderError::Other("refusing to post an empty comment".into()));
+            return Err(ProviderError::Other(
+                "refusing to post an empty comment".into(),
+            ));
         }
         let mut body = json!({ "content": { "raw": c.body } });
         if let Some(a) = &c.inline {
@@ -576,7 +619,10 @@ impl<R: BktRunner> Client<R> {
             body["inline"] = json!({ "path": a.path, side: a.line });
         }
         self.ensure_cloud()?;
-        let o = self.api_post(&format!("/repositories/{w}/{s}/pullrequests/{id}/comments"), Some(&body))?;
+        let o = self.api_post(
+            &format!("/repositories/{w}/{s}/pullrequests/{id}/comments"),
+            Some(&body),
+        )?;
         let posted = Self::parse::<WComment>("created comment", &o.stdout)
             .and_then(|wc| Self::convert("created comment", &o.stdout, wc.into_comment(id)));
         posted.map_err(|e| ProviderError::Other(format!(
@@ -587,7 +633,15 @@ impl<R: BktRunner> Client<R> {
     fn approve(&self, repo: &str, id: u64) -> ProviderResult<()> {
         let (w, s) = split_repo(repo)?;
         self.ensure_cloud()?;
-        self.exec(args(["pr", "approve", &id.to_string(), "--workspace", w, "--repo", s]))?;
+        self.exec(args([
+            "pr",
+            "approve",
+            &id.to_string(),
+            "--workspace",
+            w,
+            "--repo",
+            s,
+        ]))?;
         Ok(())
     }
 
@@ -599,22 +653,31 @@ impl<R: BktRunner> Client<R> {
         self.ensure_cloud()?;
         let mut posted = None;
         if !body.trim().is_empty() {
-            let c = NewPrComment { body: body.into(), inline: None };
+            let c = NewPrComment {
+                body: body.into(),
+                inline: None,
+            };
             posted = Some(self.add_pr_comment(repo, id, &c)?.id);
         }
-        self.api_post(&format!("/repositories/{w}/{s}/pullrequests/{id}/request-changes"), None)
-            .map(|_| ())
-            .map_err(|e| match posted {
-                Some(cid) => ProviderError::Other(format!(
-                    "comment {cid} was posted but requesting changes failed: {e}"
-                )),
-                None => e,
-            })
+        self.api_post(
+            &format!("/repositories/{w}/{s}/pullrequests/{id}/request-changes"),
+            None,
+        )
+        .map(|_| ())
+        .map_err(|e| match posted {
+            Some(cid) => ProviderError::Other(format!(
+                "comment {cid} was posted but requesting changes failed: {e}"
+            )),
+            None => e,
+        })
     }
 
     fn post_pipeline(&self, repo: &str, target: Value) -> ProviderResult<PipelineRun> {
         let (w, s) = split_repo(repo)?;
-        let o = self.api_post(&format!("/repositories/{w}/{s}/pipelines/"), Some(&json!({ "target": target })))?;
+        let o = self.api_post(
+            &format!("/repositories/{w}/{s}/pipelines/"),
+            Some(&json!({ "target": target })),
+        )?;
         let wp: WPipeline = Self::parse("triggered pipeline", &o.stdout)?;
         Self::convert("triggered pipeline", &o.stdout, wp.into_run(repo))
     }
@@ -626,7 +689,9 @@ impl<R: BktRunner> Client<R> {
     fn trigger_pipeline(&self, repo: &str, spec: &TriggerSpec) -> ProviderResult<PipelineRun> {
         split_repo(repo)?;
         if spec.branch.trim().is_empty() {
-            return Err(ProviderError::Other("a branch is required to trigger a pipeline".into()));
+            return Err(ProviderError::Other(
+                "a branch is required to trigger a pipeline".into(),
+            ));
         }
         let mut target = json!({
             "type": "pipeline_ref_target",
@@ -660,7 +725,10 @@ impl<R: BktRunner> Client<R> {
         };
         let wp: WPipeline = Self::parse("pipeline", &o.stdout)?;
         let t = wp.target;
-        if !matches!(t.kind.as_str(), "pipeline_ref_target" | "pipeline_commit_target") {
+        if !matches!(
+            t.kind.as_str(),
+            "pipeline_ref_target" | "pipeline_commit_target"
+        ) {
             return Err(ProviderError::Unsupported(format!(
                 "cannot rerun a pipeline with target type {:?}",
                 t.kind
@@ -668,7 +736,11 @@ impl<R: BktRunner> Client<R> {
         }
         let mut target = json!({ "type": t.kind });
         if !t.ref_name.is_empty() {
-            let rt = if t.ref_type.is_empty() { "branch" } else { &t.ref_type };
+            let rt = if t.ref_type.is_empty() {
+                "branch"
+            } else {
+                &t.ref_type
+            };
             target["ref_type"] = json!(rt);
             target["ref_name"] = json!(t.ref_name);
         }
@@ -700,7 +772,9 @@ impl BktHost<SystemRunner> {
 
 impl<R: BktRunner> BktHost<R> {
     pub fn with_runner(runner: R) -> Self {
-        Self { client: Client::new(runner) }
+        Self {
+            client: Client::new(runner),
+        }
     }
 }
 
@@ -739,12 +813,19 @@ impl BktHostWriter<SystemRunner> {
 
 impl<R: BktRunner> BktHostWriter<R> {
     pub fn with_runner(runner: R) -> Self {
-        Self { client: Client::new(runner) }
+        Self {
+            client: Client::new(runner),
+        }
     }
 }
 
 impl<R: BktRunner> CodeHostWriter for BktHostWriter<R> {
-    fn add_pr_comment(&self, repo: &str, id: u64, comment: &NewPrComment) -> ProviderResult<PrComment> {
+    fn add_pr_comment(
+        &self,
+        repo: &str,
+        id: u64,
+        comment: &NewPrComment,
+    ) -> ProviderResult<PrComment> {
         self.client.add_pr_comment(repo, id, comment)
     }
     fn approve(&self, repo: &str, id: u64) -> ProviderResult<()> {
