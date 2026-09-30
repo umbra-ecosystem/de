@@ -130,6 +130,39 @@ pub fn card(pal: &Pal) -> Div {
         .border_color(pal.border)
 }
 
+/// A full-width block of a screen: a label, then its content. A hairline runs edge to edge above every block but
+/// the first. The label keeps the page margin; the content decides its own (text is padded with [`pad`], tables and
+/// lists run flush so their row lines reach the edges).
+pub fn band(
+    pal: &Pal,
+    first: bool,
+    title: impl Into<SharedString>,
+    content: impl IntoElement,
+) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .w_full()
+        .when(!first, |d| {
+            d.border_t_1().border_color(pal.border.opacity(0.6))
+        })
+        .child(
+            div()
+                .px_6()
+                .pt_4()
+                .pb_2()
+                .text_xs()
+                .text_color(pal.muted)
+                .child(title.into()),
+        )
+        .child(content)
+}
+
+/// Page margin around text content inside a [`band`].
+pub fn pad(content: impl IntoElement) -> Div {
+    div().px_6().pb_4().child(content)
+}
+
 /// A titled block of a screen.
 pub fn section(pal: &Pal, title: impl Into<SharedString>) -> Div {
     let title: SharedString = title.into();

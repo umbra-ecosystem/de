@@ -109,15 +109,13 @@ pub fn ticket(
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .px_6()
-            .pt_3()
-            .pb_4()
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .gap_4()
-                    .when(!h.banners.is_empty(), |d| d.child(notices))
+                    .when(!h.banners.is_empty(), |d| {
+                        d.child(div().px_6().py_3().child(notices))
+                    })
                     .child(match other {
                         TicketBody::Overview(o) => overview::overview(ui, cx, inputs, o),
                         TicketBody::Test(t) => test_tab::test(ui, cx, inputs, &h.key, t),
@@ -147,21 +145,23 @@ fn audit_table(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
         .child(
             div()
                 .flex()
+                .px_4()
                 .py_1()
                 .border_b_1()
-                .border_color(pal.border)
+                .border_color(pal.border.opacity(0.6))
                 .text_xs()
                 .text_color(pal.faint)
-                .child(col(60.0).child("TIME"))
-                .child(col(220.0).child("ACTION"))
-                .child(col(100.0).child("REPO"))
-                .child(col(80.0).child("OUTCOME"))
-                .child(div().flex_1().px_2().child("DETAILS")),
+                .child(col(60.0).child("Time"))
+                .child(col(220.0).child("Action"))
+                .child(col(100.0).child("Repo"))
+                .child(col(80.0).child("Outcome"))
+                .child(div().flex_1().px_2().child("Details")),
         )
         .children(rows.iter().map(|a| {
             div()
                 .flex()
                 .items_start()
+                .px_4()
                 .py_1()
                 .border_b_1()
                 .border_color(pal.border.opacity(0.4))

@@ -383,23 +383,16 @@ impl AppView {
             self.vm.screen,
             ScreenVm::Next(_) | ScreenVm::Tickets(_) | ScreenVm::Ticket { .. }
         );
-        let is_ticket = matches!(self.vm.screen, ScreenVm::Ticket { .. });
+        // Every screen is edge to edge: it draws its own strips, rows and hairlines, and pads only its text.
         let body = if is_list {
-            div()
-                .flex_1()
-                .min_h_0()
-                .when(!is_ticket, |d| d.px_4().pt_4())
-                .child(screen)
-                .into_any_element()
+            div().flex_1().min_h_0().child(screen).into_any_element()
         } else {
             div()
                 .id("content")
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
-                .px_6()
-                .py_5()
-                .child(div().max_w(px(1180.0)).child(screen))
+                .child(screen)
                 .into_any_element()
         };
         div()

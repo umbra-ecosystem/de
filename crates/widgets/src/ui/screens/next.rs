@@ -219,7 +219,7 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
         .gap_3()
         .w_full()
         .h(px(ROW_H))
-        .px_3()
+        .px_6()
         .border_b_1()
         .border_color(pal.border.opacity(0.5))
         .cursor_pointer()
@@ -273,7 +273,10 @@ pub fn next(ui: &Ui, inputs: &Inputs, vm: &NextVm) -> AnyElement {
         .flex_none()
         .items_center()
         .gap_2()
-        .pb_3()
+        .h_10()
+        .px_6()
+        .border_b_1()
+        .border_color(pal.border)
         .child(div().flex_1().child(inputs.line(&Field::NextFilter)))
         .child(toggle);
     let body = if vm.cards.is_empty() {

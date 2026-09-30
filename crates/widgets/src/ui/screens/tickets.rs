@@ -27,9 +27,10 @@ fn header(ui: &Ui) -> Div {
         .flex()
         .flex_none()
         .items_center()
+        .px_4()
         .py_1()
         .border_b_1()
-        .border_color(pal.border)
+        .border_color(pal.border.opacity(0.6))
         .child(h(90.0, "Key"))
         .child(h(84.0, "Priority"))
         .child(
@@ -56,6 +57,7 @@ pub fn ticket_row(ui: &Ui, r: &TicketRowVm) -> Stateful<Div> {
         .items_center()
         .w_full()
         .h(px(ROW_H))
+        .px_4()
         .border_b_1()
         .border_color(pal.border.opacity(0.5))
         .cursor_pointer()
@@ -172,7 +174,7 @@ pub fn tickets(ui: &Ui, vm: &TicketListVm) -> AnyElement {
                                 .flex()
                                 .items_end()
                                 .h(px(ROW_H))
-                                .px_2()
+                                .px_6()
                                 .pb_1()
                                 .child(h.clone())
                                 .into_any_element(),

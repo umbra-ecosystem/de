@@ -42,6 +42,8 @@ fn step(ui: &Ui, index: usize, title: &str, state: StepState, body: Div) -> Div 
         .flex()
         .flex_col()
         .gap_2()
+        .w_full()
+        .px_6()
         .py_3()
         .when(index > 0, |d| {
             d.border_t_1().border_color(pal.border.opacity(0.6))
