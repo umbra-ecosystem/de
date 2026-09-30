@@ -387,20 +387,23 @@ pub fn step_badge(pal: &Pal, n: usize, state: StepState) -> Div {
 pub fn stepper(pal: &Pal, s: &StepperVm) -> Div {
     div()
         .flex()
+        .flex_wrap()
         .items_center()
         .gap_1()
         .children(s.steps.iter().enumerate().map(|(i, (label, st))| {
-            let c = match st {
-                StepState::Done => pal.ok,
-                StepState::Now => pal.accent,
-                _ => pal.faint,
+            // Colour lives on the dot only; the words stay neutral (current step brightest).
+            let (dot_colour, text) = match st {
+                StepState::Done => (pal.ok, pal.muted),
+                StepState::Now => (pal.accent, pal.fg),
+                StepState::Bad => (pal.bad, pal.fg),
+                StepState::Todo => (pal.faint, pal.faint),
             };
             div()
                 .flex()
                 .items_center()
                 .gap_1()
                 .when(i > 0, |d| d.child(div().w_3().h_px().bg(pal.border)))
-                .child(dot(c))
-                .child(div().text_xs().text_color(c).child(label.clone()))
+                .child(dot(dot_colour))
+                .child(div().text_xs().text_color(text).child(label.clone()))
         }))
 }

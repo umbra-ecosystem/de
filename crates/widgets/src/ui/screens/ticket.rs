@@ -45,6 +45,7 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
                 )
                 .child(buttons(ui, &h.actions)),
         )
+        .child(stepper(pal, &h.stepper))
         .child(tab_bar(
             ui,
             "ticket-tabs",
@@ -109,7 +110,6 @@ pub fn ticket(
                     .flex_col()
                     .gap_4()
                     .child(notices)
-                    .child(stepper(pal, &h.stepper))
                     .child(match other {
                         TicketBody::Overview(o) => overview::overview(ui, cx, inputs, o),
                         TicketBody::Test(t) => test_tab::test(ui, cx, inputs, &h.key, t),
