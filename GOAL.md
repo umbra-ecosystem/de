@@ -17,9 +17,9 @@ Jira: In Review ──► (review + local test + integrate) ──► Alpha Test
 ```
 
 1. **Appears.** The ticket is in the board's *Review* column. The pool is every ticket in that column; nothing in Jira says whose it is, so the author **claims** the ones they will handle. A ticket in *Returned* is only relevant if the author is **@mentioned in a Jira comment**, or when it comes back to *Review*.
-2. **Review.** Read the code without checking anything out: diffs come from git objects, not the working tree, so **any number of tickets can be under review at once**. Comments go on the Bitbucket PR (inline). **Approval is not given here**: the PR can only be approved once testing, including UAT after alpha, is complete. PRs are never merged through Bitbucket in this flow.
+2. **Review.** What is reviewed is **the PR's own diff: source branch against the PR's destination branch**, read from the PR, never assumed. PRs normally target `develop`, but **hotfix PRs target `master`/`main`**, and `uat` is never a PR target. Diffs come from git objects, not the working tree, so nothing is checked out and **any number of tickets can be under review at once**. Comments go on the Bitbucket PR (inline). **Approval is not given here**: the PR can only be approved once testing, including UAT after alpha, is complete. PRs are never merged through Bitbucket in this flow.
 3. **Local test.** Exactly **one ticket is active** at a time (each repo can only be on one branch and the stack runs one version). Activating a ticket:
-   - switches every repo the ticket touches to its branch, in place, stashing whatever was there. A ticket **touches only the repos that have a matching branch**; every **other repo goes to its base branch** (`develop` by default, configurable per repo) and is brought up to date, so the whole stack is the ticket's code on a known baseline;
+   - switches every repo the ticket touches to its branch, in place, stashing whatever was there. A ticket **touches only the repos that have a matching branch**; every **other repo goes to a baseline branch** and is brought up to date (`develop` by default, configurable per repo; for a **hotfix** you are asked which baseline to use, see below), so the whole stack is the ticket's code on a known baseline;
    - applies the **test overlay** only where it is needed: when a repo that **provides** a package (for example the API client) has the ticket branch, each repo that **consumes** it gets a Composer **`path` repository (symlink) to the provider's local checkout**, with the package's version constraint set to `*`, then `composer update <package>`, and the configured rebuild steps run (UI build, etc.). Repos that don't consume such a package are never touched;
    - assumes the workspace (Compose) is already up;
    - gives the ticket a **test checklist and notes**.
@@ -49,7 +49,8 @@ Out of scope for the first versions: reverting a ticket out of `uat`, and follow
 | Data access | **Prefer existing CLIs, fall back to REST**, behind a full sync engine with a local cache. `de` never handles credentials: each CLI owns its login and secret storage. |
 | Review | **Full in-app review**: diffs, inline comments, later approve |
 | Working trees | **Switch in place, stash by default**; one active ticket plus a parked list |
-| Repos without the ticket branch | **Fall back to the repo's base branch** (`develop` by default), fetched and fast-forwarded; skipped for review and integration |
+| Repos without the ticket branch | **Fall back to a baseline branch** (`develop` by default; **asked each time for hotfixes**), fetched and fast-forwarded; skipped for review and integration |
+| PR target branch | **Read from each PR**, never assumed. Normally `develop`; hotfixes target `master`/`main`. `uat` is only ever pushed to directly, never a PR target. |
 | Composer overlay | **Configured per repo** (provider/consumer mapping); applied only when the providing repo has the ticket branch |
 | Local time | Tracked **per ticket, locally** (no Jira worklog) |
 | Automation | **Suggest everything, execute only on confirmation**; only reads and local-safe housekeeping run automatically |
@@ -71,14 +72,23 @@ Rules:
 - Nothing posts automatically, including when pipelines finish. The app may notify that a draft is ready.
 - Reads are free; a failed read must never block local work (offline is a supported state).
 
+### Ticket kind: normal or hotfix
+
+A ticket is a **hotfix** when its PRs target the production branch (`master` or `main`, whichever the repo uses) instead of `develop`. The app derives this from the synced PRs; it is never a manual flag (though it can be overridden). It matters in three places:
+
+- **Review baseline:** always the PR's destination, so the diff is correct in both cases.
+- **Fallback baseline** for repos the ticket does not touch: `develop` for a normal ticket. For a hotfix the app **asks each time** you activate it (production branch, `develop`, or `uat`), since the right answer depends on the fix. The choice is remembered for that activation only.
+- **Suggestions:** hotfixes are flagged and prioritised. **After review a hotfix follows the same flow as any ticket**: merge to `uat`, push, alpha deploy, deploy comment, transition. Only the PR destination differs.
+
 ### Per-repo configuration
 
 Repos differ, so behaviour is declared per project (in that project's `de.toml`, next to the existing `[project]` and `[tasks]`), not decided per ticket. Illustrative shape, to be settled in M1/M3:
 
 ```toml
 [branches]
-base = "develop"   # fallback when the ticket has no branch here; also the review baseline
-uat  = "uat"       # integration branch
+base       = "develop"   # fallback when the ticket has no branch here (normal tickets)
+production = "master"    # "master" or "main" per repo; one of the baseline choices offered for hotfixes
+uat        = "uat"       # integration branch (pushed to directly, never a PR target)
 
 # Only in repos that CONSUME a package built from another workspace repo.
 [overlay.composer]
@@ -96,7 +106,7 @@ How it resolves for an active ticket:
 - **Provider on base (no ticket branch):** nothing is changed in the consumer, even though it is configured.
 - **Repo with no `overlay` section:** never touched.
 - Rebuild steps are ordinary `de` tasks, so they reuse the task proxy and can differ per repo.
-- Defaults come from the existing workspace `default_branch` setting where present, then `develop`.
+- Defaults come from the existing workspace `default_branch` setting where present, then `develop`. Review diffs do not use these; they use each PR's own destination.
 
 ### Safety: the test overlay must never reach `uat`
 
@@ -142,7 +152,8 @@ Answers: *given everything known about my tickets, what should I do now?*
 **Rules that follow from the flow** (to be tuned on real data):
 
 - *New ticket in Review, not claimed:* suggest claiming (ordered by priority, then manual order).
-- *Claimed, not reviewed:* suggest starting the review (open diffs).
+- *Claimed, not reviewed:* suggest starting the review (open the PR's diff against its destination).
+- *PR targets `master`/`main`:* flag as a hotfix and raise its priority; on activation, ask which baseline the untouched repos should use.
 - *New commits since you reviewed:* suggest re-reviewing.
 - *Reviewed, not yet tested:* suggest activating it for local test (if none active); if one is active, suggest finishing or parking it first.
 - *Active ticket, API client changed:* suggest applying the composer overlay and rebuild steps.
@@ -165,7 +176,7 @@ Safety: suggestions never bypass the write policy; "do all" is limited to local,
 Cargo workspace (already in place):
 
 - `crates/core` (`de-core`): domain and orchestration, no UI. Grows to include:
-  - **Domain model**: Ticket, Repo, Branch link, PR, Pipeline run, `uat` merge record, Overlay record, Checklist/Note, Time entry, Suggestion response.
+  - **Domain model**: Ticket (with a derived kind: normal or hotfix), Repo, Branch link, PR (source, **destination**, reviewers, approvals), Pipeline run, `uat` merge record, Overlay record, Checklist/Note, Time entry, Suggestion response.
   - **Store**: local SQLite (model, sync cache, audit log). Distinguishes **remote-mirrored data** (disposable) from **local-only data** (claims, ordering, notes, checklists, time, overlays, audit log, drafts; not reproducible, so migrations and backups matter).
   - **Git layer**: structured status, key matching across repos (local and remote, with duplicate/stale handling and manual override), safe in-place switch with stash, temporary worktrees for integration, reading diffs from git objects. Prefer `git2`/`gix` over parsing porcelain.
   - **Overlay engine**: apply, record, revert and verify test-only changes.
@@ -208,20 +219,21 @@ Flow details:
 3. **Deployment step.** Its name per repo, and how a pipeline run is found for a commit via `bkt`.
 4. **Overlay details.** Which repos provide and which consume packages (this fills the per-repo config above), and the rebuild tasks per repo. One mechanical risk remains: the symlink to the provider's checkout already resolves inside the container, so the overlay can be applied from the host; the previous `composer.lock` must be restorable exactly, and `vendor/` rebuilt, on revert.
 5. **Base branch fallback.** Is it always `develop`? Should a repo on base be fast-forwarded automatically on activation, and what if its base has diverged or the tree is dirty (stash, as for ticket branches)?
-6. **Local gate.** Varies by repo; the app offers to run a repo's tasks but does not enforce. Revisit if it becomes a source of mistakes.
-7. **Claiming and ordering.** What "claim" means in the app (local flag only), and how manual order combines with Jira priority.
-8. **Notes and checklist.** Free-form vs template checklist; where notes live; whether the checklist is per ticket only.
-9. **Time tracking.** Automatic from active-ticket time, manual timers, or both.
-10. **Notifications.** Which suggestions raise macOS notifications, and quiet hours.
+6. **Hotfix details.** Confirm `master` vs `main` per repo, and whether hotfixes need any different priority or notification handling than normal tickets.
+7. **Local gate.** Varies by repo; the app offers to run a repo's tasks but does not enforce. Revisit if it becomes a source of mistakes.
+8. **Claiming and ordering.** What "claim" means in the app (local flag only), and how manual order combines with Jira priority.
+9. **Notes and checklist.** Free-form vs template checklist; where notes live; whether the checklist is per ticket only.
+10. **Time tracking.** Automatic from active-ticket time, manual timers, or both.
+11. **Notifications.** Which suggestions raise macOS notifications, and quiet hours.
 
 Technical:
 
-11. **CLI viability.** `acli` (JSON, pagination, mention data, speed) and `bkt` (Cloud vs Data Center, inline comment creation, pipeline lookup by commit, JSON stability). Verify by running them against real accounts.
-12. **Menubar process model.** One app process owning the store and sync loop with the CLI reading the same SQLite (WAL), or a separate daemon. Launch-at-login and `.app` packaging.
-13. **`gpui-kit`.** Confirm it builds on the pinned toolchain (1.92.0) and what its editor offers for diff display, before M7/M8.
-14. **Suggestion tuning.** Needs a feedback loop (dismiss reasons) once the engine runs on real data.
-15. **Workspace concept.** How much of the current workspace registry survives once tickets own the repo set.
-16. **Release plumbing.** Installed `dist` (0.32.0) mismatches the pinned 0.30.3; the release workflow still lists old targets. README and `docs/` describe removed commands.
+12. **CLI viability.** `acli` (JSON, pagination, mention data, speed) and `bkt` (Cloud vs Data Center, inline comment creation, pipeline lookup by commit, JSON stability). Verify by running them against real accounts.
+13. **Menubar process model.** One app process owning the store and sync loop with the CLI reading the same SQLite (WAL), or a separate daemon. Launch-at-login and `.app` packaging.
+14. **`gpui-kit`.** Confirm it builds on the pinned toolchain (1.92.0) and what its editor offers for diff display, before M7/M8.
+15. **Suggestion tuning.** Needs a feedback loop (dismiss reasons) once the engine runs on real data.
+16. **Workspace concept.** How much of the current workspace registry survives once tickets own the repo set.
+17. **Release plumbing.** Installed `dist` (0.32.0) mismatches the pinned 0.30.3; the release workflow still lists old targets. README and `docs/` describe removed commands.
 
 ## Current state
 
