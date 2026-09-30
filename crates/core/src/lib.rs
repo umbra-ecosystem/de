@@ -7,6 +7,7 @@ pub mod domain;
 pub mod gateway;
 pub mod git;
 pub mod integration;
+pub mod next;
 pub mod overlay;
 pub mod project;
 pub mod providers;

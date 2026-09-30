@@ -61,6 +61,19 @@ pub enum RepoOutcome {
 }
 
 impl RepoOutcome {
+    /// A stable `(state, conflicting files, blocked reason)` summary, as stored in the audit
+    /// entry of a prepare. States: `ready`, `up_to_date`, `already_pushed`, `conflict`,
+    /// `blocked`.
+    pub fn summary(&self) -> (&'static str, Vec<String>, Option<String>) {
+        match self {
+            RepoOutcome::Ready(_) => ("ready", Vec::new(), None),
+            RepoOutcome::UpToDate { .. } => ("up_to_date", Vec::new(), None),
+            RepoOutcome::AlreadyPushed { .. } => ("already_pushed", Vec::new(), None),
+            RepoOutcome::Conflict { files } => ("conflict", files.clone(), None),
+            RepoOutcome::Blocked { reason } => ("blocked", Vec::new(), Some(reason.clone())),
+        }
+    }
+
     /// Nothing stands in the way of pushing.
     pub fn is_pushable(&self) -> bool {
         !matches!(
@@ -256,7 +269,19 @@ pub fn prepare_integration(
         now,
         actions::PREPARED,
         ticket,
-        json!({ "repos": out.iter().map(|r| json!({ "repo": r.repo, "outcome": format!("{:?}", r.outcome) })).collect::<Vec<_>>() }),
+        json!({ "repos": out.iter().map(|r| {
+            let (state, files, reason) = r.outcome.summary();
+            // `state`, `files`, `reason` and `ticket_tip` are read back by the next-action
+            // loader to keep showing a conflict until the branch changes.
+            json!({
+                "repo": r.repo,
+                "outcome": format!("{:?}", r.outcome),
+                "state": state,
+                "files": files,
+                "reason": reason,
+                "ticket_tip": r.ticket_tip,
+            })
+        }).collect::<Vec<_>>() }),
         AuditOutcome::Success,
     )?;
     Ok(IntegrationPrep {

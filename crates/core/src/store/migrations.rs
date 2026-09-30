@@ -195,6 +195,36 @@ CREATE TABLE uat_merge_details (
 ) STRICT;
 ";
 
+/// The next-action engine's local memory: what the author said about suggestions, and the
+/// marker of when a ticket was last reviewed.
+const STATE_NEXT_ACTIONS: &str = "
+-- Append-only history of responses; the latest row per suggestion id is the current one.
+-- `facts_hash` identifies the facts the suggestion had when it was answered, so a
+-- dismissal stops applying once they change materially. `suggestion_id` is derived from
+-- ticket, rule and subject (see `next::Suggestion::make_id`), never from a rowid.
+CREATE TABLE suggestion_responses (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    suggestion_id TEXT NOT NULL,
+    ticket_key    TEXT,
+    rule          TEXT NOT NULL,
+    response      TEXT NOT NULL CHECK (response IN ('dismissed','snoozed','done')),
+    reason        TEXT,
+    snooze_until  INTEGER,
+    facts_hash    TEXT NOT NULL,
+    at            INTEGER NOT NULL,
+    CHECK ((response = 'snoozed') = (snooze_until IS NOT NULL))
+) STRICT;
+CREATE INDEX suggestion_responses_by_id ON suggestion_responses (suggestion_id, id);
+
+-- When a ticket's review was finished, and the branch tips it covered (JSON object of
+-- project name to commit). Absent: not reviewed (or the review was restarted).
+CREATE TABLE ticket_reviews (
+    ticket_key  TEXT PRIMARY KEY NOT NULL REFERENCES tickets (key) ON DELETE CASCADE,
+    reviewed_at INTEGER NOT NULL,
+    heads       TEXT NOT NULL DEFAULT '{}'
+) STRICT;
+";
+
 /// Mirror of Bitbucket PRs and pipelines and of Jira comments, plus per-source sync
 /// bookkeeping; all disposable.
 ///
@@ -303,6 +333,7 @@ static STATE: LazyLock<Migrations<'static>> = LazyLock::new(|| {
         M::up(STATE_UAT_MERGES),
         M::up(STATE_DRAFTS),
         M::up(STATE_UAT_MERGE_DETAILS),
+        M::up(STATE_NEXT_ACTIONS),
     ])
 });
 
