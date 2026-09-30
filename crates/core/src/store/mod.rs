@@ -31,6 +31,8 @@ pub mod uat_merges;
 #[cfg(test)]
 mod domain_tests;
 #[cfg(test)]
+mod next_tests;
+#[cfg(test)]
 mod provider_tests;
 
 use std::path::{Path, PathBuf};
