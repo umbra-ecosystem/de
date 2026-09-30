@@ -553,10 +553,18 @@ impl Stage {
         })
     }
 
-    /// In hand -> Unclaimed, after the ticket was returned in Jira. An active ticket must be restored first.
+    /// The ticket was returned to development in Jira. One that was never shipped goes back to Unclaimed
+    /// (it comes back as new); one that had shipped (a re-merge that was returned, or parked) goes back to
+    /// Integrated with its landings, drafts and review mark intact. An active ticket must be restored first.
     pub fn returned(&mut self) -> Result<(), Illegal> {
         self.apply("return", |s| match s {
-            Stage::InHand { .. } => Ok(Stage::Unclaimed),
+            Stage::InHand { held, .. } => {
+                if held.shipped.landings.is_empty() && held.shipped.drafts.is_empty() {
+                    Ok(Stage::Unclaimed)
+                } else {
+                    Ok(Stage::Integrated { held })
+                }
+            }
             s => Err(s),
         })
     }
@@ -1085,6 +1093,39 @@ mod tests {
         s.finish_active(After::Integrate).unwrap();
         s.reclaim().unwrap();
         assert!(s.held().unwrap().shipped.landings.is_empty());
+    }
+
+    #[test]
+    fn returning_a_ticket_that_had_shipped_keeps_what_it_shipped() {
+        let landing = Landing {
+            repo: "web".into(),
+            commit: "abc".into(),
+            at: "now".into(),
+            deploy: Deploy {
+                state: DeployState::Deployed,
+                run: 1,
+                since: 0,
+                step: String::new(),
+                log: None,
+                uat_moved: None,
+            },
+        };
+        let mut s = Stage::Integrated {
+            held: Held {
+                review: Some(ReviewMark(1)),
+                shipped: Shipped {
+                    landings: vec![landing],
+                    drafts: Vec::new(),
+                },
+            },
+        };
+        s.activate(act()).unwrap();
+        s.finish_active(After::Park).unwrap();
+        s.returned().unwrap();
+        assert_eq!(s.name(), "integrated");
+        let held = s.held().unwrap();
+        assert_eq!(held.shipped.landings.len(), 1);
+        assert_eq!(held.review, Some(ReviewMark(1)));
     }
 
     #[test]

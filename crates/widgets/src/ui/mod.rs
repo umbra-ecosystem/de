@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod ctx;
+pub mod panels;
 pub mod screens;
 pub mod shell;
 pub mod theme;

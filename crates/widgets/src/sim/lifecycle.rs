@@ -1565,3 +1565,46 @@ impl Sim {
         Outcome::ok()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A re-merge (an integrated ticket activated again) that is returned must not lose its landings.
+    #[test]
+    fn returning_an_active_remerge_keeps_its_landings_and_restores_the_repos() {
+        let mut sim = Sim::new();
+        let key: TicketKey = "PROJ-127".into();
+        let before = sim.ws.branches.clone();
+        assert!(sim.activate(&key, None).is_done());
+        assert_eq!(sim.tk(&key).unwrap().local(), Some(Local::Active));
+        assert_ne!(
+            sim.ws.branches, before,
+            "repos switched to the ticket branches"
+        );
+
+        let out = sim.send_return(&key, "Sent back.", "test");
+        assert!(out.is_done(), "{out:?}");
+        let t = sim.tk(&key).unwrap();
+        assert_eq!(t.jira, JiraStatus::Returned);
+        assert_eq!(
+            t.local(),
+            Some(Local::Integrated),
+            "back where it was, not forgotten"
+        );
+        assert_eq!(t.landings().len(), 2, "what it shipped is kept");
+        assert!(t.drafts().iter().any(|d| d.posted));
+        assert!(t.act().is_none());
+        assert_eq!(sim.ws.branches, before, "the repos were restored first");
+    }
+
+    #[test]
+    fn returning_a_ticket_that_never_shipped_makes_it_unclaimed() {
+        let mut sim = Sim::new();
+        let key: TicketKey = "PROJ-142".into();
+        assert!(sim.mark_reviewed(&key).is_done());
+        let out = sim.send_return(&key, "Sent back.", "test");
+        assert!(out.is_done(), "{out:?}");
+        assert_eq!(sim.tk(&key).unwrap().local(), None);
+    }
+}

@@ -9,9 +9,11 @@ use super::screens::next::suggestion_card;
 use super::widgets::*;
 use crate::vm::*;
 
-/* ------------------------------ toolbar ------------------------------ */
+/* ------------------------------ title bar ------------------------------ */
 
-pub fn toolbar(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
+/// What lives in the title bar, next to the window controls: the app name, jump-to, and the window-level toggles.
+/// Put inside a [`TitleBar`](gpui_kit::component::TitleBar).
+pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
     let pal = &ui.pal;
     let flat = |id: &'static str, label: String, on: bool, intent: Intent| {
         div()
@@ -38,12 +40,8 @@ pub fn toolbar(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
         .flex()
         .items_center()
         .gap_3()
-        .h_10()
-        .px_3()
-        .flex_none()
-        .border_b_1()
-        .border_color(pal.border)
-        .bg(pal.panel)
+        .w_full()
+        .pr_3()
         .child(div().font_weight(FontWeight::BOLD).child("de"))
         .child(
             div()
@@ -85,7 +83,7 @@ pub fn toolbar(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
         .child(flat(
             "panel",
             "▥".to_string(),
-            vm.right.is_some(),
+            vm.right_open,
             Intent::TogglePanel,
         ))
 }
@@ -98,8 +96,7 @@ pub fn nav(ui: &Ui, vm: &AppVm) -> Div {
         .flex()
         .flex_col()
         .gap_4()
-        .w(px(210.0))
-        .flex_none()
+        .size_full()
         .p_2()
         .border_r_1()
         .border_color(pal.border)
@@ -251,8 +248,7 @@ pub fn right_panel(ui: &Ui, sections: &[RightSection]) -> Div {
         .flex()
         .flex_col()
         .gap_4()
-        .w(px(300.0))
-        .flex_none()
+        .w_full()
         .p_3()
         .border_l_1()
         .border_color(pal.border)

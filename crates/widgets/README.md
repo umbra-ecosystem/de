@@ -5,7 +5,7 @@ The view layer of the de GUI, built on `gpui-kit`, separated from state.
 - `vm`: view models. Plain data: what a screen shows and the `Intent`s it may emit.
 - `store::Store`: the seam to the data. `sim::Sim` implements it in memory (a port of `docs/design/prototype`); `de-app` will implement it over the engine.
 - `session::Session`: UI state on top of a store. No GPUI; the interaction model is unit-tested.
-- `ui`: stateless GPUI widgets and screens, plus `ui::run()` which opens the showcase.
+- `ui`: stateless GPUI widgets and screens, plus `ui::run()` which opens the showcase. The window chrome is a `TitleBar` (window controls, jump-to and the window-level toggles) above a `DockArea` (navigation left, the screen in the middle, details right; resizable and collapsible).
 
 This crate has no engine, data or SQLite dependency by design. New UI is built here and shown in the showcase before `de-app` uses it.
 

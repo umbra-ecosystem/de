@@ -3,14 +3,17 @@
 //! This is the only place that owns GPUI entities (the text inputs) and the clock. Everything it draws comes from
 //! `Session::view()`; everything a click does goes back through `Session::handle`.
 
+use std::rc::Rc;
 use std::time::Duration;
 
+use gpui_kit::component::dock::{DockArea, DockLayout, DockPlacement, DockSkin, panel_handle};
 use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
-use gpui_kit::component::{ActiveTheme, Theme};
+use gpui_kit::component::{ActiveTheme, Theme, TitleBar};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::ctx::{Inputs, TextBox, Ui};
+use super::panels::{DetailsPanel, MainPanel, NavPanel};
 use super::screens::{env, next, ticket, tickets};
 use super::shell;
 use super::theme::Pal;
@@ -115,6 +118,11 @@ pub struct AppView {
     focus: FocusHandle,
     focus_token: Option<String>,
     subs: Vec<Subscription>,
+    area: Entity<DockArea>,
+    weak: WeakEntity<AppView>,
+    /// The frame being drawn: built once per render of this view, read by the dock panels.
+    vm: Rc<AppVm>,
+    right_open: bool,
 }
 
 impl AppView {
@@ -137,12 +145,49 @@ impl AppView {
             }
         })
         .detach();
+        let session = Session::demo();
+        let vm = Rc::new(session.view());
+
+        // The dock: navigation on the left, details on the right, the screen in the middle.
+        let (area, skin) = DockSkin::dock_area("de", None, window, cx);
+        skin.set_toggle_button_visible(false, cx);
+        skin.set_close_button_visible(false, cx);
+        let app = cx.weak_entity();
+        let nav = cx.new(|cx| NavPanel::new(app.clone(), cx));
+        let main = cx.new(|cx| MainPanel::new(app.clone(), cx));
+        let details = cx.new(|cx| DetailsPanel::new(app.clone(), cx));
+        area.update(cx, |area, cx| {
+            area.set_center(
+                DockLayout::tabs().panel_view(panel_handle(main), cx),
+                window,
+                cx,
+            );
+            area.set_dock(
+                DockPlacement::Left,
+                DockLayout::tabs().panel_view(panel_handle(nav), cx),
+                window,
+                cx,
+            );
+            area.set_dock(
+                DockPlacement::Right,
+                DockLayout::tabs().panel_view(panel_handle(details), cx),
+                window,
+                cx,
+            );
+            area.set_dock_size(DockPlacement::Left, px(210.0), window, cx);
+            area.set_dock_size(DockPlacement::Right, px(300.0), window, cx);
+        });
+
         Self {
-            session: Session::demo(),
+            session,
             inputs: Inputs::default(),
             focus,
             focus_token: None,
             subs: Vec::new(),
+            area,
+            weak: app,
+            vm,
+            right_open: true,
         }
     }
 
@@ -277,17 +322,70 @@ impl AppView {
     }
 }
 
-impl Render for AppView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let vm = self.session.view();
-        self.sync_inputs(&vm, window, cx);
-        let ui = Ui {
-            view: cx.entity().downgrade(),
+impl AppView {
+    fn ui(&self, cx: &App, weak: WeakEntity<AppView>) -> Ui {
+        Ui {
+            view: weak,
             pal: Pal::of(cx),
             mono: cx.theme().mono_font_family.clone(),
-        };
+        }
+    }
+
+    /// The left dock: navigation.
+    pub(crate) fn draw_nav(&self, cx: &App) -> AnyElement {
+        let ui = self.ui(cx, self.weak.clone());
+        shell::nav(&ui, &self.vm).into_any_element()
+    }
+
+    /// The center: the tab strip and the current screen.
+    pub(crate) fn draw_main(&self, cx: &App) -> AnyElement {
+        let ui = self.ui(cx, self.weak.clone());
+        let screen = self.screen(&ui, cx, &self.vm.screen);
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .bg(ui.pal.bg)
+            .child(shell::tabstrip(&ui, &self.vm))
+            .child(
+                div()
+                    .id("content")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .px_6()
+                    .py_5()
+                    .child(div().max_w(px(1180.0)).child(screen)),
+            )
+            .into_any_element()
+    }
+
+    /// The right dock: details of whatever is selected.
+    pub(crate) fn draw_details(&self, cx: &App) -> AnyElement {
+        let ui = self.ui(cx, self.weak.clone());
+        div()
+            .id("right")
+            .size_full()
+            .overflow_y_scroll()
+            .child(shell::right_panel(&ui, &self.vm.right))
+            .into_any_element()
+    }
+}
+
+impl Render for AppView {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let vm = Rc::new(self.session.view());
+        self.vm = vm.clone();
+        self.sync_inputs(&vm, window, cx);
+        // The right dock follows the session's flag when it changes (the title bar toggle).
+        if vm.right_open != self.right_open {
+            self.right_open = vm.right_open;
+            self.area.update(cx, |area, cx| {
+                area.toggle_dock(DockPlacement::Right, window, cx);
+            });
+        }
+        let ui = self.ui(cx, cx.entity().downgrade());
         let pal = ui.pal;
-        let screen = self.screen(&ui, cx, &vm.screen);
         div()
             .key_context("Showcase")
             .track_focus(&self.focus)
@@ -306,40 +404,8 @@ impl Render for AppView {
             .bg(pal.bg)
             .text_color(pal.fg)
             .text_sm()
-            .child(shell::toolbar(&ui, &vm, vm.simulate.is_some()))
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .child(shell::nav(&ui, &vm))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .min_w_0()
-                            .child(shell::tabstrip(&ui, &vm))
-                            .child(
-                                div()
-                                    .id("content")
-                                    .flex_1()
-                                    .min_h_0()
-                                    .overflow_y_scroll()
-                                    .px_6()
-                                    .py_5()
-                                    .child(div().max_w(px(1180.0)).child(screen)),
-                            ),
-                    )
-                    .when_some(vm.right.as_ref(), |d, sections| {
-                        d.child(
-                            div()
-                                .id("right")
-                                .overflow_y_scroll()
-                                .child(shell::right_panel(&ui, sections)),
-                        )
-                    }),
-            )
+            .child(TitleBar::new().child(shell::title_bar_content(&ui, &vm, vm.simulate.is_some())))
+            .child(div().flex_1().min_h_0().child(self.area.clone()))
             .child(shell::status_bar(&ui, &vm.status))
             .when_some(vm.attention.as_ref(), |d, a| {
                 d.child(shell::attention_panel(&ui, a))
@@ -367,13 +433,10 @@ pub fn run() {
                 KeyBinding::new("escape", CancelAction, Some("Showcase")),
             ]);
             let bounds = Bounds::centered(None, size(px(1440.0), px(900.0)), cx);
+            // A custom title bar: the window controls stay, and the app's own controls sit beside them.
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(TitlebarOptions {
-                    title: Some("de · widgets showcase".into()),
-                    ..Default::default()
-                }),
-                ..Default::default()
+                ..TitleBar::window_options()
             };
             gpui_kit::open_window(options, cx, |window, cx| {
                 cx.new(|cx| AppView::new(window, cx))
