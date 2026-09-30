@@ -17,6 +17,6 @@ cargo test -p de-widgets
 
 ## Scope versus the prototype
 
-Ported: Next (ranking, reasons, dismiss/snooze/undo), ticket lists, the ticket screen with Overview, Review (unified/split diff, per-hunk viewed, inline comments, since-your-review, uat conflict/overlap banner), Test, Ship (prepare, pre-push checks, typed-key push, runs, re-run, announce, approve) and Timeline; On uat, Workspace, Audit, Settings, command palette, preview tabs, needs-attention panel, toasts with undo, all confirm/baseline/busy/one-ticket sheets, and the Simulate panel.
+Ported: Home (ranking, reasons, dismiss/snooze/undo), ticket lists, the ticket screen with Overview, Review (unified/split diff, per-hunk viewed, inline comments, since-your-review, uat conflict/overlap banner), Test, Ship (prepare, pre-push checks, typed-key push, runs, re-run, announce, approve) and Timeline; On uat, Workspace, Audit, Settings, command palette, preview tabs, needs-attention panel, toasts with undo, all confirm/baseline/busy/one-ticket sheets, and the Simulate panel.
 
 Not ported: the responsive/mobile layout, `j`/`k`/`Enter` list keys, and the prototype's automatic repo-fetch queue (only stale and external repo locks are simulated).

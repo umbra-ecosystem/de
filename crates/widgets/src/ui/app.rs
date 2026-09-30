@@ -129,6 +129,7 @@ fn apply_env(session: &mut Session) {
     let mut parts = route.split(':');
     let route = match parts.next() {
         Some("tickets") => Route::Tickets(Group::All),
+        Some("home") => Route::Next,
         Some("uat") => Route::OnUat,
         Some("workspace") => Route::Workspace,
         Some("audit") => Route::Audit,

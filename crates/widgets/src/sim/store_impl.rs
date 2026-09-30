@@ -211,7 +211,7 @@ impl Sim {
         })
     }
 
-    /// The right panel on Next: what you are in the middle of, then what is waiting.
+    /// The right panel on Home: what you are in the middle of, then what is waiting.
     fn right_next(&self) -> Vec<RightSection> {
         let mut out = Vec::new();
         if let Some(t) = self.active_key().and_then(|k| self.tk(&k)) {
@@ -898,7 +898,7 @@ impl Store for Sim {
         let q = query.trim().to_lowercase();
         let mut items = vec![
             PaletteItem {
-                label: "Next".into(),
+                label: "Home".into(),
                 hint: "screen".into(),
                 intent: Intent::Go(Route::Next),
             },

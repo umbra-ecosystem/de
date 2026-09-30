@@ -537,7 +537,7 @@ impl Session {
             NavSection {
                 title: String::new(),
                 items: vec![
-                    item("Next", Route::Next, counts.suggestions),
+                    item("Home", Route::Next, counts.suggestions),
                     list(Group::Pool),
                     list(Group::All),
                 ],
@@ -569,7 +569,7 @@ impl Session {
 
     fn tab_strip(&self) -> Vec<ShellTab> {
         let label = |r: &Route| match r {
-            Route::Next => "Next".to_string(),
+            Route::Next => "Home".to_string(),
             Route::Tickets(g) => g.label().to_string(),
             Route::OnUat => "On uat".to_string(),
             Route::Workspace => "Workspace".to_string(),
@@ -1661,7 +1661,7 @@ mod tests {
         let nav = s.view().nav;
         let labels =
             |i: usize| -> Vec<&str> { nav[i].items.iter().map(|x| x.label.as_str()).collect() };
-        assert_eq!(labels(0), ["Next", "Review pool", "All tickets"]);
+        assert_eq!(labels(0), ["Home", "Review pool", "All tickets"]);
         assert_eq!(nav[1].title, "Status");
         assert_eq!(
             labels(1),

@@ -1,4 +1,4 @@
-//! Next: the ranked suggestions, each with the reason it exists. A uniform list of fixed-height rows, like Zed's.
+//! Home: the ranked suggestions, each with the reason it exists. A uniform list of fixed-height rows, like Zed's.
 //!
 //! Clicking a row opens its ticket at the tab that matters; the primary action is the button on hover. Snooze and dismiss are icon buttons
 //! that appear on hover; what a suggestion is (hotfix, automatic, sends to a remote) is an icon with a tooltip.
@@ -254,6 +254,22 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
         )
 }
 
+/// A small label above a group of rows, optionally with a coloured dot.
+fn section_label(ui: &Ui, text: String, dot_color: Option<Hsla>) -> Div {
+    let pal = &ui.pal;
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .flex_none()
+        .h_8()
+        .px_4()
+        .text_xs()
+        .text_color(pal.muted)
+        .when_some(dot_color, |d, c| d.child(dot(c)))
+        .child(text)
+}
+
 /// The whole screen: a search field and the dismissed/snoozed toggle, then a uniform list that fills the rest.
 pub fn next(ui: &Ui, inputs: &Inputs, vm: &NextVm) -> AnyElement {
     let pal = &ui.pal;
@@ -288,25 +304,68 @@ pub fn next(ui: &Ui, inputs: &Inputs, vm: &NextVm) -> AnyElement {
                 .child(inputs.search(&Field::NextFilter)),
         )
         .child(menu);
-    let body = if vm.cards.is_empty() {
+    // What needs you is pinned above the rest, so it is the first thing seen and never scrolls away. Dismissed and
+    // snoozed rows (shown on request) belong to the rest.
+    let (urgent, rest): (Vec<SuggestionCard>, Vec<SuggestionCard>) = vm
+        .cards
+        .iter()
+        .cloned()
+        .partition(|c| c.attention && matches!(c.state, SugState::Open | SugState::Resurfaced));
+    let pinned = (!urgent.is_empty()).then(|| {
+        div()
+            .flex()
+            .flex_col()
+            .flex_none()
+            .bg(pal.bad.opacity(0.06))
+            .border_b_1()
+            .border_color(pal.border)
+            .child(section_label(
+                ui,
+                format!("Needs attention · {}", urgent.len()),
+                Some(pal.bad),
+            ))
+            .child(
+                div()
+                    .id("attention-rows")
+                    .flex()
+                    .flex_col()
+                    .max_h(px(ROW_H * 4.0))
+                    .overflow_y_scroll()
+                    .children(urgent.iter().map(|c| suggestion_row(ui, c))),
+            )
+    });
+    let body = if rest.is_empty() && pinned.is_none() {
         empty_state(pal, "Nothing to do.").into_any_element()
+    } else if rest.is_empty() {
+        div().flex_1().into_any_element()
     } else {
-        let cards = Rc::new(vm.cards.clone());
-        let ui = ui.clone();
-        uniform_list("next-list", cards.len(), move |range, _, _| {
-            range
-                .map(|i| suggestion_row(&ui, &cards[i]))
-                .collect::<Vec<_>>()
-        })
-        .w_full()
-        .flex_1()
-        .into_any_element()
+        let cards = Rc::new(rest);
+        let list_ui = ui.clone();
+        div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h_0()
+            .when(pinned.is_some(), |d| {
+                d.child(section_label(ui, "Up next".to_string(), None))
+            })
+            .child(
+                uniform_list("next-list", cards.len(), move |range, _, _| {
+                    range
+                        .map(|i| suggestion_row(&list_ui, &cards[i]))
+                        .collect::<Vec<_>>()
+                })
+                .w_full()
+                .flex_1(),
+            )
+            .into_any_element()
     };
     div()
         .flex()
         .flex_col()
         .size_full()
         .child(header)
+        .children(pinned)
         .child(body)
         .into_any_element()
 }

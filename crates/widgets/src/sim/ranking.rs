@@ -18,6 +18,7 @@ use super::rules::{Rule, Sug};
 pub const POLICY: &[Criterion] = &[
     Criterion::Blocking,
     Criterion::Hotfix,
+    Criterion::NeedsAttention,
     Criterion::Actionable,
     Criterion::Band,
     Criterion::TicketPriority,
@@ -30,6 +31,8 @@ pub enum Criterion {
     Blocking,
     /// A hotfix you can act on now.
     Hotfix,
+    /// Someone is waiting or something broke (`Rule::needs_attention`) and there is an action for it.
+    NeedsAttention,
     /// There is something to do, as opposed to something to know. Information never outranks an action.
     Actionable,
     /// How important the rule is on its own (`Rule::band`).
@@ -45,6 +48,7 @@ impl Criterion {
         match self {
             Criterion::Blocking => i64::from(s.rule.is_blocking()),
             Criterion::Hotfix => i64::from(s.hotfix && !s.info && s.rule.is_boosted_by_hotfix()),
+            Criterion::NeedsAttention => i64::from(!s.info && s.rule.needs_attention()),
             Criterion::Actionable => i64::from(!s.info),
             Criterion::Band => i64::from(s.rule.band()),
             Criterion::TicketPriority => match s.ticket_priority {
