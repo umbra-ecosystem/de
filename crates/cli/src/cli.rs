@@ -308,10 +308,18 @@ pub enum TicketCommands {
     },
 
     /// Set the active ticket aside, restoring the repos and reverting the overlay.
-    Park,
+    Park {
+        /// The ticket. Defaults to the active one, or the one an interrupted activation
+        /// left work to undo for.
+        key: Option<TicketKey>,
+    },
 
     /// Deactivate the active ticket, restoring the repos and reverting the overlay.
     Deactivate {
+        /// The ticket. Defaults to the active one, or the one an interrupted activation
+        /// left work to undo for.
+        key: Option<TicketKey>,
+
         /// The status to move the ticket to. Defaults to parked.
         #[arg(long)]
         status: Option<LocalStatus>,

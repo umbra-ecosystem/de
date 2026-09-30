@@ -11,13 +11,13 @@ use de_core::{
         WorkspaceRepo, activate, deactivate, find_matches,
     },
     domain::{BaselineChoice, LocalStatus, RepoLinkOrigin, TicketKey, TicketKind},
-    overlay::ProcessRunner,
+    overlay::{ProcessRunner, RevertOutcome},
     store::{
         Kind, Store,
         jira_cache::{self, JiraTicket},
         links::{self, RepoLink},
         notes::{self, ChecklistItem, Note},
-        overlays, tickets, time,
+        overlays, restore, tickets, time,
     },
 };
 use dialoguer::Select;
@@ -167,8 +167,8 @@ pub fn render_list(rows: &[ListRow]) -> Vec<String> {
             format!(
                 "{:<key_width$}  {:<status_width$}  {:<7}  {:>8}  {}",
                 row.key,
-                row.status,
-                row.kind,
+                row.status.as_str(),
+                row.kind.as_str(),
                 format_duration(row.seconds),
                 row.title.as_deref().unwrap_or("")
             )
@@ -507,10 +507,7 @@ pub fn render_activation(report: &ActivationReport) -> Vec<String> {
         };
         lines.push(format!("{:<width$}  {arrow}  ({role}; {was})", repo.repo));
         if let Some(stash) = &repo.stash {
-            lines.push(format!(
-                "{:<width$}    stashed local changes as '{}'",
-                "", stash.label
-            ));
+            lines.push(format!("    stashed local changes as '{}'", stash.label));
         }
         if let Some(ff) = &repo.fast_forward {
             use de_core::git::FastForward::*;
@@ -526,16 +523,13 @@ pub fn render_activation(report: &ActivationReport) -> Vec<String> {
                 }
                 NoUpstream => "no upstream".to_string(),
             };
-            lines.push(format!("{:<width$}    {text}", ""));
+            lines.push(format!("    {text}"));
         }
         for package in &repo.overlaid {
-            lines.push(format!(
-                "{:<width$}    test overlay: {package} -> provider checkout",
-                ""
-            ));
+            lines.push(format!("    test overlay: {package} -> provider checkout"));
         }
         for task in &repo.tasks_run {
-            lines.push(format!("{:<width$}    ran {task}", ""));
+            lines.push(format!("    ran {task}"));
         }
     }
     lines
@@ -591,7 +585,17 @@ pub fn render_deactivation(report: &DeactivationReport) -> Vec<String> {
     let mut lines = Vec::new();
 
     for (repo, outcome) in &report.overlays {
-        lines.push(format!("{repo}: test overlay reverted ({outcome:?})"));
+        lines.push(match outcome {
+            RevertOutcome::Reverted { lock_removed: true } => format!(
+                "{repo}: test overlay reverted (composer.lock did not exist before; removed)"
+            ),
+            RevertOutcome::Reverted {
+                lock_removed: false,
+            } => {
+                format!("{repo}: test overlay reverted, composer files restored")
+            }
+            RevertOutcome::NothingToRevert => format!("{repo}: no test overlay to revert"),
+        });
     }
     for repo in &report.repos {
         let mut line = format!("{}: back on {}", repo.repo, repo.restored_to);
@@ -641,16 +645,51 @@ fn print_deactivation(ui: &UserInterface, report: &DeactivationReport) -> eyre::
     Ok(())
 }
 
+/// Which ticket to deactivate: the one named, else the active one, else the only one an
+/// interrupted activation left restore points for (a crash or a rollback that could not finish).
+pub fn pick_ticket_to_deactivate(
+    explicit: Option<TicketKey>,
+    active: Option<TicketKey>,
+    with_leftovers: &[TicketKey],
+) -> eyre::Result<TicketKey> {
+    if let Some(key) = explicit.or(active) {
+        return Ok(key);
+    }
+    match with_leftovers {
+        [] => bail!("No ticket is active"),
+        [only] => Ok(only.clone()),
+        many => bail!(
+            "An earlier activation was left unfinished for several tickets ({}); name one",
+            many.iter()
+                .map(TicketKey::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
 /// `de ticket deactivate` and `de ticket park`.
-pub fn deactivate_cmd(status: Option<LocalStatus>) -> eyre::Result<()> {
+pub fn deactivate_cmd(key: Option<TicketKey>, status: Option<LocalStatus>) -> eyre::Result<()> {
     let ui = UserInterface::new();
     let state = open_state()?;
-    let active = tickets::active(&state)?.ok_or_else(|| eyre!("No ticket is active"))?;
+
+    let mut with_leftovers: Vec<TicketKey> = restore::list_all(&state)?
+        .into_iter()
+        .map(|r| r.ticket)
+        .chain(overlays::list_all(&state)?.into_iter().map(|o| o.ticket))
+        .collect();
+    with_leftovers.sort();
+    with_leftovers.dedup();
+    let key = pick_ticket_to_deactivate(
+        key,
+        tickets::active(&state)?.map(|t| t.key),
+        &with_leftovers,
+    )?;
 
     let report = deactivate(
         &state,
         &ProcessRunner::new(),
-        &active.key,
+        &key,
         status.unwrap_or(LocalStatus::Parked),
         now()?,
     )?;
@@ -795,6 +834,12 @@ mod tests {
         let offset = lines[0].find("STATUS").unwrap();
         assert!(lines[1][offset..].starts_with("active"));
         assert!(lines[2][offset..].starts_with("parked"));
+        let kind = lines[0].find("KIND").unwrap();
+        assert!(lines[1][kind..].starts_with("normal"), "{}", lines[1]);
+        assert!(lines[2][kind..].starts_with("hotfix"), "{}", lines[2]);
+        let time = lines[0].find("TIME").unwrap();
+        assert!(lines[1][..time + 4].ends_with("1h 05m"), "{}", lines[1]);
+        assert!(lines[2][..time + 4].ends_with("<1m"), "{}", lines[2]);
     }
 
     fn link_row(repo: &str, branch: Option<&str>, origin: RepoLinkOrigin) -> RepoLink {
@@ -981,6 +1026,29 @@ mod tests {
             (BaselineChoice::Uat, None)
         );
         assert!(resolve_baseline(TicketKind::Hotfix, None, || Err(eyre!("no terminal"))).is_err());
+    }
+
+    #[test]
+    fn the_ticket_to_deactivate_is_named_active_or_the_one_left_unfinished() {
+        let (a, b) = (key("PROJ-1"), key("PROJ-2"));
+        // Named wins, then the active one.
+        assert_eq!(
+            pick_ticket_to_deactivate(Some(b.clone()), Some(a.clone()), &[]).unwrap(),
+            b
+        );
+        assert_eq!(
+            pick_ticket_to_deactivate(None, Some(a.clone()), std::slice::from_ref(&b)).unwrap(),
+            a
+        );
+        // Nothing active: the single ticket with leftovers (crash recovery).
+        assert_eq!(
+            pick_ticket_to_deactivate(None, None, std::slice::from_ref(&b)).unwrap(),
+            b
+        );
+        let err = pick_ticket_to_deactivate(None, None, &[]).unwrap_err();
+        assert!(err.to_string().contains("No ticket is active"));
+        let err = pick_ticket_to_deactivate(None, None, &[a, b]).unwrap_err();
+        assert!(err.to_string().contains("PROJ-1, PROJ-2"), "{err}");
     }
 
     #[test]

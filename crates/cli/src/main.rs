@@ -59,8 +59,10 @@ fn main() -> eyre::Result<()> {
                 fetch,
                 workspace,
             } => commands::ticket::activate_cmd(key, baseline, fetch, workspace),
-            TicketCommands::Park => commands::ticket::deactivate_cmd(None),
-            TicketCommands::Deactivate { status } => commands::ticket::deactivate_cmd(status),
+            TicketCommands::Park { key } => commands::ticket::deactivate_cmd(key, None),
+            TicketCommands::Deactivate { key, status } => {
+                commands::ticket::deactivate_cmd(key, status)
+            }
             TicketCommands::Note { key, text } => commands::ticket::note(key, text),
             TicketCommands::Check { command } => commands::ticket::check(command),
         },
