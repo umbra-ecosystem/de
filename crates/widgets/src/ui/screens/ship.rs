@@ -68,6 +68,26 @@ fn step(ui: &Ui, index: usize, title: &str, state: StepState, body: Div) -> Div 
         .child(div().pl_6().child(body))
 }
 
+/// A soft notice (overlap, new commits, uat moved): one quiet line with a coloured icon, never a box.
+fn quiet(ui: &Ui, tone: Tone, text: impl Into<SharedString>) -> Div {
+    let pal = &ui.pal;
+    div()
+        .flex()
+        .items_start()
+        .gap_2()
+        .py_1()
+        .text_xs()
+        .text_color(pal.muted)
+        .child(
+            div().flex_none().pt_0p5().child(
+                Icon::new(IconName::TriangleAlert)
+                    .small()
+                    .text_color(pal.tone(tone)),
+            ),
+        )
+        .child(div().flex_1().min_w_0().child(text.into()))
+}
+
 fn row(ui: &Ui) -> Div {
     div()
         .flex()
@@ -102,12 +122,10 @@ fn integrate(ui: &Ui, b: &IntegrateBody) -> Div {
                     .child(faint(pal, at.clone()))
             })))
             .when(*new_commits, |d| {
-                d.child(warn_box(
-                    pal,
+                d.child(quiet(
+                    ui,
                     Tone::Warn,
-                    [div()
-                        .child("⚠ New commits on the ticket branches are not on uat. Activate the ticket again to re-merge.")
-                        .into_any_element()],
+                    "New commits on the ticket branches are not on uat. Activate the ticket again to re-merge.",
                 ))
             }),
         IntegrateBody::Active { prep, prepush, prepare, push } => div()
@@ -153,14 +171,25 @@ fn integrate(ui: &Ui, b: &IntegrateBody) -> Div {
 fn prep_row(ui: &Ui, r: &PrepRow) -> Div {
     let pal = &ui.pal;
     match r {
-        PrepRow::Ready { repo, commits, files, uat_before, merge, overlaps } => div()
+        PrepRow::Ready {
+            repo,
+            commits,
+            files,
+            uat_before,
+            merge,
+            overlaps,
+        } => div()
             .flex()
             .flex_col()
             .child(
                 row(ui)
                     .child(repo_cell(ui, repo))
                     .child(pill(pal, &Badge::new("merge ready", Tone::Ok)))
-                    .child(div().text_sm().child(format!("+{commits} commits · {files} files")))
+                    .child(
+                        div()
+                            .text_sm()
+                            .child(format!("+{commits} commits · {files} files")),
+                    )
                     .child(
                         div()
                             .font_family(ui.mono.clone())
@@ -170,22 +199,32 @@ fn prep_row(ui: &Ui, r: &PrepRow) -> Div {
                     ),
             )
             .when(!overlaps.is_empty(), |d| {
-                d.child(warn_box(
-                    pal,
+                d.child(quiet(
+                    ui,
                     Tone::Warn,
-                    [div()
-                        .child(format!(
-                            "⚠ Overlaps with {} already on uat. Not a conflict, but check the combined behaviour.",
-                            overlaps.join(", ")
-                        ))
-                        .into_any_element()],
+                    format!(
+                        "Also changed by {} on uat. Not a conflict; check the combined behaviour.",
+                        overlaps.join(", ")
+                    ),
                 ))
             }),
         PrepRow::AlreadyPushed { repo, commit } => row(ui)
             .child(repo_cell(ui, repo))
             .child(pill(pal, &Badge::new("already pushed", Tone::Ok)))
-            .child(div().font_family(ui.mono.clone()).text_xs().text_color(pal.faint).child(commit.clone())),
-        PrepRow::Conflict { repo, with, files, comment, sent } => row(ui)
+            .child(
+                div()
+                    .font_family(ui.mono.clone())
+                    .text_xs()
+                    .text_color(pal.faint)
+                    .child(commit.clone()),
+            ),
+        PrepRow::Conflict {
+            repo,
+            with,
+            files,
+            comment,
+            sent,
+        } => row(ui)
             .child(repo_cell(ui, repo))
             .child(pill(pal, &Badge::new("conflict", Tone::Bad)))
             .child(div().text_sm().flex_1().min_w_0().child(format!(
@@ -193,7 +232,10 @@ fn prep_row(ui: &Ui, r: &PrepRow) -> Div {
             )))
             .when_some(comment.clone(), |d, a| d.child(button(ui, &a)))
             .when_some(sent.clone(), |d, at| {
-                d.child(pill(pal, &Badge::new(format!("comment sent {at}"), Tone::Ok)))
+                d.child(pill(
+                    pal,
+                    &Badge::new(format!("comment sent {at}"), Tone::Ok),
+                ))
             }),
         PrepRow::Blocked { repo, reason } => row(ui)
             .child(repo_cell(ui, repo))
@@ -249,11 +291,7 @@ fn runs(ui: &Ui, cx: &App, s: &ShipVm) -> Div {
                 })
         }))
         .when_some(s.uat_moved.clone(), |d, m| {
-            d.child(warn_box(
-                pal,
-                Tone::Warn,
-                [div().child(format!("⚠ {m}")).into_any_element()],
-            ))
+            d.child(quiet(ui, Tone::Warn, m))
         })
 }
 

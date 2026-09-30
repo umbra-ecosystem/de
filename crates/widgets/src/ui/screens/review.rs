@@ -2,6 +2,7 @@
 //! filling the screen; the tab strip above stays put.
 
 use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -393,6 +394,27 @@ fn diff_pane(ui: &Ui, inputs: &Inputs, r: &ReviewVm) -> Div {
 }
 
 /// One line above the panes: which pull request, where it goes, who reviews it, how to show the diff.
+/// "Overlaps uat" as a quiet marker in the toolbar; what overlaps is in its tooltip.
+fn overlap_hint(ui: &Ui, b: &BannerVm) -> Stateful<Div> {
+    let pal = &ui.pal;
+    let tip = b.lines.join("\n");
+    div()
+        .id("uat-overlap")
+        .flex()
+        .items_center()
+        .gap_1()
+        .flex_none()
+        .text_xs()
+        .text_color(pal.muted)
+        .child(
+            Icon::new(IconName::TriangleAlert)
+                .small()
+                .text_color(pal.tone(b.tone)),
+        )
+        .child("Overlaps uat")
+        .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+}
+
 fn toolbar(ui: &Ui, r: &ReviewVm) -> Div {
     let pal = &ui.pal;
     div()
@@ -455,6 +477,9 @@ fn toolbar(ui: &Ui, r: &ReviewVm) -> Div {
             )
         })
         .child(div().flex_1())
+        .when_some(r.uat.clone().filter(|b| b.tone != Tone::Bad), |d, b| {
+            d.child(overlap_hint(ui, &b))
+        })
         .when_some(r.since_toggle.clone(), |d, (a, b, since)| {
             d.child(
                 div()
@@ -532,7 +557,13 @@ pub fn review(ui: &Ui, _cx: &App, inputs: &Inputs, r: &ReviewVm) -> Div {
         .gap_2()
         .px_6()
         .py_2()
-        .children(r.uat.iter().map(|b| notice(ui, b)))
+        // Only a conflict interrupts the page; a mere overlap is a hint in the toolbar.
+        .children(
+            r.uat
+                .iter()
+                .filter(|b| b.tone == Tone::Bad)
+                .map(|b| notice(ui, b)),
+        )
         .children(r.stale.iter().map(|b| notice(ui, b)));
     if r.empty {
         return div().flex().flex_col().size_full().child(notices).child(
@@ -546,7 +577,10 @@ pub fn review(ui: &Ui, _cx: &App, inputs: &Inputs, r: &ReviewVm) -> Div {
         .flex()
         .flex_col()
         .size_full()
-        .when(r.uat.is_some() || r.stale.is_some(), |d| d.child(notices))
+        .when(
+            r.uat.as_ref().is_some_and(|b| b.tone == Tone::Bad) || r.stale.is_some(),
+            |d| d.child(notices),
+        )
         .child(toolbar(ui, r))
         .child(
             div()
