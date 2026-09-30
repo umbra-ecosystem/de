@@ -1,0 +1,14 @@
+{
+  "page": 1, "pagelen": 100, "size": 4,
+  "next": "https://api.bitbucket.org/2.0/repositories/acme/web/pipelines/?page=2&pagelen=100&sort=-created_on",
+  "values": [
+    {"type": "pipeline", "uuid": "{aaaaaaaa-0000-0000-0000-000000000004}", "build_number": 204,
+     "state": {"name": "IN_PROGRESS", "stage": {"name": "RUNNING"}},
+     "target": {"type": "pipeline_ref_target", "ref_type": "branch", "ref_name": "uat", "commit": {"type": "commit", "hash": "fedcba9876543210fedcba9876543210fedcba98"}, "selector": {"type": "branch", "pattern": "uat"}},
+     "created_on": "2026-09-05T10:00:00.000Z"},
+    {"type": "pipeline", "uuid": "{aaaaaaaa-0000-0000-0000-000000000003}", "build_number": 203,
+     "state": {"name": "COMPLETED", "result": {"name": "SUCCESSFUL"}},
+     "target": {"type": "pipeline_ref_target", "ref_type": "branch", "ref_name": "uat", "commit": {"type": "commit", "hash": "abcdef1234567890abcdef1234567890abcdef12"}, "selector": {"type": "branch", "pattern": "uat"}},
+     "created_on": "2026-09-05T09:00:00.000Z", "completed_on": "2026-09-05T09:10:30.000Z"}
+  ]
+}

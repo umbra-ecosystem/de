@@ -1,0 +1,9 @@
+{
+  "type": "pullrequest_comment",
+  "id": 950,
+  "content": {"raw": "line \"one\"\nline two ✓"},
+  "user": {"display_name": "Me", "nickname": "me", "account_id": "557058:me"},
+  "created_on": "2026-09-05T08:00:00.000000+00:00",
+  "deleted": false,
+  "inline": {"path": "src/a.php", "from": null, "to": 12}
+}

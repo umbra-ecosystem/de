@@ -1,0 +1,4 @@
+{"type": "pipeline", "uuid": "{aaaaaaaa-0000-0000-0000-000000000003}", "build_number": 203,
+ "state": {"name": "COMPLETED", "result": {"name": "SUCCESSFUL"}},
+ "target": {"type": "pipeline_ref_target", "ref_type": "branch", "ref_name": "uat", "commit": {"type": "commit", "hash": "abcdef1234567890abcdef1234567890abcdef12"}, "selector": {"type": "branch", "pattern": "uat"}},
+ "created_on": "2026-09-05T09:00:00.000Z", "completed_on": "2026-09-05T09:10:30.000Z"}

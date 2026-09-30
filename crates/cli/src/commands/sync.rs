@@ -486,8 +486,12 @@ mod tests {
     fn run_sync_reports_an_unavailable_adapter_per_source() {
         let (state, cache) = stores();
         let config = Config::parse("[jira]\nreview_jql = \"q\"\n").unwrap();
-        // What the registry returns until the adapters exist.
-        let providers = Providers::from_config(&config);
+        // Built explicitly (not from the registry) so the test does not depend on whether
+        // `acli`/`bkt` happen to be installed on the machine running it.
+        let providers = Providers {
+            jira: Err(ProviderError::not_installed("acli", "acli is not installed")),
+            code_host: Err(ProviderError::not_installed("bkt", "bkt is not installed")),
+        };
         let ctx = SyncContext {
             state: &state,
             cache: &cache,
