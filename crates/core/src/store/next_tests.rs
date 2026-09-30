@@ -58,7 +58,10 @@ fn the_next_action_migration_upgrades_a_v6_database_keeping_its_rows() {
     assert!(responses::latest_map(&store).unwrap().is_empty());
     assert!(reviews::get(&store, &key()).unwrap().is_none());
     reviews::mark(&store, &key(), &BTreeMap::new(), 3).unwrap();
-    assert_eq!(reviews::get(&store, &key()).unwrap().unwrap().reviewed_at, 3);
+    assert_eq!(
+        reviews::get(&store, &key()).unwrap().unwrap().reviewed_at,
+        3
+    );
 }
 
 #[test]
@@ -74,7 +77,10 @@ fn a_review_mark_round_trips_is_replaced_cleared_and_follows_the_ticket() {
     assert_eq!((got.reviewed_at, got.heads), (5, heads));
 
     reviews::mark(&store, &key(), &BTreeMap::new(), 9).unwrap();
-    assert_eq!(reviews::get(&store, &key()).unwrap().unwrap().reviewed_at, 9);
+    assert_eq!(
+        reviews::get(&store, &key()).unwrap().unwrap().reviewed_at,
+        9
+    );
     assert!(reviews::clear(&store, &key()).unwrap());
     assert!(!reviews::clear(&store, &key()).unwrap());
 
@@ -102,7 +108,9 @@ fn response_history_is_kept_and_the_latest_wins() {
 fn only_a_snooze_has_a_snooze_time() {
     let store = Store::open_in_memory(Kind::State).unwrap();
     assert!(responses::record(&store, &response("a", ResponseKind::Snoozed, None, 1)).is_err());
-    assert!(responses::record(&store, &response("a", ResponseKind::Dismissed, Some(5), 1)).is_err());
+    assert!(
+        responses::record(&store, &response("a", ResponseKind::Dismissed, Some(5), 1)).is_err()
+    );
     assert!(
         store
             .conn()

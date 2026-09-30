@@ -11,9 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use eyre::Context;
 
 use super::snapshot::{
-    Availability, Checklist, DeployInfo, DraftInfo, MergeInfo, Mention, PrInfo,
-    PrepRepo, PrepSnapshot, PrepState, ReviewState, Snapshot, SourceState, StatusNames,
-    SyncSnapshot, TicketSnapshot, Tracking, Writers, is_testing_complete, status_is,
+    Availability, Checklist, DeployInfo, DraftInfo, Mention, MergeInfo, PrInfo, PrepRepo,
+    PrepSnapshot, PrepState, ReviewState, Snapshot, SourceState, StatusNames, SyncSnapshot,
+    TicketSnapshot, Tracking, Writers, is_testing_complete, status_is,
 };
 use crate::{
     activation::WorkspaceRepo,
@@ -333,10 +333,8 @@ fn fill_tracked(
     let tracking_updated = t.tracking.as_ref().map(|tr| tr.updated_at);
     t.last_handled_at = entries.first().map(|e| e.at).max(tracking_updated);
 
-    let alpha_reached = matches!(
-        status,
-        Some(LocalStatus::Integrated | LocalStatus::Done)
-    ) || !t.merges.is_empty()
+    let alpha_reached = matches!(status, Some(LocalStatus::Integrated | LocalStatus::Done))
+        || !t.merges.is_empty()
         || t.transition_posted_at.is_some();
     t.testing_complete = is_testing_complete(statuses, t.jira_status.as_deref(), alpha_reached);
     Ok(())
@@ -363,14 +361,25 @@ impl Snapshot {
             .iter()
             .filter(|j| !tracked.iter().any(|tr| tr.key == j.key))
         {
-            out.push(base_snapshot(ctx, &statuses, me.as_deref(), &j.key, Some(j), None)?);
+            out.push(base_snapshot(
+                ctx,
+                &statuses,
+                me.as_deref(),
+                &j.key,
+                Some(j),
+                None,
+            )?);
         }
 
         let mut expected = Vec::new();
         if ctx.config.jira.is_some() {
             expected.push(sync_state::JIRA.to_string());
         }
-        expected.extend(ctx.hosted.iter().map(|h| sync_state::code_host_source(&h.repo)));
+        expected.extend(
+            ctx.hosted
+                .iter()
+                .map(|h| sync_state::code_host_source(&h.repo)),
+        );
         let states = sync_state::list(ctx.cache)?
             .into_iter()
             .map(|s| SourceState {

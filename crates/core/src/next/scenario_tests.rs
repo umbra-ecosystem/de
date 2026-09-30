@@ -15,9 +15,7 @@ use crate::{
     config::Config,
     domain::{LocalStatus, TicketKey},
     gateway::{Gateway, PushReport},
-    integration::{
-        execute_push, finalize_integration, prepare_integration,
-    },
+    integration::{execute_push, finalize_integration, prepare_integration},
     providers::{
         CodeHost, PipelineState, RemoteComment, Reviewer, TicketProvider,
         fake::{
@@ -26,8 +24,9 @@ use crate::{
         },
     },
     store::{
-        Kind, Store, drafts::{self, DraftKind, DraftStatus}, notes, prs, suggestion_responses,
-        tickets, uat_merges,
+        Kind, Store,
+        drafts::{self, DraftKind, DraftStatus},
+        notes, prs, suggestion_responses, tickets, uat_merges,
     },
     sync::{DEFAULT_MIN_INTERVAL, HostedRepo, SyncContext, sync_all, uat_commits},
     testsupport::{Fixture, key},
@@ -54,21 +53,29 @@ impl World {
         fx.api_client.add_uat();
         fx.worker.add_uat();
 
-        let hosted = [(&fx.api_client, "acme/api-client"), (&fx.worker, "acme/worker")]
-            .into_iter()
-            .map(|(r, host)| HostedRepo {
-                project: r.name.clone(),
-                repo: host.into(),
-                dir: r.dir.clone(),
-                branches: Default::default(),
-                deploy_environment: Some("alpha".into()),
-            })
-            .collect();
+        let hosted = [
+            (&fx.api_client, "acme/api-client"),
+            (&fx.worker, "acme/worker"),
+        ]
+        .into_iter()
+        .map(|(r, host)| HostedRepo {
+            project: r.name.clone(),
+            repo: host.into(),
+            dir: r.dir.clone(),
+            branches: Default::default(),
+            deploy_environment: Some("alpha".into()),
+        })
+        .collect();
 
         let jira = FakeJira::new();
         jira.on_search("REVIEW", vec![ticket("PROJ-1", "In Review")]);
         let bb = FakeBitbucket::new();
-        bb.add_pr(pr("acme/api-client", 1, "feature/PROJ-1-api-change", "develop"));
+        bb.add_pr(pr(
+            "acme/api-client",
+            1,
+            "feature/PROJ-1-api-change",
+            "develop",
+        ));
         bb.add_pr(pr("acme/worker", 2, "feature/PROJ-1-work", "develop"));
 
         Self {
@@ -230,7 +237,13 @@ impl World {
 
     fn pipeline(&self, project: &str, id: &str, state: PipelineState) {
         let host = format!("acme/{project}");
-        let mut r = run(&host, id, "uat", &self.merge_commit(project), self.now.get());
+        let mut r = run(
+            &host,
+            id,
+            "uat",
+            &self.merge_commit(project),
+            self.now.get(),
+        );
         r.state = state.clone();
         r.number = Some(3);
         r.steps[0].state = state;
@@ -250,7 +263,12 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     // 1. The ticket is in Review: claim it.
     w.sync();
     let claim = w.assert_top(RuleId::ClaimNew);
-    assert_eq!(claim.action, SuggestedAction::Claim { ticket: w.ticket.clone() });
+    assert_eq!(
+        claim.action,
+        SuggestedAction::Claim {
+            ticket: w.ticket.clone()
+        }
+    );
     w.run_local(&claim);
     assert_eq!(w.status(), LocalStatus::Claimed);
     w.assert_absent(RuleId::ClaimNew);
@@ -265,7 +283,9 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     let finish = w.assert_top(RuleId::FinishReview);
     w.run_local(&finish);
     w.assert_absent(RuleId::FinishReview);
-    let mark = crate::store::reviews::get(&w.fx.store, &w.ticket).unwrap().unwrap();
+    let mark = crate::store::reviews::get(&w.fx.store, &w.ticket)
+        .unwrap()
+        .unwrap();
     assert_eq!(mark.heads.len(), 2, "both branch tips were recorded");
     w.assert_absent(RuleId::ReReview);
 
@@ -273,7 +293,10 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     let activate = w.assert_top(RuleId::ActivateReviewed);
     assert_eq!(
         activate.action,
-        SuggestedAction::Activate { ticket: w.ticket.clone(), baseline: None }
+        SuggestedAction::Activate {
+            ticket: w.ticket.clone(),
+            baseline: None
+        }
     );
     assert!(matches!(w.run_local(&activate), LocalOutcome::Activated(_)));
     assert_eq!(w.status(), LocalStatus::Active);
@@ -293,7 +316,9 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     let integrate = w.assert_top(RuleId::IntegrateReady);
     assert_eq!(
         integrate.action,
-        SuggestedAction::RunIntegrationPrepare { ticket: w.ticket.clone() }
+        SuggestedAction::RunIntegrationPrepare {
+            ticket: w.ticket.clone()
+        }
     );
 
     // The preparation, the confirmed push and the finalize are the integration flow's own.
@@ -313,8 +338,15 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     let draft = gateway.draft(prep.push_action().unwrap());
     let (report, _): (PushReport, _) = execute_push(&gateway, draft.confirm(), w.tick()).unwrap();
     assert!(report.all_done());
-    finalize_integration(&w.fx.store, &w.fx.runner, w.data.path(), &prep, &repos, w.tick())
-        .unwrap();
+    finalize_integration(
+        &w.fx.store,
+        &w.fx.runner,
+        w.data.path(),
+        &prep,
+        &repos,
+        w.tick(),
+    )
+    .unwrap();
     assert_eq!(w.status(), LocalStatus::Integrated);
     w.assert_absent(RuleId::IntegrateReady);
     w.assert_absent(RuleId::RevertOverlay);
@@ -332,7 +364,10 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     w.pipeline("api-client", "{a1}", PipelineState::Failed);
     w.sync();
     let failed = w.assert_top(RuleId::DeployFailed);
-    assert!(matches!(failed.action, SuggestedAction::OpenPipeline { .. }));
+    assert!(matches!(
+        failed.action,
+        SuggestedAction::OpenPipeline { .. }
+    ));
     w.assert_absent(RuleId::DeployWaiting);
     let rerun = w
         .list()
@@ -340,7 +375,10 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
         .find(|s| matches!(s.action, SuggestedAction::Gateway(_)))
         .unwrap();
     assert_eq!(rerun.level, ExecutionLevel::ConfirmedExternal);
-    assert!(matches!(w.run_external(&rerun), ExternalOutcome::Executed(_)));
+    assert!(matches!(
+        w.run_external(&rerun),
+        ExternalOutcome::Executed(_)
+    ));
     assert_eq!(w.bb.log().count("rerun_pipeline"), 1);
 
     w.pipeline("api-client", "{a1}", PipelineState::Succeeded);
@@ -350,7 +388,10 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     let compose = w.assert_top(RuleId::ComposeDeployComment);
     assert_eq!(
         compose.action,
-        SuggestedAction::ComposeDeployComment { ticket: w.ticket.clone(), partial: false }
+        SuggestedAction::ComposeDeployComment {
+            ticket: w.ticket.clone(),
+            partial: false
+        }
     );
 
     // 6. The draft is composed, then posted, then the transition.
@@ -359,18 +400,29 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     let post = w.assert_top(RuleId::PostDeployComment);
     assert_eq!(post.level, ExecutionLevel::ConfirmedExternal);
     assert_eq!(w.jira.log().writes().len(), 0, "drafting wrote nothing");
-    assert!(matches!(w.run_external(&post), ExternalOutcome::CommentPosted(_)));
+    assert!(matches!(
+        w.run_external(&post),
+        ExternalOutcome::CommentPosted(_)
+    ));
     assert_eq!(w.jira.log().count("add_comment"), 1);
     assert!(
-        drafts::latest(&w.fx.store, &w.ticket, DraftKind::DeployComment, DraftStatus::Posted)
-            .unwrap()
-            .is_some()
+        drafts::latest(
+            &w.fx.store,
+            &w.ticket,
+            DraftKind::DeployComment,
+            DraftStatus::Posted
+        )
+        .unwrap()
+        .is_some()
     );
     w.assert_absent(RuleId::PostDeployComment);
     w.assert_absent(RuleId::ComposeDeployComment);
 
     let transition = w.assert_top(RuleId::TransitionAlpha);
-    assert!(matches!(w.run_external(&transition), ExternalOutcome::Transitioned));
+    assert!(matches!(
+        w.run_external(&transition),
+        ExternalOutcome::Transitioned
+    ));
     assert_eq!(w.jira.ticket(&w.ticket).unwrap().status, "Alpha Testing");
     w.assert_absent(RuleId::TransitionAlpha);
     w.sync();
@@ -386,7 +438,10 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     let again = w.assert_top(RuleId::RemergeNeeded);
     assert_eq!(
         again.action,
-        SuggestedAction::Activate { ticket: w.ticket.clone(), baseline: None }
+        SuggestedAction::Activate {
+            ticket: w.ticket.clone(),
+            baseline: None
+        }
     );
     assert!(again.reason.contains("api-client"));
 
@@ -429,7 +484,11 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     w.jira.set_comments(&w.ticket, vec![second]);
     w.sync();
     let visible = next_actions(&w.snapshot(), &responses, w.now.get());
-    assert_eq!(visible[0].rule, RuleId::ReturnedMention, "new facts resurface it");
+    assert_eq!(
+        visible[0].rule,
+        RuleId::ReturnedMention,
+        "new facts resurface it"
+    );
 
     // 9. Back through UAT: signed off, so the PRs can be approved.
     let mut signed_off = ticket("PROJ-1", "UAT");
@@ -440,7 +499,10 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
     w.assert_absent(RuleId::ReturnedMention);
     let approve = w.assert_top(RuleId::ApprovePrs);
     assert_eq!(approve.facts["repo"], "acme/api-client");
-    assert!(matches!(w.run_external(&approve), ExternalOutcome::Executed(_)));
+    assert!(matches!(
+        w.run_external(&approve),
+        ExternalOutcome::Executed(_)
+    ));
     assert_eq!(w.bb.log().args_of("approve"), ["acme/api-client #1"]);
 
     // The host now shows my approval; only the other PR is left.
@@ -483,7 +545,10 @@ fn an_unavailable_writer_shows_up_as_a_note_when_loading() {
         gateway: &gateway,
     })
     .unwrap();
-    assert!(matches!(snapshot.writers.jira, Availability::Unavailable(_)));
+    assert!(matches!(
+        snapshot.writers.jira,
+        Availability::Unavailable(_)
+    ));
     assert!(snapshot.writers.code_host.is_ready());
 }
 
@@ -523,8 +588,15 @@ fn a_prepared_conflict_is_shown_until_the_branch_moves() {
 
     let list = w.list();
     assert_eq!(list[0].rule, RuleId::IntegrationBlocked);
-    assert!(matches!(list[0].action, SuggestedAction::ResolveConflict { .. }));
-    assert_eq!(list[1].rule, RuleId::IntegrateReady, "retry stays available");
+    assert!(matches!(
+        list[0].action,
+        SuggestedAction::ResolveConflict { .. }
+    ));
+    assert_eq!(
+        list[1].rule,
+        RuleId::IntegrateReady,
+        "retry stays available"
+    );
 
     // The ticket branch moves on: the old result no longer describes it.
     api.git(&["switch", "feature/PROJ-1-api-change"]);

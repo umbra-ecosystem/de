@@ -12,16 +12,9 @@ use serde_json::{Value, json};
 
 use super::{
     model::{RuleId, SuggestedAction, Suggestion, prio},
-    snapshot::{
-        DeployInfo, PrepState, Snapshot, TicketSnapshot, jira_priority_rank, status_is,
-    },
+    snapshot::{DeployInfo, PrepState, Snapshot, TicketSnapshot, jira_priority_rank, status_is},
 };
-use crate::{
-    domain::LocalStatus,
-    gateway::Action,
-    git::short_sha,
-    integration::DeployState,
-};
+use crate::{domain::LocalStatus, gateway::Action, git::short_sha, integration::DeployState};
 
 /// Data older than this (five minutes) is stale and a sync is suggested.
 pub const SYNC_STALE_SECS: i64 = 300;
@@ -193,7 +186,9 @@ pub fn claim_new(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
             Some(&t.key),
             RuleId::ClaimNew,
             "-",
-            SuggestedAction::Claim { ticket: t.key.clone() },
+            SuggestedAction::Claim {
+                ticket: t.key.clone(),
+            },
             format!(
                 "{} is in {} and not claimed (Jira priority {}, #{} in the queue)",
                 t.label(),
@@ -233,7 +228,9 @@ pub fn returned_to_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
             Some(&t.key),
             RuleId::ReturnedToReview,
             "-",
-            SuggestedAction::Claim { ticket: t.key.clone() },
+            SuggestedAction::Claim {
+                ticket: t.key.clone(),
+            },
             format!(
                 "{} went to {} and is back in {}: handle it as a new ticket",
                 t.label(),
@@ -262,8 +259,14 @@ pub fn start_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
             Some(&t.key),
             RuleId::StartReview,
             "-",
-            SuggestedAction::StartReview { ticket: t.key.clone() },
-            format!("{} is claimed and not reviewed: {}", t.label(), describe_prs(t)),
+            SuggestedAction::StartReview {
+                ticket: t.key.clone(),
+            },
+            format!(
+                "{} is claimed and not reviewed: {}",
+                t.label(),
+                describe_prs(t)
+            ),
             facts(t, json!({ "prs": pr_lines(t) })),
             prio::START_REVIEW,
         ));
@@ -280,7 +283,9 @@ pub fn finish_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
             Some(&t.key),
             RuleId::FinishReview,
             "-",
-            SuggestedAction::MarkReviewed { ticket: t.key.clone() },
+            SuggestedAction::MarkReviewed {
+                ticket: t.key.clone(),
+            },
             format!(
                 "{} is under review; mark it reviewed when you are done ({})",
                 t.label(),
@@ -302,7 +307,11 @@ pub enum ReviewChange {
         to: String,
     },
     /// A PR was updated after the review, in a repo whose branch tips are not known.
-    PrUpdated { repo: String, pr: u64, updated_at: i64 },
+    PrUpdated {
+        repo: String,
+        pr: u64,
+        updated_at: i64,
+    },
 }
 
 /// What changed since the ticket was reviewed. Branch tips decide where both the reviewed
@@ -367,7 +376,11 @@ pub fn re_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
                 ReviewChange::HeadMoved { repo, from, to } => {
                     json!({ "repo": repo, "from": from, "to": to })
                 }
-                ReviewChange::PrUpdated { repo, pr, updated_at } => {
+                ReviewChange::PrUpdated {
+                    repo,
+                    pr,
+                    updated_at,
+                } => {
                     json!({ "repo": repo, "pr": pr, "updated_at": updated_at })
                 }
             })
@@ -376,7 +389,9 @@ pub fn re_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
             Some(&t.key),
             RuleId::ReReview,
             "-",
-            SuggestedAction::StartReview { ticket: t.key.clone() },
+            SuggestedAction::StartReview {
+                ticket: t.key.clone(),
+            },
             format!(
                 "{} changed since you reviewed it: {}",
                 t.label(),
@@ -408,7 +423,9 @@ pub fn activate_reviewed(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
             _ => continue,
         };
         let action = if t.is_hotfix() {
-            SuggestedAction::ChooseHotfixBaseline { ticket: t.key.clone() }
+            SuggestedAction::ChooseHotfixBaseline {
+                ticket: t.key.clone(),
+            }
         } else {
             SuggestedAction::Activate {
                 ticket: t.key.clone(),
@@ -465,7 +482,9 @@ pub fn park_active(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
         Some(&active.key),
         RuleId::ParkActive,
         "-",
-        SuggestedAction::Park { ticket: active.key.clone() },
+        SuggestedAction::Park {
+            ticket: active.key.clone(),
+        },
         format!(
             "{} is waiting to be tested but {} is active: finish or park {} first{}",
             names.join(", "),
@@ -500,15 +519,21 @@ pub fn park_active(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
 /// one nobody wants any more is marked done.
 pub fn stale_ticket(s: &Snapshot, now: i64, out: &mut Vec<Suggestion>) {
     for t in tracked(s) {
-        let Some(tracking) = &t.tracking else { continue };
+        let Some(tracking) = &t.tracking else {
+            continue;
+        };
         let age = now - tracking.updated_at;
         let (action, what) = match tracking.status {
             LocalStatus::Active if age >= STALE_ACTIVE_SECS => (
-                SuggestedAction::Park { ticket: t.key.clone() },
+                SuggestedAction::Park {
+                    ticket: t.key.clone(),
+                },
                 "active",
             ),
             LocalStatus::Parked if age >= STALE_PARKED_SECS => (
-                SuggestedAction::MarkDone { ticket: t.key.clone() },
+                SuggestedAction::MarkDone {
+                    ticket: t.key.clone(),
+                },
                 "parked",
             ),
             _ => continue,
@@ -551,7 +576,9 @@ pub fn integrate_ready(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
             Some(&t.key),
             RuleId::IntegrateReady,
             "-",
-            SuggestedAction::RunIntegrationPrepare { ticket: t.key.clone() },
+            SuggestedAction::RunIntegrationPrepare {
+                ticket: t.key.clone(),
+            },
             format!(
                 "{} is tested ({}/{} checklist items done): integrate {} into uat{}{}",
                 t.label(),
@@ -559,7 +586,10 @@ pub fn integrate_ready(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
                 t.checklist.total,
                 t.touched_repos.join(", "),
                 if again {
-                    format!(" again ({} have new commits since the last merge)", t.remerge_repos.join(", "))
+                    format!(
+                        " again ({} have new commits since the last merge)",
+                        t.remerge_repos.join(", ")
+                    )
                 } else {
                     String::new()
                 },
@@ -649,7 +679,9 @@ pub fn remerge_needed(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
             continue;
         }
         let action = if t.is_hotfix() {
-            SuggestedAction::ChooseHotfixBaseline { ticket: t.key.clone() }
+            SuggestedAction::ChooseHotfixBaseline {
+                ticket: t.key.clone(),
+            }
         } else {
             SuggestedAction::Activate {
                 ticket: t.key.clone(),
@@ -895,7 +927,9 @@ pub fn compose_deploy_comment(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>
 /// only an unposted draft counts.
 pub fn post_deploy_comment(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
     for t in tracked(s) {
-        let Some(draft) = &t.comment_draft else { continue };
+        let Some(draft) = &t.comment_draft else {
+            continue;
+        };
         out.push(Suggestion::new(
             Some(&t.key),
             RuleId::PostDeployComment,
@@ -927,7 +961,8 @@ pub fn transition_alpha(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
         let Some(comment_at) = t.comment_posted_at else {
             continue;
         };
-        if t.transition_posted_at.is_some_and(|moved| moved >= comment_at)
+        if t.transition_posted_at
+            .is_some_and(|moved| moved >= comment_at)
             || past_alpha(t.jira_status.as_deref())
         {
             continue;
@@ -1014,11 +1049,9 @@ pub fn approve_prs(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
     for t in tracked(s).filter(|t| t.testing_complete) {
         for p in t.open_prs() {
             let mine = s.me.as_deref().is_some_and(|me| p.pr.author == me);
-            let approved = s.me.as_deref().is_some_and(|me| {
-                p.pr.reviewers
-                    .iter()
-                    .any(|r| r.account == me && r.approved)
-            });
+            let approved =
+                s.me.as_deref()
+                    .is_some_and(|me| p.pr.reviewers.iter().any(|r| r.account == me && r.approved));
             if mine || approved {
                 continue;
             }

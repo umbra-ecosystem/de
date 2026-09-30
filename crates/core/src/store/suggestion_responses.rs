@@ -114,10 +114,9 @@ pub fn latest_per_suggestion(store: &Store) -> eyre::Result<Vec<SuggestionRespon
          WHERE r.id = (SELECT MAX(id) FROM suggestion_responses WHERE suggestion_id = r.suggestion_id)
          ORDER BY suggestion_id"
     ))?;
-    Ok(stmt
-        .query_map([], from_row)?
+    stmt.query_map([], from_row)?
         .collect::<Result<Vec<_>, _>>()
-        .wrap_err("Failed to read the responses to suggestions")?)
+        .wrap_err("Failed to read the responses to suggestions")
 }
 
 /// Every response ever given to `suggestion_id`, oldest first.

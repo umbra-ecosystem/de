@@ -17,9 +17,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use super::model::Suggestion;
-use crate::{
-    store::suggestion_responses::{ResponseKind, SuggestionResponse},
-};
+use crate::store::suggestion_responses::{ResponseKind, SuggestionResponse};
 
 /// Where a suggestion stands with respect to what the author said about it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

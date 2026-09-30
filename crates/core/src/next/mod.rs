@@ -27,9 +27,7 @@ mod scenario_tests;
 
 pub use engine::{next_actions, sort, suggest};
 pub use load::{LoadContext, ticket_heads};
-pub use model::{
-    ExecutionLevel, Priority, RuleId, SuggestedAction, Suggestion, facts_hash, prio,
-};
+pub use model::{ExecutionLevel, Priority, RuleId, SuggestedAction, Suggestion, facts_hash, prio};
 pub use responses::{ResponseState, annotate, apply_responses, classify, make_response};
 pub use snapshot::*;
 

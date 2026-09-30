@@ -174,11 +174,7 @@ pub enum SuggestedAction {
         files: Vec<String>,
     },
     /// Informational: look at a PR.
-    OpenPr {
-        repo: String,
-        pr: u64,
-        url: String,
-    },
+    OpenPr { repo: String, pr: u64, url: String },
     /// Informational: look at a pipeline run (its step log).
     OpenPipeline {
         repo: String,

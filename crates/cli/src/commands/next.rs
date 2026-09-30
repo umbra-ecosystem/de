@@ -31,11 +31,7 @@ use super::{
     ship::{confirm, render_preview},
     ticket::{ask_baseline, render_activation, render_deactivation},
 };
-use crate::{
-    types::Slug,
-    utils::ui::UserInterface,
-    workspace::Workspace,
-};
+use crate::{types::Slug, utils::ui::UserInterface, workspace::Workspace};
 
 /// How many suggestions `de next` shows without `--all`.
 pub const DEFAULT_LIMIT: usize = 5;
@@ -157,7 +153,9 @@ pub fn describe_action(action: &SuggestedAction) -> Vec<String> {
         )],
         SuggestedAction::MarkDone { ticket } => vec![format!("Mark {ticket} as done.")],
         SuggestedAction::RunIntegrationPrepare { ticket } => vec![
-            format!("Prepare merging {ticket} into uat in temporary worktrees; nothing is pushed yet."),
+            format!(
+                "Prepare merging {ticket} into uat in temporary worktrees; nothing is pushed yet."
+            ),
             "The push is previewed and needs its own confirmation.".into(),
         ],
         SuggestedAction::ComposeDeployComment { ticket, partial } => vec![format!(
@@ -181,7 +179,10 @@ pub fn describe_action(action: &SuggestedAction) -> Vec<String> {
             vec![format!("{repo} pipeline {run_id}: {url}")]
         }
         SuggestedAction::OpenTicket { ticket, url } => {
-            vec![format!("{ticket}: {}", url.as_deref().unwrap_or("no URL cached"))]
+            vec![format!(
+                "{ticket}: {}",
+                url.as_deref().unwrap_or("no URL cached")
+            )]
         }
         SuggestedAction::Waiting { what, .. } => vec![format!("Waiting for {what}.")],
         SuggestedAction::AdapterUnavailable {
@@ -238,7 +239,11 @@ fn load_env(workspace: Option<Slug>) -> eyre::Result<Loaded> {
     })
 }
 
-fn rank(env: &Loaded, gateway: &Gateway<'_>, now: i64) -> eyre::Result<Vec<(Suggestion, ResponseState)>> {
+fn rank(
+    env: &Loaded,
+    gateway: &Gateway<'_>,
+    now: i64,
+) -> eyre::Result<Vec<(Suggestion, ResponseState)>> {
     let snapshot = Snapshot::load(&LoadContext {
         state: &env.state,
         cache: &env.cache,
@@ -257,7 +262,9 @@ fn find(items: Vec<(Suggestion, ResponseState)>, id: &str) -> eyre::Result<Sugge
         .map(|(s, _)| s)
         .find(|s| s.id == id)
         .ok_or_else(|| {
-            eyre!("There is no suggestion '{id}' right now; run `de next --all` for the current ids")
+            eyre!(
+                "There is no suggestion '{id}' right now; run `de next --all` for the current ids"
+            )
         })
 }
 
@@ -343,8 +350,7 @@ pub fn do_it(id: String, workspace: Option<Slug>) -> eyre::Result<()> {
             false
         }
         SuggestedAction::Gateway(_) => {
-            let prepared =
-                exec::prepare_external(&gateway, &env.state, &env.config, &s, started)?;
+            let prepared = exec::prepare_external(&gateway, &env.state, &env.config, &s, started)?;
             ui.new_line()?;
             print_lines(&ui, &render_preview(prepared.preview()))?;
             ui.new_line()?;
@@ -457,7 +463,9 @@ mod tests {
             Some(&key("PROJ-1")),
             RuleId::ClaimNew,
             "-",
-            SuggestedAction::Claim { ticket: key("PROJ-1") },
+            SuggestedAction::Claim {
+                ticket: key("PROJ-1"),
+            },
             "PROJ-1 is in In Review and not claimed",
             json!({ "ticket": "PROJ-1", "queue_position": 1 }),
             480,
@@ -469,7 +477,10 @@ mod tests {
             Some(&key("PROJ-2")),
             RuleId::ApprovePrs,
             "acme/web#7",
-            SuggestedAction::Gateway(Action::ApprovePr { repo: "acme/web".into(), pr: 7 }),
+            SuggestedAction::Gateway(Action::ApprovePr {
+                repo: "acme/web".into(),
+                pr: 7,
+            }),
             "PROJ-2 passed testing: approve acme/web #7",
             json!({ "repo": "acme/web", "pr": 7 }),
             690,
@@ -591,11 +602,17 @@ mod tests {
     #[test]
     fn the_json_of_a_sync_and_an_empty_list() {
         let parsed: Value = serde_json::from_str(&render_json(&[], 5)).unwrap();
-        assert_eq!(parsed, json!({ "version": 1, "generated_at": 5, "suggestions": [] }));
+        assert_eq!(
+            parsed,
+            json!({ "version": 1, "generated_at": 5, "suggestions": [] })
+        );
 
         let one = [(sync(), ResponseState::Open)];
         let parsed: Value = serde_json::from_str(&render_json(&one, 5)).unwrap();
-        assert_eq!(parsed["suggestions"][0]["action"], json!({ "type": "sync" }));
+        assert_eq!(
+            parsed["suggestions"][0]["action"],
+            json!({ "type": "sync" })
+        );
         assert_eq!(parsed["suggestions"][0]["ticket"], Value::Null);
         assert_eq!(parsed["suggestions"][0]["level"], "automatic");
     }
@@ -608,20 +625,54 @@ mod tests {
             SuggestedAction::Claim { ticket: t.clone() },
             SuggestedAction::StartReview { ticket: t.clone() },
             SuggestedAction::MarkReviewed { ticket: t.clone() },
-            SuggestedAction::Activate { ticket: t.clone(), baseline: Some(BaselineChoice::Uat) },
+            SuggestedAction::Activate {
+                ticket: t.clone(),
+                baseline: Some(BaselineChoice::Uat),
+            },
             SuggestedAction::ChooseHotfixBaseline { ticket: t.clone() },
             SuggestedAction::Park { ticket: t.clone() },
             SuggestedAction::MarkDone { ticket: t.clone() },
             SuggestedAction::RunIntegrationPrepare { ticket: t.clone() },
-            SuggestedAction::ComposeDeployComment { ticket: t.clone(), partial: true },
-            SuggestedAction::RevertOverlay { ticket: t.clone(), repos: vec!["web".into()] },
-            SuggestedAction::ResolveConflict { ticket: t.clone(), repo: "web".into(), files: vec![] },
-            SuggestedAction::OpenPr { repo: "r".into(), pr: 1, url: "u".into() },
-            SuggestedAction::OpenPipeline { repo: "r".into(), run_id: "x".into(), url: "u".into() },
-            SuggestedAction::OpenTicket { ticket: t.clone(), url: None },
-            SuggestedAction::Waiting { ticket: t.clone(), what: "w".into() },
-            SuggestedAction::AdapterUnavailable { adapter: "jira".into(), detail: "d".into(), blocked: "b".into() },
-            SuggestedAction::Gateway(Action::ApprovePr { repo: "r".into(), pr: 1 }),
+            SuggestedAction::ComposeDeployComment {
+                ticket: t.clone(),
+                partial: true,
+            },
+            SuggestedAction::RevertOverlay {
+                ticket: t.clone(),
+                repos: vec!["web".into()],
+            },
+            SuggestedAction::ResolveConflict {
+                ticket: t.clone(),
+                repo: "web".into(),
+                files: vec![],
+            },
+            SuggestedAction::OpenPr {
+                repo: "r".into(),
+                pr: 1,
+                url: "u".into(),
+            },
+            SuggestedAction::OpenPipeline {
+                repo: "r".into(),
+                run_id: "x".into(),
+                url: "u".into(),
+            },
+            SuggestedAction::OpenTicket {
+                ticket: t.clone(),
+                url: None,
+            },
+            SuggestedAction::Waiting {
+                ticket: t.clone(),
+                what: "w".into(),
+            },
+            SuggestedAction::AdapterUnavailable {
+                adapter: "jira".into(),
+                detail: "d".into(),
+                blocked: "b".into(),
+            },
+            SuggestedAction::Gateway(Action::ApprovePr {
+                repo: "r".into(),
+                pr: 1,
+            }),
         ];
         for a in actions {
             let v = serde_json::to_value(&a).unwrap();
@@ -643,7 +694,10 @@ mod tests {
             baseline: Some(BaselineChoice::Production),
         };
         assert!(describe_action(&a)[0].contains("production baseline"));
-        let a = SuggestedAction::Activate { ticket: key("PROJ-1"), baseline: None };
+        let a = SuggestedAction::Activate {
+            ticket: key("PROJ-1"),
+            baseline: None,
+        };
         assert!(describe_action(&a)[0].contains("base baseline"));
     }
 }

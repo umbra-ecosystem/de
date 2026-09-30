@@ -58,7 +58,10 @@ fn rules_of(s: &[Suggestion]) -> Vec<RuleId> {
 }
 
 fn only(s: &Snapshot, rule: RuleId) -> Vec<Suggestion> {
-    suggest(s, NOW).into_iter().filter(|x| x.rule == rule).collect()
+    suggest(s, NOW)
+        .into_iter()
+        .filter(|x| x.rule == rule)
+        .collect()
 }
 
 fn deploy(repo: &str, state: DeployState) -> DeployInfo {
@@ -97,7 +100,10 @@ fn sync_is_suggested_for_missing_or_old_sources_only() {
         last_attempt_at: ok,
         last_error: None,
     };
-    s.sync.states = vec![fresh("jira", NOW - 10), fresh("bitbucket:acme/web", NOW - 20)];
+    s.sync.states = vec![
+        fresh("jira", NOW - 10),
+        fresh("bitbucket:acme/web", NOW - 20),
+    ];
     assert!(only(&s, RuleId::SyncStale).is_empty());
 
     // Old data: stale.
@@ -140,7 +146,10 @@ fn review_tickets_are_claimed_by_jira_priority_then_key() {
     assert_eq!(list[0].priority, Priority(470));
     assert_eq!(list[2].priority, Priority(450));
     assert_eq!(list[0].facts["queue_position"], 1);
-    assert!(list.iter().all(|x| x.level == ExecutionLevel::LocalOneClick));
+    assert!(
+        list.iter()
+            .all(|x| x.level == ExecutionLevel::LocalOneClick)
+    );
 }
 
 #[test]
@@ -176,7 +185,12 @@ fn a_returned_ticket_back_in_review_is_claimed_again_only_after_the_transition()
     t.jira_status = Some("In Review".into());
     let list = only(&snap(vec![t.clone()]), RuleId::ReturnedToReview);
     assert_eq!(list.len(), 1);
-    assert_eq!(list[0].action, SuggestedAction::Claim { ticket: key("PROJ-1") });
+    assert_eq!(
+        list[0].action,
+        SuggestedAction::Claim {
+            ticket: key("PROJ-1")
+        }
+    );
 
     // Integrated but not announced yet: Jira still says Review, that is normal.
     let mut early = t.clone();
@@ -207,7 +221,11 @@ fn claimed_tickets_start_review_and_say_where_the_prs_go() {
     let s = snap(vec![mine("PROJ-2", LocalStatus::Reviewing, 0)]);
     assert!(only(&s, RuleId::StartReview).is_empty());
     let s = snap(vec![mine("PROJ-2", LocalStatus::Claimed, 0)]);
-    assert!(only(&s, RuleId::StartReview)[0].reason.contains("no open PR"));
+    assert!(
+        only(&s, RuleId::StartReview)[0]
+            .reason
+            .contains("no open PR")
+    );
 }
 
 #[test]
@@ -233,7 +251,12 @@ fn re_review_compares_branch_tips_before_pr_timestamps() {
     t.review.current_heads.insert("web".into(), "b".repeat(40));
     let list = only(&snap(vec![t.clone()]), RuleId::ReReview);
     assert_eq!(list.len(), 1);
-    assert_eq!(list[0].action, SuggestedAction::StartReview { ticket: key("PROJ-1") });
+    assert_eq!(
+        list[0].action,
+        SuggestedAction::StartReview {
+            ticket: key("PROJ-1")
+        }
+    );
     assert!(list[0].reason.contains("aaaaaaa..bbbbbbb"));
 }
 
@@ -278,7 +301,10 @@ fn a_reviewed_ticket_is_activated_when_nothing_is_active() {
     let list = only(&s, RuleId::ActivateReviewed);
     assert_eq!(
         list[0].action,
-        SuggestedAction::Activate { ticket: key("PROJ-1"), baseline: None }
+        SuggestedAction::Activate {
+            ticket: key("PROJ-1"),
+            baseline: None
+        }
     );
 
     // Reviewing but not reviewed: no.
@@ -286,7 +312,10 @@ fn a_reviewed_ticket_is_activated_when_nothing_is_active() {
     assert!(only(&s, RuleId::ActivateReviewed).is_empty());
     // A parked ticket is resumed, at a lower priority.
     let s = snap(vec![mine("PROJ-1", LocalStatus::Parked, 0)]);
-    assert_eq!(only(&s, RuleId::ActivateReviewed)[0].priority, Priority(630));
+    assert_eq!(
+        only(&s, RuleId::ActivateReviewed)[0].priority,
+        Priority(630)
+    );
 }
 
 #[test]
@@ -302,7 +331,12 @@ fn nothing_is_activated_while_another_ticket_is_active() {
     );
     let park = only(&s, RuleId::ParkActive);
     assert_eq!(park.len(), 1);
-    assert_eq!(park[0].action, SuggestedAction::Park { ticket: key("PROJ-1") });
+    assert_eq!(
+        park[0].action,
+        SuggestedAction::Park {
+            ticket: key("PROJ-1")
+        }
+    );
     assert!(park[0].reason.contains("PROJ-2"));
 }
 
@@ -313,7 +347,9 @@ fn a_hotfix_asks_for_its_baseline_first() {
     let list = only(&snap(vec![t]), RuleId::ActivateReviewed);
     assert_eq!(
         list[0].action,
-        SuggestedAction::ChooseHotfixBaseline { ticket: key("PROJ-1") }
+        SuggestedAction::ChooseHotfixBaseline {
+            ticket: key("PROJ-1")
+        }
     );
     assert_eq!(list[0].facts["hotfix"], true);
     assert!(list[0].reason.starts_with("Hotfix: "));
@@ -326,7 +362,10 @@ fn a_waiting_hotfix_raises_the_park_suggestion_and_dirty_trees_are_named() {
     active.dirty_repos = vec!["web".into()];
     let mut hot = reviewed("PROJ-2", LocalStatus::Reviewing, 1);
     hot.kind = TicketKind::Hotfix;
-    let plain = snap(vec![active.clone(), reviewed("PROJ-2", LocalStatus::Reviewing, 1)]);
+    let plain = snap(vec![
+        active.clone(),
+        reviewed("PROJ-2", LocalStatus::Reviewing, 1),
+    ]);
     let calm = only(&plain, RuleId::ParkActive);
     assert_eq!(calm[0].priority, Priority(625));
     assert!(calm[0].reason.contains("stashed"));
@@ -345,9 +384,19 @@ fn stale_tickets_are_parked_or_finished() {
     let mut p = mine("PROJ-2", LocalStatus::Parked, 1);
     p.tracking.as_mut().unwrap().updated_at = NOW - 15 * 86_400;
     let list = only(&snap(vec![a]), RuleId::StaleTicket);
-    assert_eq!(list[0].action, SuggestedAction::Park { ticket: key("PROJ-1") });
+    assert_eq!(
+        list[0].action,
+        SuggestedAction::Park {
+            ticket: key("PROJ-1")
+        }
+    );
     let list = only(&snap(vec![p]), RuleId::StaleTicket);
-    assert_eq!(list[0].action, SuggestedAction::MarkDone { ticket: key("PROJ-2") });
+    assert_eq!(
+        list[0].action,
+        SuggestedAction::MarkDone {
+            ticket: key("PROJ-2")
+        }
+    );
 
     let mut fresh = mine("PROJ-1", LocalStatus::Active, 0);
     fresh.tracking.as_mut().unwrap().updated_at = NOW - 4 * 86_400;
@@ -372,7 +421,9 @@ fn a_complete_checklist_suggests_preparing_the_integration_not_the_push() {
     assert_eq!(list.len(), 1);
     assert_eq!(
         list[0].action,
-        SuggestedAction::RunIntegrationPrepare { ticket: key("PROJ-1") }
+        SuggestedAction::RunIntegrationPrepare {
+            ticket: key("PROJ-1")
+        }
     );
     assert_eq!(list[0].level, ExecutionLevel::LocalOneClick);
 }
@@ -434,7 +485,11 @@ fn a_conflict_from_the_last_prepare_is_surfaced_and_blocks_nothing_else_silently
 
 #[test]
 fn ready_or_finished_prepares_are_not_conflicts() {
-    for state in [PrepState::Ready, PrepState::UpToDate, PrepState::AlreadyPushed] {
+    for state in [
+        PrepState::Ready,
+        PrepState::UpToDate,
+        PrepState::AlreadyPushed,
+    ] {
         let mut t = active_done();
         t.prep = Some(prepped(state));
         assert!(only(&snap(vec![t]), RuleId::IntegrationBlocked).is_empty());
@@ -457,7 +512,10 @@ fn a_fix_after_alpha_suggests_activating_again_and_never_while_something_is_acti
     let list = only(&snap(vec![t.clone()]), RuleId::RemergeNeeded);
     assert_eq!(
         list[0].action,
-        SuggestedAction::Activate { ticket: key("PROJ-1"), baseline: None }
+        SuggestedAction::Activate {
+            ticket: key("PROJ-1"),
+            baseline: None
+        }
     );
     assert!(list[0].reason.contains("web"));
 
@@ -486,7 +544,10 @@ fn a_leftover_overlay_is_reverted_but_an_active_tickets_is_normal() {
     let list = only(&snap(vec![left]), RuleId::RevertOverlay);
     assert_eq!(
         list[0].action,
-        SuggestedAction::RevertOverlay { ticket: key("PROJ-1"), repos: vec!["web".into()] }
+        SuggestedAction::RevertOverlay {
+            ticket: key("PROJ-1"),
+            repos: vec!["web".into()]
+        }
     );
     assert_eq!(list[0].priority, Priority(985));
 
@@ -532,7 +593,10 @@ fn a_failed_pipeline_offers_the_log_and_a_gateway_rerun() {
 #[test]
 fn running_pipelines_are_only_a_waiting_note() {
     let mut t = integrated();
-    t.deploy = vec![deploy("web", DeployState::Running), deploy("api", DeployState::Deployed)];
+    t.deploy = vec![
+        deploy("web", DeployState::Running),
+        deploy("api", DeployState::Deployed),
+    ];
     let list = only(&snap(vec![t]), RuleId::DeployWaiting);
     assert_eq!(list.len(), 1);
     assert!(list[0].informational);
@@ -563,7 +627,10 @@ fn all_deployed_suggests_the_comment_draft_once() {
     let list = only(&snap(vec![t.clone()]), RuleId::ComposeDeployComment);
     assert_eq!(
         list[0].action,
-        SuggestedAction::ComposeDeployComment { ticket: key("PROJ-1"), partial: false }
+        SuggestedAction::ComposeDeployComment {
+            ticket: key("PROJ-1"),
+            partial: false
+        }
     );
 
     // Not every repo deployed.
@@ -573,7 +640,11 @@ fn all_deployed_suggests_the_comment_draft_once() {
 
     // A draft exists.
     let mut drafted = t.clone();
-    drafted.comment_draft = Some(DraftInfo { id: 3, body: "b".into(), created_at: 200 });
+    drafted.comment_draft = Some(DraftInfo {
+        id: 3,
+        body: "b".into(),
+        created_at: 200,
+    });
     assert!(only(&snap(vec![drafted]), RuleId::ComposeDeployComment).is_empty());
 
     // Already announced after the newest merge...
@@ -582,17 +653,26 @@ fn all_deployed_suggests_the_comment_draft_once() {
     assert!(only(&snap(vec![posted.clone()]), RuleId::ComposeDeployComment).is_empty());
     // ...but a newer merge needs a new comment.
     merged(&mut posted, "web", 300);
-    assert_eq!(only(&snap(vec![posted]), RuleId::ComposeDeployComment).len(), 1);
+    assert_eq!(
+        only(&snap(vec![posted]), RuleId::ComposeDeployComment).len(),
+        1
+    );
 }
 
 #[test]
 fn repos_without_pipeline_tracking_make_the_comment_partial() {
     let mut t = integrated();
-    t.deploy = vec![deploy("web", DeployState::Deployed), deploy("docs", DeployState::Untracked)];
+    t.deploy = vec![
+        deploy("web", DeployState::Deployed),
+        deploy("docs", DeployState::Untracked),
+    ];
     let list = only(&snap(vec![t.clone()]), RuleId::ComposeDeployComment);
     assert_eq!(
         list[0].action,
-        SuggestedAction::ComposeDeployComment { ticket: key("PROJ-1"), partial: true }
+        SuggestedAction::ComposeDeployComment {
+            ticket: key("PROJ-1"),
+            partial: true
+        }
     );
     t.deploy = vec![deploy("docs", DeployState::Untracked)];
     assert!(only(&snap(vec![t]), RuleId::ComposeDeployComment).is_empty());
@@ -601,7 +681,11 @@ fn repos_without_pipeline_tracking_make_the_comment_partial() {
 #[test]
 fn an_unposted_draft_is_posted_through_the_gateway_and_a_posted_one_never_again() {
     let mut t = integrated();
-    t.comment_draft = Some(DraftInfo { id: 4, body: "Deployed.".into(), created_at: 200 });
+    t.comment_draft = Some(DraftInfo {
+        id: 4,
+        body: "Deployed.".into(),
+        created_at: 200,
+    });
     let list = only(&snap(vec![t.clone()]), RuleId::PostDeployComment);
     assert_eq!(
         list[0].action,
@@ -649,14 +733,22 @@ fn the_transition_follows_the_posted_comment_once() {
     for status in ["Alpha Testing", "UAT", "Done"] {
         let mut j = t.clone();
         j.jira_status = Some(status.into());
-        assert!(only(&snap(vec![j]), RuleId::TransitionAlpha).is_empty(), "{status}");
+        assert!(
+            only(&snap(vec![j]), RuleId::TransitionAlpha).is_empty(),
+            "{status}"
+        );
     }
 }
 
 // ---------------------------------------------------------------- returned
 
 fn mention(id: &str, author: &str, at: i64) -> Mention {
-    Mention { comment_id: id.into(), author: author.into(), text: format!("hey {id}"), created_at: at }
+    Mention {
+        comment_id: id.into(),
+        author: author.into(),
+        text: format!("hey {id}"),
+        created_at: at,
+    }
 }
 
 fn returned() -> TicketSnapshot {
@@ -709,7 +801,10 @@ fn signed_off() -> TicketSnapshot {
     let mut t = integrated();
     t.jira_status = Some("UAT".into());
     t.testing_complete = true;
-    t.prs = vec![open_pr("web", "acme/web", 7, "develop"), open_pr("api", "acme/api", 8, "develop")];
+    t.prs = vec![
+        open_pr("web", "acme/web", 7, "develop"),
+        open_pr("api", "acme/api", 8, "develop"),
+    ];
     t
 }
 
@@ -719,19 +814,30 @@ fn testing_complete_offers_each_unapproved_open_pr() {
     assert_eq!(list.len(), 2);
     assert_eq!(
         list[0].action,
-        SuggestedAction::Gateway(Action::ApprovePr { repo: "acme/api".into(), pr: 8 })
+        SuggestedAction::Gateway(Action::ApprovePr {
+            repo: "acme/api".into(),
+            pr: 8
+        })
     );
 }
 
 #[test]
 fn approval_skips_approved_own_closed_and_untested_prs() {
     let mut t = signed_off();
-    t.prs[0].pr.reviewers = vec![Reviewer { account: "me".into(), approved: true, changes_requested: false }];
+    t.prs[0].pr.reviewers = vec![Reviewer {
+        account: "me".into(),
+        approved: true,
+        changes_requested: false,
+    }];
     t.prs[1].pr.author = "me".into();
     assert!(only(&snap(vec![t.clone()]), RuleId::ApprovePrs).is_empty());
 
     let mut other = signed_off();
-    other.prs[0].pr.reviewers = vec![Reviewer { account: "sam".into(), approved: true, changes_requested: false }];
+    other.prs[0].pr.reviewers = vec![Reviewer {
+        account: "sam".into(),
+        approved: true,
+        changes_requested: false,
+    }];
     assert_eq!(only(&snap(vec![other]), RuleId::ApprovePrs).len(), 2);
 
     let mut merged_pr = signed_off();
@@ -751,7 +857,10 @@ fn testing_complete_needs_alpha_and_a_uat_or_done_status() {
     assert!(!is_testing_complete(&st, Some("UAT"), false));
     assert!(!is_testing_complete(&st, Some("Alpha Testing"), true));
     assert!(!is_testing_complete(&st, None, true));
-    let custom = StatusNames { done: vec!["Closed".into()], ..StatusNames::default() };
+    let custom = StatusNames {
+        done: vec!["Closed".into()],
+        ..StatusNames::default()
+    };
     assert!(is_testing_complete(&custom, Some("Closed"), true));
     assert!(!is_testing_complete(&custom, Some("Done"), true));
 }
@@ -761,14 +870,27 @@ fn testing_complete_needs_alpha_and_a_uat_or_done_status() {
 #[test]
 fn an_unavailable_writer_replaces_the_gateway_suggestion_with_a_note() {
     let mut t = integrated();
-    t.comment_draft = Some(DraftInfo { id: 4, body: "x".into(), created_at: 1 });
+    t.comment_draft = Some(DraftInfo {
+        id: 4,
+        body: "x".into(),
+        created_at: 1,
+    });
     let mut s = snap(vec![t]);
     s.writers.jira = Availability::Unavailable("acli is not installed".into());
     let all = suggest(&s, NOW);
-    assert!(!all.iter().any(|x| matches!(x.action, SuggestedAction::Gateway(_))));
-    let note = all.iter().find(|x| x.rule == RuleId::AdapterUnavailable).unwrap();
+    assert!(
+        !all.iter()
+            .any(|x| matches!(x.action, SuggestedAction::Gateway(_)))
+    );
+    let note = all
+        .iter()
+        .find(|x| x.rule == RuleId::AdapterUnavailable)
+        .unwrap();
     assert!(note.informational && note.level == ExecutionLevel::Automatic);
-    assert!(note.reason.contains("acli is not installed") && note.reason.contains("post the deploy comment"));
+    assert!(
+        note.reason.contains("acli is not installed")
+            && note.reason.contains("post the deploy comment")
+    );
     assert!(note.priority.0 <= 299);
 }
 
@@ -787,7 +909,11 @@ fn unavailable_code_host_notes_collapse_per_ticket() {
 fn suggest_is_deterministic() {
     let mut t = integrated();
     t.deploy = vec![deploy("web", DeployState::Failed)];
-    let s = snap(vec![t, pool("PROJ-9", Some("High")), mine("PROJ-2", LocalStatus::Claimed, 3)]);
+    let s = snap(vec![
+        t,
+        pool("PROJ-9", Some("High")),
+        mine("PROJ-2", LocalStatus::Claimed, 3),
+    ]);
     assert_eq!(suggest(&s, NOW), suggest(&s.clone(), NOW));
 }
 
@@ -823,7 +949,14 @@ fn housekeeping_ranks_below_the_queue() {
     let mut stale = mine("PROJ-4", LocalStatus::Parked, 3);
     stale.tracking.as_mut().unwrap().updated_at = -2_000_000;
     let all = suggest(&snap(vec![stale, pool("PROJ-8", None)]), NOW);
-    assert_eq!(rules_of(&all), [RuleId::ActivateReviewed, RuleId::ClaimNew, RuleId::StaleTicket]);
+    assert_eq!(
+        rules_of(&all),
+        [
+            RuleId::ActivateReviewed,
+            RuleId::ClaimNew,
+            RuleId::StaleTicket
+        ]
+    );
 }
 
 #[test]
@@ -854,7 +987,10 @@ fn ties_break_by_manual_order_then_key() {
     a.prs.clear();
     b.prs.clear();
     let all = suggest(&snap(vec![b, a]), NOW);
-    let keys: Vec<&str> = all.iter().map(|x| x.ticket.as_ref().unwrap().as_str()).collect();
+    let keys: Vec<&str> = all
+        .iter()
+        .map(|x| x.ticket.as_ref().unwrap().as_str())
+        .collect();
     assert_eq!(keys, ["PROJ-9", "PROJ-1"], "manual order, not key order");
 
     // Equal manual order (should not happen) falls back to the key.
@@ -867,7 +1003,10 @@ fn ties_break_by_manual_order_then_key() {
 #[test]
 fn claims_follow_tracked_work_in_the_same_priority_by_jira_rank() {
     let all = suggest(
-        &snap(vec![pool("PROJ-2", Some("High")), pool("PROJ-1", Some("Low"))]),
+        &snap(vec![
+            pool("PROJ-2", Some("High")),
+            pool("PROJ-1", Some("Low")),
+        ]),
         NOW,
     );
     assert_eq!(all[0].ticket, Some(key("PROJ-2")));
@@ -879,7 +1018,10 @@ fn claims_follow_tracked_work_in_the_same_priority_by_jira_rank() {
 fn ids_are_stable_and_distinguish_subjects() {
     let a = Suggestion::make_id(Some(&key("PROJ-1")), RuleId::ApprovePrs, "acme/web#7");
     assert_eq!(a, "PROJ-1:approve_prs:acme/web#7");
-    assert_eq!(Suggestion::make_id(None, RuleId::SyncStale, ""), "-:sync_stale:-");
+    assert_eq!(
+        Suggestion::make_id(None, RuleId::SyncStale, ""),
+        "-:sync_stale:-"
+    );
 
     let s = snap(vec![signed_off()]);
     let ids: Vec<String> = suggest(&s, NOW).into_iter().map(|x| x.id).collect();
@@ -908,7 +1050,10 @@ fn the_facts_hash_ignores_key_order_and_reacts_to_values() {
         facts_hash(&json!({ "a": 1, "b": [1, 2], "c": { "x": 1, "y": 2 } })),
         facts_hash(&json!({ "c": { "y": 2, "x": 1 }, "b": [1, 2], "a": 1 }))
     );
-    assert_ne!(facts_hash(&json!({ "a": 1 })), facts_hash(&json!({ "a": 2 })));
+    assert_ne!(
+        facts_hash(&json!({ "a": 1 })),
+        facts_hash(&json!({ "a": 2 }))
+    );
     assert_ne!(facts_hash(&json!([1, 2])), facts_hash(&json!([2, 1])));
     // Pinned: stored hashes must keep their meaning.
     assert_eq!(facts_hash(&json!({ "a": 1 })), "9c3e82dd6fcae8b1");
@@ -920,7 +1065,11 @@ fn one() -> Suggestion {
     suggest(&snap(vec![pool("PROJ-1", None)]), NOW).remove(0)
 }
 
-fn answer(s: &Suggestion, kind: ResponseKind, until: Option<i64>) -> BTreeMap<String, SuggestionResponse> {
+fn answer(
+    s: &Suggestion,
+    kind: ResponseKind,
+    until: Option<i64>,
+) -> BTreeMap<String, SuggestionResponse> {
     let r = make_response(s, kind, Some("because".into()), until, NOW);
     BTreeMap::from([(r.suggestion_id.clone(), r)])
 }
@@ -930,12 +1079,21 @@ fn a_dismissal_hides_until_the_facts_change() {
     let s = one();
     let responses = answer(&s, ResponseKind::Dismissed, None);
     assert!(apply_responses(vec![s.clone()], &responses, NOW + 1).is_empty());
-    assert_eq!(classify(&s, responses.get(&s.id), NOW), ResponseState::Dismissed);
+    assert_eq!(
+        classify(&s, responses.get(&s.id), NOW),
+        ResponseState::Dismissed
+    );
 
     let mut changed = s.clone();
     changed.facts = json!({ "ticket": "PROJ-1", "queue_position": 2 });
-    assert_eq!(apply_responses(vec![changed.clone()], &responses, NOW).len(), 1);
-    assert_eq!(classify(&changed, responses.get(&s.id), NOW), ResponseState::Resurfaced);
+    assert_eq!(
+        apply_responses(vec![changed.clone()], &responses, NOW).len(),
+        1
+    );
+    assert_eq!(
+        classify(&changed, responses.get(&s.id), NOW),
+        ResponseState::Resurfaced
+    );
 }
 
 #[test]
@@ -943,8 +1101,14 @@ fn a_snooze_returns_at_its_end_regardless_of_facts() {
     let s = one();
     let responses = answer(&s, ResponseKind::Snoozed, Some(NOW + 100));
     assert!(apply_responses(vec![s.clone()], &responses, NOW + 99).is_empty());
-    assert_eq!(classify(&s, responses.get(&s.id), NOW + 99), ResponseState::Snoozed);
-    assert_eq!(apply_responses(vec![s.clone()], &responses, NOW + 100).len(), 1);
+    assert_eq!(
+        classify(&s, responses.get(&s.id), NOW + 99),
+        ResponseState::Snoozed
+    );
+    assert_eq!(
+        apply_responses(vec![s.clone()], &responses, NOW + 100).len(),
+        1
+    );
     let mut changed = s.clone();
     changed.facts = json!({ "different": true });
     assert!(apply_responses(vec![changed], &responses, NOW + 50).is_empty());
@@ -998,11 +1162,23 @@ fn only_the_gateway_variant_carries_an_external_write() {
     let key: TicketKey = key("PROJ-1");
     let samples = [
         SuggestedAction::Sync,
-        SuggestedAction::Claim { ticket: key.clone() },
-        SuggestedAction::Park { ticket: key.clone() },
-        SuggestedAction::RunIntegrationPrepare { ticket: key.clone() },
-        SuggestedAction::OpenTicket { ticket: key.clone(), url: None },
-        SuggestedAction::Gateway(Action::ApprovePr { repo: "r".into(), pr: 1 }),
+        SuggestedAction::Claim {
+            ticket: key.clone(),
+        },
+        SuggestedAction::Park {
+            ticket: key.clone(),
+        },
+        SuggestedAction::RunIntegrationPrepare {
+            ticket: key.clone(),
+        },
+        SuggestedAction::OpenTicket {
+            ticket: key.clone(),
+            url: None,
+        },
+        SuggestedAction::Gateway(Action::ApprovePr {
+            repo: "r".into(),
+            pr: 1,
+        }),
     ];
     for a in samples {
         assert_eq!(
@@ -1015,7 +1191,14 @@ fn only_the_gateway_variant_carries_an_external_write() {
 #[test]
 fn the_engine_sources_never_touch_writers_or_confirmations() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/next");
-    for file in ["rules.rs", "engine.rs", "snapshot.rs", "load.rs", "model.rs", "responses.rs"] {
+    for file in [
+        "rules.rs",
+        "engine.rs",
+        "snapshot.rs",
+        "load.rs",
+        "model.rs",
+        "responses.rs",
+    ] {
         let text = std::fs::read_to_string(dir.join(file)).unwrap();
         // Strip comments so the docs may mention them.
         let code: String = text
@@ -1026,8 +1209,8 @@ fn the_engine_sources_never_touch_writers_or_confirmations() {
         for banned in [
             "TicketWriter",
             "CodeHostWriter",
-            "build_ticket_writer",
-            "build_code_host_writer",
+            concat!("build_ticket", "_writer"),
+            concat!("build_code_host", "_writer"),
             ".confirm()",
             ".execute(",
             "gateway::Confirmed",

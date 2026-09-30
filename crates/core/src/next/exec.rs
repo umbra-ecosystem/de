@@ -33,8 +33,9 @@ use crate::{
         Store,
         audit::{self, NewAuditEntry},
         drafts::StoredDraft,
-        reviews, suggestion_responses as responses, tickets,
+        reviews, suggestion_responses as responses,
         suggestion_responses::ResponseKind,
+        tickets,
     },
     sync::HostedRepo,
 };
@@ -117,7 +118,13 @@ pub fn start_review(state: &Store, key: &TicketKey, now: i64) -> eyre::Result<St
         tickets::set_status(state, key, LocalStatus::Reviewing, now)?;
     }
     reviews::clear(state, key)?;
-    audit_local(state, now, "review.started", key, json!({ "from": t.status.as_str() }))?;
+    audit_local(
+        state,
+        now,
+        "review.started",
+        key,
+        json!({ "from": t.status.as_str() }),
+    )?;
     Ok(format!("Review of {key} started"))
 }
 
@@ -135,7 +142,13 @@ pub fn mark_reviewed(
     discover_links(state, key, repos, now)?;
     let heads = ticket_heads(state, repos, key)?;
     reviews::mark(state, key, &heads, now)?;
-    audit_local(state, now, "review.finished", key, json!({ "heads": heads }))?;
+    audit_local(
+        state,
+        now,
+        "review.finished",
+        key,
+        json!({ "heads": heads }),
+    )?;
     Ok(format!("{key} marked as reviewed"))
 }
 
@@ -161,9 +174,9 @@ pub fn execute_local(
             audit_local(state, now, "ticket.done", ticket, json!({}))?;
             Ok(LocalOutcome::Done(format!("{ticket} marked done")))
         }
-        SuggestedAction::Park { ticket } => Ok(LocalOutcome::Parked(park(
-            state, env.runner, ticket, now,
-        )?)),
+        SuggestedAction::Park { ticket } => {
+            Ok(LocalOutcome::Parked(park(state, env.runner, ticket, now)?))
+        }
         SuggestedAction::Activate { ticket, baseline } => {
             let options = ActivateOptions {
                 fetch: env.fetch,
