@@ -25,6 +25,7 @@ pub use ops::{
 };
 pub use repo::{
     BaseBranch, BranchInfo, BranchKind, BranchMatch, CommitInfo, GitRepo,
-    INTEGRATION_BRANCH_PREFIX, LogicalBranch, RepoStatus, group_branches, match_branches, pick_base, short_sha,
+    INTEGRATION_BRANCH_PREFIX, LogicalBranch, RepoStatus, group_branches, match_branches,
+    pick_base, short_sha,
 };
 pub use runner::{GitCommandError, GitOutput, GitRunner};

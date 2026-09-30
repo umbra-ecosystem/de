@@ -11,7 +11,8 @@ use tracing_subscriber::EnvFilter;
 
 use crate::{
     cli::{
-        Cli, Commands, GitCommands, NextCommands, ProvidersCommands, SelfCommands, TaskCommands, TicketCommands, WorkspaceCommands,
+        Cli, Commands, GitCommands, NextCommands, ProvidersCommands, SelfCommands, TaskCommands,
+        TicketCommands, WorkspaceCommands,
     },
     utils::theme::Theme,
     workspace::Workspace,

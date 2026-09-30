@@ -19,11 +19,11 @@ mod tests;
 pub use discovery::{
     Discovery, RepoMatches, WorkspaceRepo, discover_links, find_matches, gather_plan_repos,
 };
+pub(crate) use engine::deactivate_for_integration;
 pub use engine::{
     ActivateOptions, ActivationReport, DeactivationReport, RepoActivation, RepoRestore,
     RestoreFailure, activate, deactivate, park, stash_label,
 };
-pub(crate) use engine::deactivate_for_integration;
 pub use plan::{
     ActivationPlan, Baselines, OverlayPlan, PlanError, PlanProblem, PlanRepo, RepoAction, RepoPlan,
     plan_activation,

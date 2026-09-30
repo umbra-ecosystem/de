@@ -572,7 +572,10 @@ mod tests {
         // Built explicitly (not from the registry) so the test does not depend on whether
         // `acli`/`bkt` happen to be installed on the machine running it.
         let providers = Providers {
-            jira: Err(ProviderError::not_installed("acli", "acli is not installed")),
+            jira: Err(ProviderError::not_installed(
+                "acli",
+                "acli is not installed",
+            )),
             code_host: Err(ProviderError::not_installed("bkt", "bkt is not installed")),
         };
         let ctx = SyncContext {

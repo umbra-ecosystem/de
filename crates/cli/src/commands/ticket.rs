@@ -813,7 +813,10 @@ mod tests {
             LocalStatus::Reviewing
         );
         let err = manual_deactivation_target(Some(LocalStatus::Integrated)).unwrap_err();
-        assert!(err.to_string().contains("only when it is merged and pushed"));
+        assert!(
+            err.to_string()
+                .contains("only when it is merged and pushed")
+        );
     }
 
     use super::*;
