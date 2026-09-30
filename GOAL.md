@@ -196,10 +196,10 @@ Foundation first. Each milestone is usable and tested headlessly before the next
 - **M3: Done**, independently reviewed and fixed. Active ticket and local test. Activate/park/restore, overlay engine (composer pointing at the ticket branch, rebuild tasks) with guaranteed revert and push guard.
 - **M4: Done** (adapters unverified for writes and for Bitbucket reads). Providers and sync. Provider traits; Jira via `acli` (Review column, priority, @mentions, statuses), Bitbucket via `bkt` (PRs, pipelines by commit). Verify JSON, mention data and inline comments first; pin CLI versions. Cache, refresh, offline.
 - **M5: Done.** Write gateway and integration. The `uat` merge-and-push flow (conflict reporting, recorded merge commits), deploy-comment drafts, Alpha Testing transition, pipeline re-run, all confirmed and audited.
-- **M6: In progress.** Next-action engine. Suggestion/Action model, the rules above, priority, dismiss/snooze persistence. Exposed headlessly as `de next` so rules can be tuned on real data before any UI.
+- **M6: Done.** Next-action engine. Suggestion/Action model, the rules above, priority, dismiss/snooze persistence. Exposed headlessly as `de next` so rules can be tuned on real data before any UI.
 - **M7: Menubar app.** GPUI shell: ticket views (review queue, active, parked), ticket detail, notifications, start/stop workspace. Needs a `.app` bundle; `cargo-dist` does not build one.
 - **M8: In-app review.** Our own diff view (Zed's diff code is GPL-3, `de` is MIT), inline PR comments, later approve.
-- **M9: After alpha.** UAT sign-off tracking, Returned handling, re-merge detection, PR approval suggestion.
+- **M9: Done** (as engine rules). After alpha. UAT sign-off tracking, Returned handling, re-merge detection, PR approval suggestion.
 - **Later:** GitHub adapter, time reports, reverting a ticket out of `uat`.
 
 ## Non-goals
@@ -237,20 +237,11 @@ Technical:
 
 ## Current state
 
-- Workspace of two crates (`de-core`, `de`). Built and tested (real temporary git repos and SQLite, several hundred tests): M1 store and domain model, M2 git layer with `de git status` and the `stop` guard, M3 activation and the Composer overlay with `de ticket ...`.
-- A ticket can be claimed, linked to repos (auto-discovered by key, with manual override), activated (ticket branch or baseline per repo, stash and restore, overlay, rebuild tasks) and parked, entirely headless.
-- Not built: providers and sync (Jira via `acli`, Bitbucket via `bkt`), write gateway and the `uat` merge/push flow, next-action engine, menubar app, in-app review. Hotfix kind is still a manual `--hotfix` flag until PR destinations are synced.
-- An independent adversarial review found and fixed: the push guard failing open (merge commits, root commits, renames, wildcard spellings, context-line changes), `revert` silently discarding hand edits to composer files (now saved as `<name>.de-edited`), and a window where a failed restore-point write left work in an unreferenced stash.
-- **Rules for the write gateway (M5), from that review:**
-  - Pass commit SHAs, never branch names, to `check_range_for_overlay`, `commits_not_in` and `is_ancestor` (a tag can shadow a branch name).
-  - Run `working_tree_has_overlay` on the integration checkout as well; the guard sees commits, not `vendor/`.
-  - Treat `Integrated` as meaningful only when the gateway itself set it after a push. The CLI now refuses `deactivate --status integrated`, but `tickets::set_status` is not guarded at the store level.
-  - Write audit entries for claim and untrack too (currently missing).
-- **Open gaps (not fixed, judged low or medium-low):**
-  - A hard kill between `git switch` and the restore-record insert leaves work in a labelled `de:KEY:repo` stash with no record; closing it needs a write-ahead record.
-  - If `composer install` keeps failing during revert, the ticket stays Active with no escape hatch.
-  - No cross-process lock on activation (matters once the menubar app and CLI run together); the DB's unique-Active index and rollback keep the outcome fail-safe.
-  - The stash-by-label fallback can pop a stale stash with the same label on a retry.
-  - A repo without `de.toml` blocks activation; `.env` files of workspace repos leak into the process environment; `de stop` does not mention an Active ticket.
-  - The overlay has only run against stub composers, never real Composer; manifests and tasks are read before branches switch; composer/rebuild output is captured, not streamed.
+Everything before the GUI is built and tested (about 480 tests, real temporary git repos and SQLite; provider fakes for Jira and Bitbucket), and has had independent adversarial review of the overlay/activation code and, in progress, of the gateway/push path and the engine/sync/adapters.
+
+- **Built:** store and domain (M1), git layer, `de git status`, `de stop` guard (M2), activation and the Composer overlay with a fail-closed push guard (M3), provider contracts, sync engine, `acli` and `bkt` adapters (M4), write gateway, `uat` integration, deploy tracking and comment drafts (M5), next-action engine and after-alpha rules with `de next --json` (M6, M9).
+- **Verified against real tools:** `acli` 1.3.39 reads (search, view, comments and @mentions via `view --fields comment`), via opt-in `live_` tests. `bkt` 0.32.1 only up to its logged-out behaviour.
+- **Not verified:** any write to Jira or Bitbucket (comment, transition, PR comment, approve, pipeline trigger), `bkt` reads (needs `bkt auth login` and `bkt context use`), `git push` against hosted Bitbucket (only local bare remotes), Composer overlay against real Composer, interactive `de next do`.
+- **Pending: the GUI.** M7 (menubar app: ticket views, notifications, background sync loop, start/stop workspace) and M8 (in-app review: own diff view, inline PR comments, later approve). The GUI must render `de next --json` and call `de-core`, with no business logic of its own. Spike `gpui-kit` first (open question 13).
+- **Known gaps:** see the review notes above and each milestone's listed gaps; hotfix kind is derived from synced PRs but the ticket CLI still shows the manual override; README and `docs/` describe removed commands.
 - Removed earlier: shims, setup/snapshot, doctor/status, the old git commands, service tasks.

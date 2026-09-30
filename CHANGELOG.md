@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Local changes are stashed and restored on deactivate.
   - Per-repo `[branches]`, `[overlay.composer]` and `[activate]` sections in `de.toml` configure the fallback branch, the Composer path/symlink test overlay and post-activation tasks.
 - Local SQLite store (`state.db`, `cache.db`) for tickets, notes, checklists, time and an append-only audit log.
+- `de sync` and `de providers check|probe`: read-only sync of Jira (via `acli`) and Bitbucket (via `bkt`) into a local cache; `probe` prints raw tool output for diagnosing shape mismatches.
+- `de ticket integrate|integration|deploy|draft-comment|post-comment|transition|cancel-integration`: merge a ticket to `uat` in temporary worktrees, push with an explicit confirmation (no flag skips it), track per-repo deploys from pipelines, and draft/post the Jira deploy comment and the transition. Every external write goes through one audited gateway; the Composer overlay is blocked from reaching `uat` by a fail-closed guard.
+- `de next [--json]`, `de next dismiss|snooze|do`: ranked suggestions for what to do next across tickets, with reasons; `--json` is a versioned contract for a future GUI.
 
 ### Removed
 
