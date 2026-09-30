@@ -26,12 +26,7 @@ fn thread(ui: &Ui, t: &ThreadVm) -> Div {
                 .items_center()
                 .gap_2()
                 .child(avatar(&t.author))
-                .child(
-                    div()
-                        .text_sm()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(t.author.clone()),
-                )
+                .child(div().text_sm().child(t.author.clone()))
                 .when(t.mine, |d| {
                     d.child(pill(pal, &Badge::new("you", Tone::Accent)))
                 })
@@ -404,11 +399,7 @@ pub fn review(ui: &Ui, _cx: &App, inputs: &Inputs, r: &ReviewVm) -> Div {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(
-                        div()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(p.title.clone()),
-                    )
+                    .child(div().child(p.title.clone()))
                     .child(
                         div()
                             .flex()

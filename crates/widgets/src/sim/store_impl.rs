@@ -65,6 +65,7 @@ impl Sim {
             .primary_if(s.level == Level::External || !s.info);
         SuggestionCard {
             id: s.id.clone(),
+            attention: !s.info && (s.rule.needs_attention() || s.hotfix),
             rank: s.rank,
             hotfix: s.hotfix,
             info: s.info,

@@ -106,6 +106,8 @@ pub enum SugState {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SuggestionCard {
     pub id: SuggestionId,
+    /// Needs you now (something broke, someone waits, a hotfix): the one thing the UI draws in bold.
+    pub attention: bool,
     pub rank: usize,
     pub hotfix: bool,
     pub info: bool,

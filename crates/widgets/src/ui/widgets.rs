@@ -81,7 +81,6 @@ pub fn key_link(ui: &Ui, key: &str, intent: Intent) -> Stateful<Div> {
         .flex_none()
         .font_family(ui.mono.clone())
         .text_sm()
-        .font_weight(FontWeight::SEMIBOLD)
         .text_color(ui.pal.accent)
         .cursor_pointer()
         .hover(|s| s.underline())
@@ -98,7 +97,6 @@ pub fn key_text(ui: &Ui, key: &str) -> Div {
         .flex_none()
         .font_family(ui.mono.clone())
         .text_sm()
-        .font_weight(FontWeight::SEMIBOLD)
         .text_color(ui.pal.accent)
         .child(key.to_string())
 }
@@ -137,17 +135,13 @@ pub fn section(pal: &Pal, title: impl Into<SharedString>) -> Div {
     div().flex().flex_col().gap_2().child(
         div()
             .text_xs()
-            .font_weight(FontWeight::SEMIBOLD)
             .text_color(pal.muted)
             .child(title.into().to_uppercase()),
     )
 }
 
 pub fn heading(title: impl Into<SharedString>) -> Div {
-    div()
-        .text_lg()
-        .font_weight(FontWeight::SEMIBOLD)
-        .child(title.into())
+    div().text_lg().child(title.into())
 }
 
 pub fn empty_state(_pal: &Pal, text: impl Into<SharedString>) -> Empty {
@@ -185,8 +179,8 @@ pub fn banner(ui: &Ui, b: &BannerVm) -> Div {
         .child(
             div()
                 .text_sm()
-                .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c)
+                .when(b.tone == Tone::Bad, |d| d.font_weight(FontWeight::BOLD))
                 .child(b.title.clone()),
         )
         .children(
@@ -298,12 +292,7 @@ pub fn blocks(pal: &Pal, cx: &App, items: &[Block]) -> Div {
                     .text_sm()
                     .child(inline_text(pal, x))
                     .into_any_element(),
-                Block::Heading(x) => div()
-                    .text_sm()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .pt_1()
-                    .child(x.clone())
-                    .into_any_element(),
+                Block::Heading(x) => div().text_sm().pt_1().child(x.clone()).into_any_element(),
                 Block::List(items) => div()
                     .flex()
                     .flex_col()
@@ -399,10 +388,10 @@ pub fn stepper(pal: &Pal, s: &StepperVm) -> Div {
         .items_center()
         .gap_1()
         .children(s.steps.iter().enumerate().map(|(i, (label, st))| {
-            let (c, w) = match st {
-                StepState::Done => (pal.ok, FontWeight::NORMAL),
-                StepState::Now => (pal.accent, FontWeight::SEMIBOLD),
-                _ => (pal.faint, FontWeight::NORMAL),
+            let c = match st {
+                StepState::Done => pal.ok,
+                StepState::Now => pal.accent,
+                _ => pal.faint,
             };
             div()
                 .flex()
@@ -410,12 +399,6 @@ pub fn stepper(pal: &Pal, s: &StepperVm) -> Div {
                 .gap_1()
                 .when(i > 0, |d| d.child(div().w_3().h_px().bg(pal.border)))
                 .child(dot(c))
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(c)
-                        .font_weight(w)
-                        .child(label.clone()),
-                )
+                .child(div().text_xs().text_color(c).child(label.clone()))
         }))
 }

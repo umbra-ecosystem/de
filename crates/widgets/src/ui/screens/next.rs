@@ -111,7 +111,7 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
         .child(
             div()
                 .truncate()
-                .font_weight(FontWeight::SEMIBOLD)
+                .when(s.attention, |d| d.font_weight(FontWeight::BOLD))
                 .child(s.title.clone()),
         )
         .when(s.state == SugState::Resurfaced, |d| {

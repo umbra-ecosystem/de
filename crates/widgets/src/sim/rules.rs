@@ -93,7 +93,7 @@ impl Rule {
     }
 
     /// Something is broken, someone is waiting, or a hotfix is in play.
-    fn needs_attention(self) -> bool {
+    pub(crate) fn needs_attention(self) -> bool {
         matches!(
             self,
             Rule::StaleLock

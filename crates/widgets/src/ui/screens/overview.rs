@@ -116,12 +116,7 @@ fn comment(ui: &Ui, cx: &App, c: &CommentVm) -> Div {
                         .items_center()
                         .gap_2()
                         .child(avatar(&c.who))
-                        .child(
-                            div()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_sm()
-                                .child(c.who.clone()),
-                        )
+                        .child(div().text_sm().child(c.who.clone()))
                         .child(faint(pal, c.at.clone())),
                 )
                 .when(c.is_new, |d| {

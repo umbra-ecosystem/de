@@ -32,12 +32,7 @@ pub fn on_uat(ui: &Ui, v: &OnUatVm) -> Div {
                                 .flex()
                                 .items_center()
                                 .justify_between()
-                                .child(
-                                    div()
-                                        .font_family(ui.mono.clone())
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .child(c.repo.to_string()),
-                                )
+                                .child(div().font_family(ui.mono.clone()).child(c.repo.to_string()))
                                 .child(pill(pal, &Badge::new(c.host.clone(), Tone::Neutral))),
                         )
                         .child(if c.items.is_empty() {
@@ -217,11 +212,7 @@ pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
                     div()
                         .flex()
                         .justify_between()
-                        .child(
-                            div()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(p.name.clone()),
-                        )
+                        .child(div().child(p.name.clone()))
                         .child(pill(
                             pal,
                             &if p.ready {

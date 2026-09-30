@@ -42,7 +42,7 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
         .gap_3()
         .w_full()
         .pr_3()
-        .child(div().font_weight(FontWeight::BOLD).child("de"))
+        .child(div().child("de"))
         .child(div().flex_1())
         .child(flat(
             "attn",
@@ -91,7 +91,6 @@ pub fn nav(ui: &Ui, vm: &AppVm) -> Div {
                         .px_2()
                         .pb_1()
                         .text_xs()
-                        .font_weight(FontWeight::SEMIBOLD)
                         .text_color(pal.faint)
                         .child(s.title.to_uppercase()),
                 )
@@ -112,11 +111,6 @@ pub fn nav(ui: &Ui, vm: &AppVm) -> Div {
                             gpui_kit::transparent_black()
                         })
                         .text_color(if i.selected { pal.fg } else { pal.muted })
-                        .font_weight(if i.selected {
-                            FontWeight::SEMIBOLD
-                        } else {
-                            FontWeight::NORMAL
-                        })
                         .hover(|s| s.bg(pal.hover))
                         .on_click(ui.on_click(Intent::Go(i.route.clone())))
                         .child(i.label.clone())
@@ -186,7 +180,6 @@ pub fn tabstrip(ui: &Ui, vm: &AppVm) -> Div {
                     div()
                         .font_family(ui.mono.clone())
                         .text_xs()
-                        .font_weight(FontWeight::SEMIBOLD)
                         .child(t.label.clone()),
                 )
                 .when(!t.title.is_empty(), |d| {
@@ -287,15 +280,7 @@ pub fn right_panel(ui: &Ui, sections: &[RightSection]) -> Div {
                             .gap_2()
                             .text_xs()
                             .child(dot(if *ok { pal.ok } else { pal.bad }))
-                            .child(
-                                div()
-                                    .child(
-                                        div()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .child(source.clone()),
-                                    )
-                                    .child(text.clone()),
-                            )
+                            .child(div().child(div().child(source.clone())).child(text.clone()))
                             .into_any_element(),
                         RightRow::Button(a) => div().child(button(ui, a)).into_any_element(),
                     }
@@ -425,11 +410,7 @@ pub fn attention_panel(ui: &Ui, a: &AttentionVm) -> Div {
                         .flex()
                         .items_center()
                         .justify_between()
-                        .child(
-                            div()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child("Needs attention"),
-                        )
+                        .child(div().child("Needs attention"))
                         .child(button_ghost(
                             ui,
                             &Btn::new("All next actions", Intent::Go(Route::Next)),
@@ -467,11 +448,7 @@ pub fn simulate_panel(ui: &Ui, groups: &[SimGroup]) -> Div {
         .border_color(pal.border)
         .bg(pal.bg)
         .shadow_lg()
-        .child(
-            div()
-                .font_weight(FontWeight::SEMIBOLD)
-                .child("Simulate the outside world"),
-        )
+        .child(div().child("Simulate the outside world"))
         .children(groups.iter().map(|g| {
             section(pal, g.title.clone()).child(
                 div().flex().flex_col().gap_1().children(
@@ -562,7 +539,6 @@ fn sheet_frame(ui: &Ui, width: f32, title: Div, body: Div, footer: Div) -> Div {
                                 .py_3()
                                 .border_b_1()
                                 .border_color(pal.border)
-                                .font_weight(FontWeight::SEMIBOLD)
                                 .child(title),
                         )
                         .child(
@@ -610,7 +586,7 @@ fn risk_banner(ui: &Ui, p: &Preview) -> Div {
                 .child(pill(pal, &Badge::new(label, tone)))
                 .child(
                     div()
-                        .font_weight(FontWeight::SEMIBOLD)
+                        .when(p.risk == Risk::High, |d| d.font_weight(FontWeight::BOLD))
                         .child(p.title.clone()),
                 ),
         )

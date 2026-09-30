@@ -17,11 +17,7 @@ fn step(ui: &Ui, n: usize, title: &str, state: StepState, body: Div) -> Div {
             .flex_1()
             .min_w_0()
             .pb_4()
-            .child(
-                div()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(title.to_string()),
-            )
+            .child(div().child(title.to_string()))
             .child(body),
     )
 }
@@ -206,10 +202,7 @@ fn runs(ui: &Ui, cx: &App, s: &ShipVm) -> Div {
                                     .flex()
                                     .justify_between()
                                     .child(
-                                        div()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .text_sm()
-                                            .child(format!("Failed at step “{step}”")),
+                                        div().text_sm().child(format!("Failed at step “{step}”")),
                                     )
                                     .child(faint(pal, format!("run #{run}"))),
                             )

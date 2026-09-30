@@ -62,7 +62,7 @@ pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &TicketKey, t: &TestVm) ->
             .rounded_lg()
             .border_1()
             .border_color(pal.border)
-            .child(div().font_weight(FontWeight::SEMIBOLD).child("Not active."))
+            .child(div().child("Not active."))
             .child(muted(pal, why.clone()))
             .when(!errors.is_empty(), |d| {
                 d.child(warn_box(

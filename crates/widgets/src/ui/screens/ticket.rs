@@ -34,12 +34,7 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
                 )
                 .child(buttons(ui, &h.actions)),
         )
-        .child(
-            div()
-                .text_xl()
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(h.title.clone()),
-        )
+        .child(div().text_xl().child(h.title.clone()))
         .children(h.banners.iter().map(|b| banner(ui, b)))
         .child(stepper(pal, &h.stepper))
         .child(tab_bar(

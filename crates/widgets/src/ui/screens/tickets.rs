@@ -76,7 +76,9 @@ pub fn ticket_row(ui: &Ui, r: &TicketRowVm) -> Stateful<Div> {
                         .child(
                             div()
                                 .truncate()
-                                .font_weight(FontWeight::SEMIBOLD)
+                                .when(r.flags.iter().any(|b| b.tone == Tone::Bad), |d| {
+                                    d.font_weight(FontWeight::BOLD)
+                                })
                                 .child(r.title.clone()),
                         )
                         .when(r.hotfix, |d| d.child(hotfix_pill(pal))),
@@ -179,7 +181,6 @@ pub fn tickets(ui: &Ui, vm: &TicketListVm) -> AnyElement {
                                 .h(px(ROW_H))
                                 .px_2()
                                 .pb_1()
-                                .font_weight(FontWeight::SEMIBOLD)
                                 .child(h.clone())
                                 .into_any_element(),
                             Item::Ticket(r) => ticket_row(&ui, r).into_any_element(),
