@@ -6,7 +6,9 @@
 use de_core::{
     activation::WorkspaceRepo,
     config::Config,
-    providers::{Health, ProviderError, Providers},
+    domain::TicketKey,
+    overlay::ProcessRunner,
+    providers::{self, Health, ProviderError, Providers},
     store::{Kind, Store},
     sync::{
         DEFAULT_MIN_INTERVAL, HostedRepo, SourceOutcome, SourceReport, SyncContext, SyncReport,
@@ -216,6 +218,87 @@ pub fn providers_check() -> eyre::Result<()> {
         return Err(eyre!("Some providers are not ready"));
     }
     Ok(())
+}
+
+/// One probed command, whichever adapter ran it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProbeLine {
+    pub command: String,
+    pub exit_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+/// `de providers probe`.
+pub fn providers_probe(
+    ticket: Option<TicketKey>,
+    repo: Option<String>,
+    out: Option<std::path::PathBuf>,
+) -> eyre::Result<()> {
+    let runner = ProcessRunner::new();
+
+    let jira: Vec<ProbeLine> = providers::acli::probe(&runner, ticket.as_ref())
+        .into_iter()
+        .map(|r| ProbeLine {
+            command: r.command,
+            exit_code: r.exit_code,
+            stdout: r.stdout,
+            stderr: r.stderr,
+        })
+        .collect();
+    let bitbucket: Vec<ProbeLine> = providers::bkt::probe(&runner, repo.as_deref())
+        .into_iter()
+        .map(|r| ProbeLine {
+            command: r.command,
+            exit_code: r.exit_code,
+            stdout: r.stdout,
+            stderr: r.stderr,
+        })
+        .collect();
+
+    let report = render_probe(&[("acli (Jira)", &jira), ("bkt (Bitbucket)", &bitbucket)]);
+
+    match out {
+        Some(path) => {
+            std::fs::write(&path, &report)
+                .wrap_err_with(|| format!("Failed to write {}", path.display()))?;
+            UserInterface::new().writeln(&format!(
+                "Wrote the probe report to {}. Read it before sharing: it can contain ticket and PR titles.",
+                path.display()
+            ))?;
+        }
+        None => print!("{report}"),
+    }
+    Ok(())
+}
+
+/// The probe report: a privacy note, then per tool each command with its exit code, stdout and
+/// stderr, delimited so it can be pasted into a fixture or an issue.
+pub fn render_probe(sections: &[(&str, &[ProbeLine])]) -> String {
+    let mut out = String::from(
+        "# de providers probe\n\
+         # Raw output of read-only commands. It may contain ticket and PR titles or names:\n\
+         # review it before sharing.\n",
+    );
+    for (tool, lines) in sections {
+        out.push_str(&format!("\n## {tool}\n"));
+        if lines.is_empty() {
+            out.push_str("(no commands were run)\n");
+        }
+        for line in lines.iter() {
+            let code = line
+                .exit_code
+                .map_or_else(|| "did not start".to_string(), |c| format!("exit {c}"));
+            out.push_str(&format!("\n$ {}\n[{code}]\n", line.command));
+            for (label, text) in [("stdout", &line.stdout), ("stderr", &line.stderr)] {
+                if text.trim().is_empty() {
+                    continue;
+                }
+                out.push_str(&format!("--- {label}\n{}\n", text.trim_end()));
+            }
+        }
+    }
+    out
 }
 
 /// Lines for the health check, one block per provider.
@@ -510,5 +593,45 @@ mod tests {
             text.contains("not configured: no project has a [hosting] section"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn probe_report_shows_each_command_its_exit_code_and_output() {
+        let jira = vec![
+            ProbeLine {
+                command: "acli --version".into(),
+                exit_code: Some(0),
+                stdout: "acli 1.3.4\n".into(),
+                stderr: String::new(),
+            },
+            ProbeLine {
+                command: "acli jira auth status".into(),
+                exit_code: Some(1),
+                stdout: String::new(),
+                stderr: "not logged in\n".into(),
+            },
+        ];
+        let bkt = vec![ProbeLine {
+            command: "bkt --version".into(),
+            exit_code: None,
+            stdout: String::new(),
+            stderr: "No such file or directory".into(),
+        }];
+
+        let report = render_probe(&[("acli (Jira)", &jira), ("bkt (Bitbucket)", &bkt)]);
+
+        assert!(report.contains("review it before sharing"));
+        assert!(report.contains("## acli (Jira)"));
+        assert!(report.contains("$ acli --version\n[exit 0]\n--- stdout\nacli 1.3.4"));
+        assert!(report.contains("[exit 1]\n--- stderr\nnot logged in"));
+        assert!(report.contains("$ bkt --version\n[did not start]"));
+        // Empty streams are not printed.
+        assert!(!report.contains("--- stdout\n\n"));
+    }
+
+    #[test]
+    fn probe_report_says_when_nothing_ran() {
+        let report = render_probe(&[("acli (Jira)", &[])]);
+        assert!(report.contains("(no commands were run)"));
     }
 }

@@ -87,6 +87,9 @@ fn main() -> eyre::Result<()> {
         Commands::Sync { only, force } => commands::sync::sync(only.map(Into::into), force),
         Commands::Providers { command } => match command {
             ProvidersCommands::Check => commands::sync::providers_check(),
+            ProvidersCommands::Probe { ticket, repo, out } => {
+                commands::sync::providers_probe(ticket, repo, out)
+            }
         },
         Commands::Compose {
             project,

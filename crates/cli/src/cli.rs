@@ -435,6 +435,25 @@ impl From<SyncOnly> for SyncSource {
 pub enum ProvidersCommands {
     /// Show whether each provider is installed, logged in and recent enough.
     Check,
+
+    /// Run harmless read-only commands against `acli` and `bkt` and print their raw output.
+    ///
+    /// Use this on a real install to confirm the output shapes `de` expects, and paste the
+    /// result into a bug report. The output can contain ticket and PR titles: read it before
+    /// sharing it.
+    Probe {
+        /// A Jira key to view and list comments for (e.g. PROJ-123).
+        #[arg(long)]
+        ticket: Option<TicketKey>,
+
+        /// A Bitbucket repository as `workspace/slug` to list PRs and pipelines for.
+        #[arg(long)]
+        repo: Option<String>,
+
+        /// Write the report to this file instead of printing it.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
