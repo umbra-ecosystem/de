@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod constants;
+pub mod domain;
 pub mod project;
 pub mod store;
 pub mod types;
