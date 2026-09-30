@@ -678,6 +678,19 @@ pub fn pick_ticket_to_deactivate(
     }
 }
 
+/// The status a deactivated ticket may be moved to by hand.
+///
+/// `Integrated` is refused: it means "merged and pushed to `uat`", so only the flow that
+/// actually pushes may set it. Marking it here would record a push that never happened.
+fn manual_deactivation_target(status: Option<LocalStatus>) -> eyre::Result<LocalStatus> {
+    match status.unwrap_or(LocalStatus::Parked) {
+        LocalStatus::Integrated => Err(eyre::eyre!(
+            "A ticket becomes 'integrated' only when it is merged and pushed to uat, not by hand"
+        )),
+        other => Ok(other),
+    }
+}
+
 /// `de ticket deactivate` and `de ticket park`.
 pub fn deactivate_cmd(key: Option<TicketKey>, status: Option<LocalStatus>) -> eyre::Result<()> {
     let ui = UserInterface::new();
@@ -700,7 +713,7 @@ pub fn deactivate_cmd(key: Option<TicketKey>, status: Option<LocalStatus>) -> ey
         &state,
         &ProcessRunner::new(),
         &key,
-        status.unwrap_or(LocalStatus::Parked),
+        manual_deactivation_target(status)?,
         now()?,
     )?;
     print_deactivation(&ui, &report)
@@ -785,6 +798,24 @@ pub fn check(command: CheckCommands) -> eyre::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn deactivation_target_defaults_to_parked_and_refuses_integrated() {
+        assert_eq!(
+            manual_deactivation_target(None).unwrap(),
+            LocalStatus::Parked
+        );
+        assert_eq!(
+            manual_deactivation_target(Some(LocalStatus::Done)).unwrap(),
+            LocalStatus::Done
+        );
+        assert_eq!(
+            manual_deactivation_target(Some(LocalStatus::Reviewing)).unwrap(),
+            LocalStatus::Reviewing
+        );
+        let err = manual_deactivation_target(Some(LocalStatus::Integrated)).unwrap_err();
+        assert!(err.to_string().contains("only when it is merged and pushed"));
+    }
+
     use super::*;
     use de_core::{activation::RepoRestore, git::StashRef, overlay::RevertOutcome};
 

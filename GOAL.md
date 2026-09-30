@@ -193,7 +193,7 @@ Foundation first. Each milestone is usable and tested headlessly before the next
 - **M0: Done.** Workspace split, command surface slimmed, task proxy (shell execution, exit codes propagate), clippy clean.
 - **M1: Done** (except importing the current workspace config, deferred). Domain and store. Ticket/repo/branch model, SQLite with migrations, local state (claims, ordering, notes, checklist, time), audit log. Import current workspace config.
 - **M2: Done.** Git layer. Structured status, key matching with manual override, safe in-place switch with stash/restore, diff-from-objects, temporary worktrees, restore the uncommitted/unpushed guard on `stop`.
-- **M3: Done** (pending independent review findings). Active ticket and local test. Activate/park/restore, overlay engine (composer pointing at the ticket branch, rebuild tasks) with guaranteed revert and push guard.
+- **M3: Done**, independently reviewed and fixed. Active ticket and local test. Activate/park/restore, overlay engine (composer pointing at the ticket branch, rebuild tasks) with guaranteed revert and push guard.
 - **M4: Providers and sync.** Provider traits; Jira via `acli` (Review column, priority, @mentions, statuses), Bitbucket via `bkt` (PRs, pipelines by commit). Verify JSON, mention data and inline comments first; pin CLI versions. Cache, refresh, offline.
 - **M5: Write gateway and integration.** The `uat` merge-and-push flow (conflict reporting, recorded merge commits), deploy-comment drafts, Alpha Testing transition, pipeline re-run, all confirmed and audited.
 - **M6: Next-action engine.** Suggestion/Action model, the rules above, priority, dismiss/snooze persistence. Exposed headlessly as `de next` so rules can be tuned on real data before any UI.
@@ -240,5 +240,17 @@ Technical:
 - Workspace of two crates (`de-core`, `de`). Built and tested (real temporary git repos and SQLite, several hundred tests): M1 store and domain model, M2 git layer with `de git status` and the `stop` guard, M3 activation and the Composer overlay with `de ticket ...`.
 - A ticket can be claimed, linked to repos (auto-discovered by key, with manual override), activated (ticket branch or baseline per repo, stash and restore, overlay, rebuild tasks) and parked, entirely headless.
 - Not built: providers and sync (Jira via `acli`, Bitbucket via `bkt`), write gateway and the `uat` merge/push flow, next-action engine, menubar app, in-app review. Hotfix kind is still a manual `--hotfix` flag until PR destinations are synced.
-- Known gaps recorded by the M3 author: manifests/tasks are read before switching branches; composer/rebuild output is captured rather than streamed; the overlay was only tested against stub composers, never real composer; the overlay matches the workspace project id, not `[project].name`.
+- An independent adversarial review found and fixed: the push guard failing open (merge commits, root commits, renames, wildcard spellings, context-line changes), `revert` silently discarding hand edits to composer files (now saved as `<name>.de-edited`), and a window where a failed restore-point write left work in an unreferenced stash.
+- **Rules for the write gateway (M5), from that review:**
+  - Pass commit SHAs, never branch names, to `check_range_for_overlay`, `commits_not_in` and `is_ancestor` (a tag can shadow a branch name).
+  - Run `working_tree_has_overlay` on the integration checkout as well; the guard sees commits, not `vendor/`.
+  - Treat `Integrated` as meaningful only when the gateway itself set it after a push. The CLI now refuses `deactivate --status integrated`, but `tickets::set_status` is not guarded at the store level.
+  - Write audit entries for claim and untrack too (currently missing).
+- **Open gaps (not fixed, judged low or medium-low):**
+  - A hard kill between `git switch` and the restore-record insert leaves work in a labelled `de:KEY:repo` stash with no record; closing it needs a write-ahead record.
+  - If `composer install` keeps failing during revert, the ticket stays Active with no escape hatch.
+  - No cross-process lock on activation (matters once the menubar app and CLI run together); the DB's unique-Active index and rollback keep the outcome fail-safe.
+  - The stash-by-label fallback can pop a stale stash with the same label on a retry.
+  - A repo without `de.toml` blocks activation; `.env` files of workspace repos leak into the process environment; `de stop` does not mention an Active ticket.
+  - The overlay has only run against stub composers, never real Composer; manifests and tasks are read before branches switch; composer/rebuild output is captured, not streamed.
 - Removed earlier: shims, setup/snapshot, doctor/status, the old git commands, service tasks.
