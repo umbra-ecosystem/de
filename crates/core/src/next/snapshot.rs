@@ -219,7 +219,10 @@ pub struct DraftInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Mention {
     pub comment_id: String,
+    /// The author's display name, for the reason.
     pub author: String,
+    /// The author's Jira account id, which is what [`Snapshot::me`] is compared with.
+    pub author_account: String,
     pub text: String,
     pub created_at: i64,
 }

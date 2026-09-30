@@ -288,7 +288,7 @@ fn stdout_errors_and_error_marker_with_exit_zero_are_errors() {
 }
 
 #[test]
-fn search_accepts_wrapped_objects_and_empty_output() {
+fn search_accepts_wrapped_objects_and_an_empty_array_but_not_empty_output() {
     let wrapped = r#"{"issues":[{"key":"APP-9","fields":{"summary":"s","status":{"name":"Open"}}}],"total":1}"#;
     let (jira, _) = reader(
         Fake::default()
@@ -299,7 +299,52 @@ fn search_accepts_wrapped_objects_and_empty_output() {
     let t = jira.search("a").unwrap();
     assert_eq!((t.len(), t[0].updated_at), (1, 0));
     assert!(jira.search("b").unwrap().is_empty());
-    assert!(jira.search("c").unwrap().is_empty());
+    // Verified against a real acli: a search with no result prints `[]`. Nothing at all on
+    // stdout (exit 0) is a run that did not answer, and reading it as "no tickets" would make
+    // sync delete every cached ticket and comment that is not tracked.
+    let e = jira.search("c").unwrap_err();
+    assert_eq!(e.kind(), ProviderErrorKind::Parse, "{e}");
+}
+
+#[test]
+fn a_ticket_number_that_looks_like_an_http_status_does_not_change_the_error_kind() {
+    // `PROJ-401` and `PROJ-404` are tickets, not HTTP statuses: a ticket that cannot be
+    // read must stay a per-ticket NotFound and must not abort the whole sync as "not
+    // logged in".
+    let key401 = key("PROJ-401");
+    let argv = [
+        "jira",
+        "workitem",
+        "view",
+        "PROJ-401",
+        "--json",
+        "--fields",
+        VIEW_FIELDS,
+    ];
+    let (jira, _) = reader(Fake::default().on(
+        &argv,
+        fail(
+            1,
+            "✗ Error: Issue PROJ-401 does not exist or you do not have permission to see it.\n",
+        ),
+    ));
+    assert_eq!(
+        jira.get(&key401).unwrap_err().kind(),
+        ProviderErrorKind::NotFound
+    );
+
+    // A real status still counts.
+    let (jira, _) = reader(Fake::default().on(&argv, fail(1, "✗ Error: HTTP 401 Unauthorized\n")));
+    assert_eq!(
+        jira.get(&key("PROJ-401")).unwrap_err().kind(),
+        ProviderErrorKind::NotAuthenticated
+    );
+    let (jira, _) =
+        reader(Fake::default().on(&argv, fail(1, "✗ Error: request failed with status 401\n")));
+    assert_eq!(
+        jira.get(&key("PROJ-401")).unwrap_err().kind(),
+        ProviderErrorKind::NotAuthenticated
+    );
 }
 
 #[test]

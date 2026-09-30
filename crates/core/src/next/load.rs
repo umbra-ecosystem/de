@@ -226,6 +226,7 @@ fn base_snapshot(
             .map(|c| Mention {
                 comment_id: c.id,
                 author: c.author_name,
+                author_account: c.author_account_id,
                 text: c.body_text,
                 created_at: c.created_at,
             })

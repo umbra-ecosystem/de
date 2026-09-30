@@ -131,6 +131,26 @@ fn encode_pipeline_id(id: &str) -> ProviderResult<String> {
     Ok(id.replace('{', "%7B").replace('}', "%7D"))
 }
 
+/// Whether `lower` names the HTTP status `code` as a status, in one of the ways Go HTTP
+/// clients print it. A bare number is not enough: PR ids, ports and pipeline numbers are
+/// numbers too (`pull request 401` is not an authentication failure).
+fn has_http_status(lower: &str, code: &str) -> bool {
+    [
+        format!("status {code}"),
+        format!("status: {code}"),
+        format!("status code {code}"),
+        format!("http {code}"),
+        format!("http/1.1 {code}"),
+        format!("error {code}"),
+        format!("({code})"),
+        format!("[{code}]"),
+        format!("{code} unauthorized"),
+        format!("{code} not found"),
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle.as_str()))
+}
+
 /// Maps a failed `bkt` run onto a typed error. The stderr wording is from `bkt`'s source
 /// (`pkg/cmdutil/context.go`, `pkg/httpx/client.go`); matching is loose. Only the
 /// `no active context` wording is verified against a real bkt 0.32.1.
@@ -159,9 +179,9 @@ fn classify(out: &RawOutput) -> ProviderError {
         "auth login",
         "credentials for host",
         "unauthorized",
-        "401",
         "invalid credentials",
-    ]) {
+    ]) || has_http_status(&lower, "401")
+    {
         return ProviderError::not_authenticated(TOOL, snippet(&out.stderr));
     }
     if has(&[
@@ -175,7 +195,7 @@ fn classify(out: &RawOutput) -> ProviderError {
     ]) {
         return ProviderError::Network(snippet(&out.stderr));
     }
-    if has(&["404", "not found"]) {
+    if has(&["not found"]) || has_http_status(&lower, "404") {
         return ProviderError::NotFound(snippet(&out.stderr));
     }
     ProviderError::Command {

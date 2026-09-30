@@ -145,7 +145,7 @@ fn review_tickets_are_claimed_by_jira_priority_then_key() {
     assert_eq!(keys, ["PROJ-2", "PROJ-3", "PROJ-9", "PROJ-7"]);
     assert_eq!(list[0].priority, Priority(470));
     assert_eq!(list[2].priority, Priority(450));
-    assert_eq!(list[0].facts["queue_position"], 1);
+    assert!(list[0].reason.contains("#1 in the queue"));
     assert!(
         list.iter()
             .all(|x| x.level == ExecutionLevel::LocalOneClick)
@@ -746,6 +746,7 @@ fn mention(id: &str, author: &str, at: i64) -> Mention {
     Mention {
         comment_id: id.into(),
         author: author.into(),
+        author_account: author.into(),
         text: format!("hey {id}"),
         created_at: at,
     }
@@ -1229,4 +1230,118 @@ fn rule_ids_are_unique_and_listed() {
     assert_eq!(names.len(), RuleId::ALL.len());
     // Pr helper stays in sync with the model used above.
     let _: Pr = pr("a/b", 1, "x", "develop");
+}
+
+// ------------------------------------------------- independent review findings
+
+#[test]
+fn a_dismissed_claim_is_not_resurfaced_when_the_queue_around_it_changes() {
+    // Facts must hold what changes with the situation of the ticket, not its place in a
+    // queue that other tickets enter and leave all day.
+    let before = snap(vec![pool("PROJ-2", Some("Low"))]);
+    let claim = only(&before, RuleId::ClaimNew).remove(0);
+    let responses = answer(&claim, ResponseKind::Dismissed, None);
+
+    let after = snap(vec![
+        pool("PROJ-2", Some("Low")),
+        pool("PROJ-1", Some("High")),
+    ]);
+    let listed = next_actions(&after, &responses, NOW);
+    assert!(
+        listed.iter().all(|s| s.id != claim.id),
+        "a new ticket in the queue brought the dismissed claim back"
+    );
+}
+
+#[test]
+fn my_own_comment_is_recognised_by_account_id_not_by_display_name() {
+    // The loader knows the comment author's display name and account id; the configured
+    // identity is an account id, so comparing it with the name never matched.
+    let mut t = returned();
+    t.mentions = vec![Mention {
+        comment_id: "c3".into(),
+        author: "Display Name".into(),
+        author_account: "me".into(),
+        text: "note to self".into(),
+        created_at: 900,
+    }];
+    assert!(only(&snap(vec![t]), RuleId::ReturnedMention).is_empty());
+
+    // Someone whose display name happens to be my account id is somebody else.
+    let mut t = returned();
+    t.mentions = vec![Mention {
+        comment_id: "c4".into(),
+        author: "me".into(),
+        author_account: "someone-else".into(),
+        text: "ping".into(),
+        created_at: 900,
+    }];
+    assert_eq!(only(&snap(vec![t]), RuleId::ReturnedMention).len(), 1);
+}
+
+#[test]
+fn a_returned_or_finished_ticket_is_not_pushed_along_the_local_flow() {
+    // GOAL.md: a Returned ticket is ignored unless you are mentioned or it returns to
+    // Review. Rules that move a ticket towards review, test or integration stay quiet.
+    for jira in ["Returned", "returned ", "Done"] {
+        let mut claimed = mine("PROJ-1", LocalStatus::Claimed, 0);
+        claimed.jira_status = Some(jira.into());
+        let mut reviewing = mine("PROJ-2", LocalStatus::Reviewing, 1);
+        reviewing.jira_status = Some(jira.into());
+        let mut reviewed_t = reviewed("PROJ-3", LocalStatus::Reviewing, 2);
+        reviewed_t.jira_status = Some(jira.into());
+        let mut active = active_done();
+        active.jira_status = Some(jira.into());
+
+        // (Nothing may be active for the activation rule to speak at all.)
+        let mut all = suggest(&snap(vec![claimed, reviewing, reviewed_t]), NOW);
+        all.extend(suggest(&snap(vec![active]), NOW));
+        let noisy: Vec<_> = all
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s.rule,
+                    RuleId::StartReview
+                        | RuleId::FinishReview
+                        | RuleId::ActivateReviewed
+                        | RuleId::IntegrateReady
+                )
+            })
+            .map(|s| s.id.clone())
+            .collect();
+        assert!(noisy.is_empty(), "{jira}: {noisy:?}");
+    }
+
+    // Back in Review it is an ordinary ticket again.
+    let mut claimed = mine("PROJ-1", LocalStatus::Claimed, 0);
+    claimed.jira_status = Some("In Review".into());
+    assert_eq!(only(&snap(vec![claimed]), RuleId::StartReview).len(), 1);
+}
+
+#[test]
+fn only_external_writes_are_remembered_as_done() {
+    // A local action changes the store at once. Remembering it as done would hide the
+    // same suggestion when it recurs with identical facts (parked a second time, a
+    // review restarted after new commits).
+    let t = key("PROJ-1");
+    for local in [
+        SuggestedAction::Claim { ticket: t.clone() },
+        SuggestedAction::StartReview { ticket: t.clone() },
+        SuggestedAction::MarkReviewed { ticket: t.clone() },
+        SuggestedAction::Activate {
+            ticket: t.clone(),
+            baseline: None,
+        },
+        SuggestedAction::Park { ticket: t.clone() },
+        SuggestedAction::RunIntegrationPrepare { ticket: t.clone() },
+        SuggestedAction::Sync,
+    ] {
+        assert!(!exec::records_done(&local), "{}", local.kind());
+    }
+    assert!(exec::records_done(&SuggestedAction::Gateway(
+        Action::ApprovePr {
+            repo: "acme/web".into(),
+            pr: 1
+        }
+    )));
 }

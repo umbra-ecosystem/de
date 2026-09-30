@@ -339,6 +339,17 @@ impl ConfirmedExternal {
     }
 }
 
+/// Whether carrying out `action` is remembered as a `Done` response.
+///
+/// Only for external writes: the remote cache lags behind them, so the suggestion would
+/// come back until the next sync. A local action changes the local store at once, which
+/// removes the suggestion by itself; remembering it as done would instead hide the same
+/// suggestion the next time it legitimately recurs with identical facts (a ticket parked a
+/// second time, a review restarted), because the facts of those rules carry no counter.
+pub fn records_done(action: &SuggestedAction) -> bool {
+    matches!(action, SuggestedAction::Gateway(_))
+}
+
 /// Stores the author's response to `suggestion`, tied to its current facts.
 pub fn respond(
     state: &Store,

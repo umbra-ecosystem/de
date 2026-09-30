@@ -315,7 +315,7 @@ pub fn snooze(id: String, duration: String, workspace: Option<Slug>) -> eyre::Re
         &s,
         ResponseKind::Snoozed,
         None,
-        Some(now + seconds),
+        Some(now.saturating_add(seconds)),
         now,
     )?;
     UserInterface::new().success_item(&format!("Snoozed {id} for {duration}"), None)?;
@@ -390,7 +390,7 @@ pub fn do_it(id: String, workspace: Option<Slug>) -> eyre::Result<()> {
         }
     };
 
-    if ran {
+    if ran && exec::records_done(&s.action) {
         // Tied to the facts it was done for: it returns only if they change.
         exec::respond(&env.state, &s, ResponseKind::Done, None, None, now()?)?;
     }

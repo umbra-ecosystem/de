@@ -58,6 +58,14 @@ fn tracked(s: &Snapshot) -> impl Iterator<Item = &TicketSnapshot> {
     s.tickets.iter().filter(|t| t.is_tracked())
 }
 
+/// Jira shows the ticket as Returned or finished. GOAL.md: a Returned ticket is ignored
+/// unless you are mentioned ([`returned_mention`]) or it comes back to Review
+/// ([`returned_to_review`]), so the rules that push it along the local flow stay quiet.
+fn sent_back(s: &Snapshot, t: &TicketSnapshot) -> bool {
+    let status = t.jira_status.as_deref();
+    status_is(status, &s.statuses.returned) || s.statuses.done.iter().any(|d| status_is(status, d))
+}
+
 fn pr_lines(t: &TicketSnapshot) -> Vec<Value> {
     t.open_prs()
         .map(|p| {
@@ -201,7 +209,8 @@ pub fn claim_new(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
                 json!({
                     "jira_status": t.jira_status,
                     "jira_priority": t.jira_priority,
-                    "queue_position": position + 1,
+                    // No queue position: it changes whenever another ticket enters or
+                    // leaves the queue and would bring a dismissed claim back each time.
                 }),
             ),
             prio::CLAIM_TOP - prio::CLAIM_STEP * rank,
@@ -254,7 +263,7 @@ pub fn returned_to_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
 /// Step 2, "Review": a claimed ticket whose review has not begun. The diff to read is each
 /// PR's own source against its destination.
 pub fn start_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
-    for t in tracked(s).filter(|t| t.status() == Some(LocalStatus::Claimed)) {
+    for t in tracked(s).filter(|t| t.status() == Some(LocalStatus::Claimed) && !sent_back(s, t)) {
         out.push(Suggestion::new(
             Some(&t.key),
             RuleId::StartReview,
@@ -276,9 +285,11 @@ pub fn start_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
 /// Step 2, "Review": under review but not marked reviewed yet. Marking it records the
 /// branch tips covered, which is what [`re_review`] compares against later.
 pub fn finish_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
-    for t in tracked(s)
-        .filter(|t| t.status() == Some(LocalStatus::Reviewing) && t.review.reviewed_at.is_none())
-    {
+    for t in tracked(s).filter(|t| {
+        t.status() == Some(LocalStatus::Reviewing)
+            && t.review.reviewed_at.is_none()
+            && !sent_back(s, t)
+    }) {
         out.push(Suggestion::new(
             Some(&t.key),
             RuleId::FinishReview,
@@ -355,7 +366,7 @@ pub fn re_review(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
         matches!(
             t.status(),
             Some(LocalStatus::Reviewing | LocalStatus::Parked | LocalStatus::Active)
-        )
+        ) && !sent_back(s, t)
     }) {
         let changes = review_changes(t);
         if changes.is_empty() {
@@ -412,7 +423,7 @@ pub fn activate_reviewed(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
     if s.active().is_some() {
         return;
     }
-    for t in tracked(s) {
+    for t in tracked(s).filter(|t| !sent_back(s, t)) {
         let (priority, why) = match t.status() {
             Some(LocalStatus::Reviewing) if t.review.reviewed_at.is_some() => {
                 (prio::ACTIVATE_REVIEWED, "is reviewed and not tested yet")
@@ -461,7 +472,7 @@ pub fn activate_reviewed(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
 pub fn park_active(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
     let Some(active) = s.active() else { return };
     let waiting: Vec<&TicketSnapshot> = tracked(s)
-        .filter(|t| t.key != active.key)
+        .filter(|t| t.key != active.key && !sent_back(s, t))
         .filter(|t| {
             (t.status() == Some(LocalStatus::Reviewing) && t.review.reviewed_at.is_some())
                 || t.status() == Some(LocalStatus::Parked)
@@ -563,7 +574,7 @@ pub fn stale_ticket(s: &Snapshot, now: i64, out: &mut Vec<Suggestion>) {
 /// after a fix following alpha ([`remerge_needed`] re-activates the ticket first).
 pub fn integrate_ready(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
     for t in tracked(s).filter(|t| t.status() == Some(LocalStatus::Active)) {
-        if !t.checklist.is_complete() || t.touched_repos.is_empty() {
+        if !t.checklist.is_complete() || t.touched_repos.is_empty() || sent_back(s, t) {
             continue;
         }
         let blocked = t.prep.as_ref().is_some_and(|p| {
@@ -1005,7 +1016,7 @@ pub fn returned_mention(s: &Snapshot, _now: i64, out: &mut Vec<Suggestion>) {
             .mentions
             .iter()
             .filter(|m| m.created_at > since)
-            .filter(|m| s.me.as_deref() != Some(m.author.as_str()))
+            .filter(|m| s.me.as_deref() != Some(m.author_account.as_str()))
             .max_by(|a, b| {
                 a.created_at
                     .cmp(&b.created_at)
