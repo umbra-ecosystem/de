@@ -497,21 +497,38 @@ fn activate_repo(
     .wrap_err_with(|| format!("Failed to switch {} to '{branch}'", plan.name))?;
 
     // Persist before doing anything else in this repo: from here on it can be restored.
-    restore::insert(
-        store,
-        &RestoreRecord {
-            ticket: ticket.clone(),
-            repo: plan.name.clone(),
-            position: position as i64,
-            repo_dir: plan.dir.clone(),
-            role: plan.action.role(),
-            branch: branch.into(),
-            previous_branch: switched.previous_branch.clone(),
-            previous_commit: switched.previous_commit.clone(),
-            stash: switched.stash.clone(),
-            created_at: now,
-        },
-    )?;
+    let point = RestoreRecord {
+        ticket: ticket.clone(),
+        repo: plan.name.clone(),
+        position: position as i64,
+        repo_dir: plan.dir.clone(),
+        role: plan.action.role(),
+        branch: branch.into(),
+        previous_branch: switched.previous_branch.clone(),
+        previous_commit: switched.previous_commit.clone(),
+        stash: switched.stash.clone(),
+        created_at: now,
+    };
+    if let Err(error) = restore::insert(store, &point) {
+        // Nothing is recorded, so nothing else would ever put this repo (and the stash made
+        // for its working tree) back: do it here, now.
+        return Err(match restore_repo(store, ticket, &point, now) {
+            Ok(_) => error.wrap_err(format!(
+                "Could not record the restore point of {}; it was put back as it was",
+                plan.name
+            )),
+            Err(undo) => error.wrap_err(format!(
+                "Could not record the restore point of {} and could not put it back either ({undo:#}); \
+                 it was on {}{}",
+                plan.name,
+                point.previous_branch.as_deref().unwrap_or("a detached HEAD"),
+                point
+                    .stash
+                    .as_ref()
+                    .map_or_else(String::new, |s| format!(", its changes are in the stash '{}'", s.label)),
+            )),
+        });
+    }
     record(
         store,
         now,

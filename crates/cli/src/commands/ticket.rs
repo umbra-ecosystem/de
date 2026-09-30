@@ -586,16 +586,26 @@ pub fn render_deactivation(report: &DeactivationReport) -> Vec<String> {
 
     for (repo, outcome) in &report.overlays {
         lines.push(match outcome {
-            RevertOutcome::Reverted { lock_removed: true } => format!(
+            RevertOutcome::Reverted {
+                lock_removed: true, ..
+            } => format!(
                 "{repo}: test overlay reverted (composer.lock did not exist before; removed)"
             ),
             RevertOutcome::Reverted {
                 lock_removed: false,
+                ..
             } => {
                 format!("{repo}: test overlay reverted, composer files restored")
             }
             RevertOutcome::NothingToRevert => format!("{repo}: no test overlay to revert"),
         });
+        if let RevertOutcome::Reverted { saved, .. } = outcome {
+            for name in saved {
+                lines.push(format!(
+                    "  ! {name} was edited while testing; your version is saved as {name}.de-edited (see {repo})"
+                ));
+            }
+        }
     }
     for repo in &report.repos {
         let mut line = format!("{}: back on {}", repo.repo, repo.restored_to);
@@ -1127,6 +1137,7 @@ mod tests {
                 "web".into(),
                 RevertOutcome::Reverted {
                     lock_removed: false,
+                    saved: Vec::new(),
                 },
             )],
             repos: vec![

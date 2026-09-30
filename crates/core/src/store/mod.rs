@@ -210,4 +210,47 @@ mod tests {
         assert!(dir.path().join("state.db").exists());
         assert!(state.schema_version().unwrap() >= 1);
     }
+
+    #[test]
+    fn upgrading_from_every_earlier_version_keeps_the_data() {
+        let latest = Store::open_in_memory(Kind::State)
+            .unwrap()
+            .schema_version()
+            .unwrap() as usize;
+        for from in 1..latest {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("state.db");
+            {
+                let mut conn = Connection::open(&path).unwrap();
+                migrations::for_kind(Kind::State)
+                    .to_version(&mut conn, from)
+                    .unwrap();
+                if from >= 2 {
+                    conn.execute(
+                        "INSERT INTO tickets (key, status, manual_order, claimed_at, updated_at)
+                         VALUES ('PROJ-1', 'active', 0, 1, 1)",
+                        [],
+                    )
+                    .unwrap();
+                    conn.execute(
+                        "INSERT INTO time_entries (ticket_key, started_at) VALUES ('PROJ-1', 1)",
+                        [],
+                    )
+                    .unwrap();
+                }
+            }
+
+            let store = Store::open_in(dir.path(), Kind::State).unwrap();
+            assert_eq!(store.schema_version().unwrap() as usize, latest);
+            if from >= 2 {
+                let status: String = store
+                    .conn()
+                    .query_row("SELECT status FROM tickets WHERE key = 'PROJ-1'", [], |r| {
+                        r.get(0)
+                    })
+                    .unwrap();
+                assert_eq!(status, "active");
+            }
+        }
+    }
 }

@@ -100,52 +100,7 @@ impl GitRepo {
         diff.find_similar(Some(DiffFindOptions::new().renames(true)))
             .wrap_err("Failed to detect renames")?;
 
-        let mut files = Vec::new();
-        for idx in 0..diff.deltas().len() {
-            let Some(delta) = diff.get_delta(idx) else {
-                continue;
-            };
-
-            let new_path = delta.new_file().path().or(delta.old_file().path());
-            let path = new_path.map(|p| p.to_string_lossy().into_owned());
-            let old = delta
-                .old_file()
-                .path()
-                .map(|p| p.to_string_lossy().into_owned());
-            let Some(path) = path else { continue };
-
-            let status = match delta.status() {
-                Delta::Added => FileStatus::Added,
-                Delta::Deleted => FileStatus::Deleted,
-                Delta::Renamed => FileStatus::Renamed,
-                _ => FileStatus::Modified,
-            };
-            let old_path = if status == FileStatus::Renamed {
-                old
-            } else {
-                None
-            };
-
-            let mut file = FileDiff {
-                path,
-                old_path,
-                status,
-                binary: delta.flags().is_binary(),
-                additions: 0,
-                deletions: 0,
-                hunks: Vec::new(),
-            };
-
-            if let Some(patch) = Patch::from_diff(&diff, idx)? {
-                file.binary = patch.delta().flags().is_binary();
-                let (_, additions, deletions) = patch.line_stats()?;
-                file.additions = additions;
-                file.deletions = deletions;
-                file.hunks = collect_hunks(&patch)?;
-            }
-
-            files.push(file);
-        }
+        let files = files_of(&diff)?;
 
         Ok(RepoDiff {
             base: base.into(),
@@ -154,6 +109,88 @@ impl GitRepo {
             files,
         })
     }
+}
+
+impl GitRepo {
+    /// What commit `sha` changed, once per parent (a root commit against the empty tree).
+    ///
+    /// Unlike [`diff`](Self::diff) this does no rename detection, so a file moved into place
+    /// shows all of its lines as added; safety checks must see every line a commit introduces.
+    pub fn commit_diffs(&self, sha: &str) -> eyre::Result<Vec<Vec<FileDiff>>> {
+        let commit = self.commit(sha)?;
+        let tree = commit.tree()?;
+        let parents: Vec<Option<git2::Tree<'_>>> = if commit.parent_count() == 0 {
+            vec![None]
+        } else {
+            commit
+                .parents()
+                .map(|p| p.tree().map(Some))
+                .collect::<Result<_, _>>()?
+        };
+
+        parents
+            .iter()
+            .map(|parent| {
+                let mut opts = DiffOptions::new();
+                opts.context_lines(3);
+                let diff = self
+                    .inner()
+                    .diff_tree_to_tree(parent.as_ref(), Some(&tree), Some(&mut opts))
+                    .wrap_err("Failed to compute diff")?;
+                files_of(&diff)
+            })
+            .collect()
+    }
+}
+
+fn files_of(diff: &git2::Diff<'_>) -> eyre::Result<Vec<FileDiff>> {
+    let mut files = Vec::new();
+    for idx in 0..diff.deltas().len() {
+        let Some(delta) = diff.get_delta(idx) else {
+            continue;
+        };
+
+        let new_path = delta.new_file().path().or(delta.old_file().path());
+        let path = new_path.map(|p| p.to_string_lossy().into_owned());
+        let old = delta
+            .old_file()
+            .path()
+            .map(|p| p.to_string_lossy().into_owned());
+        let Some(path) = path else { continue };
+
+        let status = match delta.status() {
+            Delta::Added => FileStatus::Added,
+            Delta::Deleted => FileStatus::Deleted,
+            Delta::Renamed => FileStatus::Renamed,
+            _ => FileStatus::Modified,
+        };
+        let old_path = if status == FileStatus::Renamed {
+            old
+        } else {
+            None
+        };
+
+        let mut file = FileDiff {
+            path,
+            old_path,
+            status,
+            binary: delta.flags().is_binary(),
+            additions: 0,
+            deletions: 0,
+            hunks: Vec::new(),
+        };
+
+        if let Some(patch) = Patch::from_diff(diff, idx)? {
+            file.binary = patch.delta().flags().is_binary();
+            let (_, additions, deletions) = patch.line_stats()?;
+            file.additions = additions;
+            file.deletions = deletions;
+            file.hunks = collect_hunks(&patch)?;
+        }
+
+        files.push(file);
+    }
+    Ok(files)
 }
 
 fn collect_hunks(patch: &Patch<'_>) -> eyre::Result<Vec<Hunk>> {

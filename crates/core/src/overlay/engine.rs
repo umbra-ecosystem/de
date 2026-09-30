@@ -57,6 +57,9 @@ pub enum RevertOutcome {
     Reverted {
         /// `composer.lock` did not exist before the overlay and was deleted again.
         lock_removed: bool,
+        /// Composer files that were edited while the overlay was applied. Their contents were
+        /// saved under these names (next to the originals) before being replaced.
+        saved: Vec<String>,
     },
 }
 
@@ -77,6 +80,17 @@ fn read_optional(path: &Path) -> eyre::Result<Option<Vec<u8>>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(eyre::Report::new(e).wrap_err(format!("Failed to read {}", path.display()))),
     }
+}
+
+/// `<name>.de-edited`, or the first of `<name>.de-edited-2`, `-3`, ... that is free.
+fn free_name(dir: &Path, name: &str) -> String {
+    let mut candidate = format!("{name}.de-edited");
+    let mut n = 2;
+    while dir.join(&candidate).exists() {
+        candidate = format!("{name}.de-edited-{n}");
+        n += 1;
+    }
+    candidate
 }
 
 fn remove_if_exists(path: &Path) -> eyre::Result<bool> {
@@ -174,6 +188,8 @@ pub fn apply(
 
     std::fs::write(&json_path, &new_json)
         .wrap_err_with(|| format!("Failed to write {}", json_path.display()))?;
+    // Known from here on, so a revert can tell the overlay's file from one edited afterwards.
+    overlays::set_after(store, req.ticket, req.repo, &new_json, None)?;
 
     let names: Vec<&str> = req.packages.iter().map(|p| p.package.as_str()).collect();
     let mut update_args = vec!["update"];
@@ -217,7 +233,39 @@ pub fn revert(
     let json_path = dir.join("composer.json");
     let lock_path = dir.join("composer.lock");
 
+    let mut saved = Vec::new();
     if !backup.files_restored {
+        // Anything that is neither the original nor what the overlay wrote is the user's own
+        // edit made while testing; keep a copy before the original goes back.
+        let edits = [
+            (
+                &json_path,
+                "composer.json",
+                backup.composer_json.as_slice(),
+                backup.json_after.as_deref(),
+            ),
+            (
+                &lock_path,
+                "composer.lock",
+                backup.composer_lock.as_deref().unwrap_or_default(),
+                backup.lock_after.as_deref(),
+            ),
+        ];
+        for (path, name, original, after) in edits {
+            let Some(current) = read_optional(path)? else {
+                continue;
+            };
+            let was_absent = name == "composer.lock" && backup.composer_lock.is_none();
+            let is_original = current.as_slice() == original && !was_absent;
+            if is_original || after == Some(current.as_slice()) {
+                continue;
+            }
+            let copy = free_name(dir, name);
+            std::fs::write(dir.join(&copy), &current)
+                .wrap_err_with(|| format!("Failed to save the edited {}", path.display()))?;
+            saved.push(copy);
+        }
+
         std::fs::write(&json_path, &backup.composer_json)
             .wrap_err_with(|| format!("Failed to restore {}", json_path.display()))?;
         match &backup.composer_lock {
@@ -241,5 +289,8 @@ pub fn revert(
     let lock_removed = backup.composer_lock.is_none() && remove_if_exists(&lock_path)?;
 
     overlays::delete(store, ticket, repo)?;
-    Ok(RevertOutcome::Reverted { lock_removed })
+    Ok(RevertOutcome::Reverted {
+        lock_removed,
+        saved,
+    })
 }

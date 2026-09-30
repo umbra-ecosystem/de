@@ -137,6 +137,20 @@ pub struct Finding {
     pub text: String,
 }
 
+/// Whether a constraint means "any version": `*`, possibly with spaces or a stability flag
+/// (`*@dev`).
+pub fn is_wildcard_constraint(constraint: &str) -> bool {
+    let constraint = constraint.trim();
+    let flag = constraint.strip_prefix('*').map(str::trim_start);
+    match flag {
+        Some("") => true,
+        Some(rest) => rest
+            .strip_prefix('@')
+            .is_some_and(|f| !f.is_empty() && f.chars().all(|c| c.is_ascii_alphanumeric())),
+        None => false,
+    }
+}
+
 static TYPE_PATH: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#""type"\s*:\s*"path""#).expect("valid regex"));
 static SYMLINK: LazyLock<Regex> =
@@ -161,7 +175,9 @@ pub fn scan_composer_json(lines: &[(Option<u32>, &str)], packages: &[&str]) -> V
         .map(|package| {
             // composer.json may spell the slash as `\/`.
             let name = regex::escape(package).replace('/', r"\\?/");
-            Regex::new(&format!(r#""{name}"\s*:\s*"\*""#)).expect("valid regex")
+            // Any spelling of "match anything": spaces and a stability flag (`*@dev`) included,
+            // and composer package names are case-insensitive.
+            Regex::new(&format!(r#"(?i)"{name}"\s*:\s*"\s*\*\s*(@\w+)?\s*""#)).expect("valid regex")
         })
         .collect();
     for (line, text) in lines {
