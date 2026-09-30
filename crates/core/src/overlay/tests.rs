@@ -215,7 +215,8 @@ fn revert_restores_both_files_byte_for_byte_and_reinstalls() {
     assert_eq!(
         outcome,
         RevertOutcome::Reverted {
-            lock_removed: false
+            lock_removed: false,
+            saved: Vec::new()
         }
     );
 
@@ -246,7 +247,13 @@ fn a_lock_created_by_the_overlay_is_deleted_on_revert() {
 
     // The fake `composer install` creates a lock when none exists, like the real one.
     let outcome = revert(&fx.store, &fx.runner, &key("PROJ-1"), "web").unwrap();
-    assert_eq!(outcome, RevertOutcome::Reverted { lock_removed: true });
+    assert_eq!(
+        outcome,
+        RevertOutcome::Reverted {
+            lock_removed: true,
+            saved: Vec::new()
+        }
+    );
     assert!(!fx.web.exists("composer.lock"));
     assert_eq!(fx.web.read("composer.json"), WEB_COMPOSER_JSON);
     assert!(fx.web.is_clean());
@@ -615,7 +622,11 @@ fn a_leak_moved_into_composer_json_by_a_rename_is_found() {
     let web = &fx.web;
     web.git(&["switch", "-c", "feature/PROJ-1-web"]);
     web.git(&["rm", "-q", "composer.json", "composer.lock"]);
-    web.commit("scratch.json", OVERLAY_JSON_ONE_LINE, "innocent looking file");
+    web.commit(
+        "scratch.json",
+        OVERLAY_JSON_ONE_LINE,
+        "innocent looking file",
+    );
     web.git(&["mv", "scratch.json", "composer.json"]);
     web.commit_all("rename it into place");
 
@@ -638,4 +649,44 @@ fn spellings_of_the_wildcard_constraint_are_all_leaks() {
         composer::scan_composer_json(&[(Some(1), line)], PACKAGES).len(),
         1
     );
+}
+
+#[test]
+fn revert_keeps_a_copy_of_composer_files_edited_while_testing() {
+    let fx = fixture();
+    apply_web(&fx, &fx.runner, &key("PROJ-1")).unwrap();
+
+    // The tester adds a dependency by hand and hacks the lock while the overlay is applied.
+    let edited = fx
+        .web
+        .read("composer.json")
+        .replace("\"php\"", "\"extra/pkg\": \"^1\",\n        \"php\"");
+    fx.web.write("composer.json", &edited);
+    fx.web.write("composer.lock", "{\"my\": \"lock edit\"}");
+
+    let outcome = revert(&fx.store, &fx.runner, &key("PROJ-1"), "web").unwrap();
+
+    assert_eq!(fx.web.read("composer.json"), WEB_COMPOSER_JSON);
+    assert_eq!(fx.web.read("composer.lock"), WEB_COMPOSER_LOCK);
+    let RevertOutcome::Reverted { saved, .. } = outcome else {
+        panic!("expected a revert");
+    };
+    assert_eq!(
+        saved,
+        ["composer.json.de-edited", "composer.lock.de-edited"]
+    );
+    assert_eq!(fx.web.read("composer.json.de-edited"), edited);
+    assert_eq!(
+        fx.web.read("composer.lock.de-edited"),
+        "{\"my\": \"lock edit\"}"
+    );
+}
+
+#[test]
+fn revert_of_an_untouched_overlay_saves_nothing() {
+    let fx = fixture();
+    apply_web(&fx, &fx.runner, &key("PROJ-1")).unwrap();
+    let outcome = revert(&fx.store, &fx.runner, &key("PROJ-1"), "web").unwrap();
+    assert!(matches!(outcome, RevertOutcome::Reverted { saved, .. } if saved.is_empty()));
+    assert!(!fx.web.exists("composer.json.de-edited"));
 }

@@ -163,8 +163,7 @@ pub fn scan_composer_json(lines: &[(Option<u32>, &str)], packages: &[&str]) -> V
             let name = regex::escape(package).replace('/', r"\\?/");
             // Any spelling of "match anything": spaces and a stability flag (`*@dev`) included,
             // and composer package names are case-insensitive.
-            Regex::new(&format!(r#"(?i)"{name}"\s*:\s*"\s*\*\s*(@\w+)?\s*""#))
-                .expect("valid regex")
+            Regex::new(&format!(r#"(?i)"{name}"\s*:\s*"\s*\*\s*(@\w+)?\s*""#)).expect("valid regex")
         })
         .collect();
     for (line, text) in lines {
