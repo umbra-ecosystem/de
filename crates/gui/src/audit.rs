@@ -61,6 +61,22 @@ pub fn entries(state: &Store, now: i64) -> eyre::Result<Vec<AuditEntry>> {
         .collect())
 }
 
+/// The side panel's "Last sync" from the audit log: the newest sync on record, as it was reported then. Empty when
+/// there has been none.
+pub fn last_sync_report(entries: &[AuditEntry]) -> Vec<(bool, String, String)> {
+    entries
+        .iter()
+        .find(|e| e.action == "sync")
+        .map(|e| {
+            vec![(
+                e.outcome == AuditOutcome::Success,
+                "Jira (acli)".to_string(),
+                e.details.clone(),
+            )]
+        })
+        .unwrap_or_default()
+}
+
 /// `03:07` for today, `09-30 21:24` for another day (local time).
 pub fn when(at: i64, now: i64) -> String {
     when_at(at, now, localtime::offset_at(at), localtime::offset_at(now))
@@ -106,6 +122,19 @@ mod tests {
         assert_eq!(rows[1].details, "63 tickets");
         assert_eq!(rows[1].outcome, AuditOutcome::Success);
         assert!(rows[0].id > rows[1].id);
+    }
+
+    #[test]
+    fn the_last_sync_is_the_newest_sync_entry_and_nothing_else() {
+        let state = Store::open_in_memory(Kind::State).unwrap();
+        assert!(last_sync_report(&entries(&state, 0).unwrap()).is_empty());
+
+        record(&state, 100, "sync", None, true, "old").unwrap();
+        record(&state, 200, "sync", None, false, "offline, cache kept").unwrap();
+        record(&state, 300, "config.jira", None, true, "Saved 1 setting").unwrap();
+
+        let report = last_sync_report(&entries(&state, 400).unwrap());
+        assert_eq!(report, [(false, "Jira (acli)".to_string(), "offline, cache kept".to_string())]);
     }
 
     #[test]

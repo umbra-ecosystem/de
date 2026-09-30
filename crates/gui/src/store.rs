@@ -53,7 +53,10 @@ impl CoreStore {
         sim.set_last_sync_minutes_ago(last_sync_minutes_ago(now()));
         sim.set_start_minute_of_day(localtime::minute_of_day(now()));
         // The audit log is on disk; the simulation only shows it.
-        sim.use_external_audit(stored_audit().unwrap_or_default());
+        let stored = stored_audit().unwrap_or_default();
+        // The side panel's "Last sync" is the last one on record, not only one from this session.
+        sim.set_last_sync_report(audit::last_sync_report(&stored));
+        sim.use_external_audit(stored);
         let mut store = Self {
             sim,
             running: None,

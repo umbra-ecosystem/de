@@ -228,6 +228,12 @@ impl Sim {
         self.audit = entries;
     }
 
+    /// What the side panel's "Last sync" shows before any sync in this session: the report of the last one on
+    /// record. `(ok, source, text)` per source.
+    pub fn set_last_sync_report(&mut self, report: Vec<(bool, String, String)>) {
+        self.sync.report = report;
+    }
+
     /// Replace the externally kept audit log (newest first).
     pub fn set_audit(&mut self, entries: Vec<AuditEntry>) {
         self.audit = entries;
