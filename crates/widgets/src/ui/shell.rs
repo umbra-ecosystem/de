@@ -89,60 +89,85 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
 
 /* ------------------------------ navigation ------------------------------ */
 
+/// The title strip at the top of a side panel. Same height, border and type as the tab strip beside it.
+pub fn panel_header(ui: &Ui, title: String) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .flex_none()
+        .h_9()
+        .px_3()
+        .border_b_1()
+        .border_color(ui.pal.border)
+        .bg(ui.pal.panel)
+        .text_xs()
+        .font_family(ui.mono.clone())
+        .child(title)
+}
+
 pub fn nav(ui: &Ui, vm: &AppVm) -> Div {
     let pal = &ui.pal;
+    let title = vm.nav.first().map_or("Tickets", |s| s.title.as_str());
     div()
         .flex()
         .flex_col()
-        .gap_4()
         .size_full()
-        .p_2()
         .border_r_1()
         .border_color(pal.border)
         .bg(pal.panel)
-        .children(vm.nav.iter().map(|s| {
+        .child(panel_header(ui, title.to_string()))
+        .child(
             div()
                 .flex()
                 .flex_col()
-                .gap_0p5()
-                .child(
+                .gap_4()
+                .p_2()
+                .children(vm.nav.iter().enumerate().map(|(n, s)| {
                     div()
-                        .px_2()
-                        .pb_1()
-                        .text_xs()
-                        .text_color(pal.faint)
-                        .child(s.title.to_uppercase()),
-                )
-                .children(s.items.iter().map(|i| {
-                    div()
-                        .id(SharedString::from(format!("nav-{}", i.label)))
                         .flex()
-                        .items_center()
-                        .justify_between()
-                        .px_2()
-                        .py_1()
-                        .rounded_md()
-                        .text_sm()
-                        .cursor_pointer()
-                        .bg(if i.selected {
-                            pal.accent.opacity(0.16)
-                        } else {
-                            gpui_kit::transparent_black()
-                        })
-                        .text_color(if i.selected { pal.fg } else { pal.muted })
-                        .hover(|s| s.bg(pal.hover))
-                        .on_click(ui.on_click(Intent::Go(i.route.clone())))
-                        .child(i.label.clone())
-                        .when(i.count > 0, |d| {
+                        .flex_col()
+                        .gap_0p5()
+                        .when(n > 0, |d| {
                             d.child(
                                 div()
+                                    .px_2()
+                                    .pb_1()
                                     .text_xs()
                                     .text_color(pal.faint)
-                                    .child(i.count.to_string()),
+                                    .child(s.title.to_uppercase()),
                             )
                         })
-                }))
-        }))
+                        .children(s.items.iter().map(|i| {
+                            div()
+                                .id(SharedString::from(format!("nav-{}", i.label)))
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .px_2()
+                                .py_1()
+                                .rounded_md()
+                                .text_sm()
+                                .cursor_pointer()
+                                .bg(if i.selected {
+                                    pal.accent.opacity(0.16)
+                                } else {
+                                    gpui_kit::transparent_black()
+                                })
+                                .text_color(if i.selected { pal.fg } else { pal.muted })
+                                .hover(|s| s.bg(pal.hover))
+                                .on_click(ui.on_click(Intent::Go(i.route.clone())))
+                                .child(i.label.clone())
+                                .when(i.count > 0, |d| {
+                                    d.child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(pal.faint)
+                                            .child(i.count.to_string()),
+                                    )
+                                })
+                        }))
+                })),
+        )
 }
 
 /* ------------------------------ tab strip ------------------------------ */
@@ -236,76 +261,103 @@ fn short(s: &str, n: usize) -> String {
 
 pub fn right_panel(ui: &Ui, sections: &[RightSection]) -> Div {
     let pal = &ui.pal;
+    let title = sections.first().map_or("Details", |s| s.title.as_str());
     div()
         .flex()
         .flex_col()
-        .gap_4()
-        .w_full()
-        .p_3()
+        .size_full()
         .border_l_1()
         .border_color(pal.border)
         .bg(pal.panel)
-        .children(sections.iter().map(|s| {
-            section(pal, s.title.clone()).child(div().flex().flex_col().gap_2().children(
-                s.rows.iter().map(|r| {
-                    match r {
-                        RightRow::Kv(k) => kv(pal, k).into_any_element(),
-                        RightRow::Text(t) => div().text_sm().child(t.clone()).into_any_element(),
-                        RightRow::Muted(t) => muted(pal, t.clone()).into_any_element(),
-                        RightRow::Item {
-                            head,
-                            key,
-                            title,
-                            sub,
-                        } => div()
-                            .flex()
-                            .flex_col()
-                            .gap_0p5()
-                            .child(
-                                div()
+        .child(panel_header(ui, title.to_string()))
+        .child(
+            div()
+                .id("right-scroll")
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_h_0()
+                .gap_4()
+                .p_3()
+                .overflow_y_scroll()
+                .children(sections.iter().enumerate().map(|(n, s)| {
+                    section(
+                        pal,
+                        if n == 0 {
+                            String::new()
+                        } else {
+                            s.title.clone()
+                        },
+                    )
+                    .child(div().flex().flex_col().gap_2().children(
+                        s.rows.iter().map(|r| {
+                            match r {
+                                RightRow::Kv(k) => kv(pal, k).into_any_element(),
+                                RightRow::Text(t) => {
+                                    div().text_sm().child(t.clone()).into_any_element()
+                                }
+                                RightRow::Muted(t) => muted(pal, t.clone()).into_any_element(),
+                                RightRow::Item {
+                                    head,
+                                    key,
+                                    title,
+                                    sub,
+                                } => div()
                                     .flex()
-                                    .flex_wrap()
-                                    .items_center()
-                                    .gap_1()
-                                    .children(head.iter().map(|b| pill(pal, b)))
-                                    .when_some(key.clone(), |d, k| {
-                                        d.child(key_link(
-                                            ui,
-                                            &k,
-                                            Intent::go_ticket(&k, TicketTab::Overview),
-                                        ))
-                                    }),
-                            )
-                            .child(div().text_sm().child(title.clone()))
-                            .when_some(sub.clone(), |d, s| d.child(faint(pal, s)))
-                            .into_any_element(),
-                        RightRow::Activity { at, text, failed } => div()
-                            .flex()
-                            .gap_2()
-                            .text_xs()
-                            .child(
-                                div()
-                                    .font_family(ui.mono.clone())
-                                    .text_color(pal.faint)
-                                    .child(at.clone()),
-                            )
-                            .child(div().child(text.clone()))
-                            .when(*failed, |d| {
-                                d.child(pill(pal, &Badge::new("failed", Tone::Bad)))
-                            })
-                            .into_any_element(),
-                        RightRow::Report { ok, source, text } => div()
-                            .flex()
-                            .gap_2()
-                            .text_xs()
-                            .child(dot(if *ok { pal.ok } else { pal.bad }))
-                            .child(div().child(div().child(source.clone())).child(text.clone()))
-                            .into_any_element(),
-                        RightRow::Button(a) => div().child(button(ui, a)).into_any_element(),
-                    }
-                }),
-            ))
-        }))
+                                    .flex_col()
+                                    .gap_0p5()
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .flex_wrap()
+                                            .items_center()
+                                            .gap_1()
+                                            .children(head.iter().map(|b| pill(pal, b)))
+                                            .when_some(key.clone(), |d, k| {
+                                                d.child(key_link(
+                                                    ui,
+                                                    &k,
+                                                    Intent::go_ticket(&k, TicketTab::Overview),
+                                                ))
+                                            }),
+                                    )
+                                    .child(div().text_sm().child(title.clone()))
+                                    .when_some(sub.clone(), |d, s| d.child(faint(pal, s)))
+                                    .into_any_element(),
+                                RightRow::Activity { at, text, failed } => div()
+                                    .flex()
+                                    .gap_2()
+                                    .text_xs()
+                                    .child(
+                                        div()
+                                            .font_family(ui.mono.clone())
+                                            .text_color(pal.faint)
+                                            .child(at.clone()),
+                                    )
+                                    .child(div().child(text.clone()))
+                                    .when(*failed, |d| {
+                                        d.child(pill(pal, &Badge::new("failed", Tone::Bad)))
+                                    })
+                                    .into_any_element(),
+                                RightRow::Report { ok, source, text } => div()
+                                    .flex()
+                                    .gap_2()
+                                    .text_xs()
+                                    .child(dot(if *ok { pal.ok } else { pal.bad }))
+                                    .child(
+                                        div()
+                                            .child(div().child(source.clone()))
+                                            .child(text.clone()),
+                                    )
+                                    .into_any_element(),
+                                RightRow::Button(a) => {
+                                    div().child(button(ui, a)).into_any_element()
+                                }
+                            }
+                        }),
+                    ))
+                })),
+        )
 }
 
 /* ------------------------------ status bar ------------------------------ */

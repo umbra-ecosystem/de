@@ -132,12 +132,19 @@ pub fn card(pal: &Pal) -> Div {
 
 /// A titled block of a screen.
 pub fn section(pal: &Pal, title: impl Into<SharedString>) -> Div {
-    div().flex().flex_col().gap_2().child(
-        div()
-            .text_xs()
-            .text_color(pal.muted)
-            .child(title.into().to_uppercase()),
-    )
+    let title: SharedString = title.into();
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .when(!title.is_empty(), |d| {
+            d.child(
+                div()
+                    .text_xs()
+                    .text_color(pal.muted)
+                    .child(title.to_uppercase()),
+            )
+        })
 }
 
 pub fn heading(title: impl Into<SharedString>) -> Div {

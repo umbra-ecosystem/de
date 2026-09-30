@@ -418,9 +418,7 @@ impl AppView {
     pub(crate) fn draw_details(&self, cx: &App) -> AnyElement {
         let ui = self.ui(cx, self.weak.clone());
         div()
-            .id("right")
             .size_full()
-            .overflow_y_scroll()
             .child(shell::right_panel(&ui, &self.vm.right))
             .into_any_element()
     }
