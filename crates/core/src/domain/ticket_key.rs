@@ -13,9 +13,31 @@ pub struct ParseTicketKeyError(String);
 ///
 /// The project part is ASCII letters and digits starting with a letter; the number has no
 /// leading zero (Jira never issues one).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+///
+/// Ordered by project, then by number numerically (`PROJ-9 < PROJ-10`), not as text. Equality
+/// and hashing stay on the normalised text, which agrees with this order: two keys compare
+/// equal exactly when project and number are the same.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct TicketKey(String);
+
+impl Ord for TicketKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // The number has no leading zero, so a longer digit string is the larger number
+        // (and no overflow is possible, unlike parsing to an integer).
+        let number = |k: &TicketKey| k.0.split_once('-').map_or("", |(_, n)| n).to_owned();
+        let (a, b) = (number(self), number(other));
+        self.project()
+            .cmp(other.project())
+            .then_with(|| a.len().cmp(&b.len()).then_with(|| a.cmp(&b)))
+    }
+}
+
+impl PartialOrd for TicketKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 fn valid_project(p: &str) -> bool {
     p.starts_with(|c: char| c.is_ascii_alphabetic()) && p.bytes().all(|b| b.is_ascii_alphanumeric())
@@ -151,6 +173,37 @@ mod tests {
         assert_eq!(key("Ab1-9").to_string(), "AB1-9");
         assert_eq!(key("proj-42").project(), "PROJ");
         assert_eq!(key("proj-42").number(), 42);
+    }
+
+    #[test]
+    fn keys_sort_by_project_then_number_not_as_text() {
+        use std::cmp::Ordering;
+        assert!(key("PROJ-9") < key("PROJ-10"));
+        assert!(key("PROJ-2") < key("PROJ-100"));
+        assert!(key("PROJ-99999999999999999999") > key("PROJ-9"));
+        assert!(key("ABC-500") < key("PROJ-1"));
+        assert!(key("AB-1") < key("ABC-1"));
+        assert_eq!(key("proj-7").cmp(&key("PROJ-7")), Ordering::Equal);
+        assert_eq!(
+            key("PROJ-7").partial_cmp(&key("PROJ-8")),
+            Some(Ordering::Less)
+        );
+
+        let mut keys: Vec<TicketKey> =
+            ["PROJ-10", "ZED-1", "PROJ-9", "PROJ-100", "ABC-3", "PROJ-9"]
+                .iter()
+                .map(|k| key(k))
+                .collect();
+        keys.sort();
+        let sorted: Vec<&str> = keys.iter().map(TicketKey::as_str).collect();
+        assert_eq!(
+            sorted,
+            ["ABC-3", "PROJ-9", "PROJ-9", "PROJ-10", "PROJ-100", "ZED-1"]
+        );
+        // BTree collections follow the same order.
+        let set: std::collections::BTreeSet<TicketKey> = keys.into_iter().collect();
+        let in_set: Vec<&str> = set.iter().map(TicketKey::as_str).collect();
+        assert_eq!(in_set, ["ABC-3", "PROJ-9", "PROJ-10", "PROJ-100", "ZED-1"]);
     }
 
     #[test]

@@ -85,11 +85,49 @@ pub enum MergeOutcome {
     },
 }
 
+/// Checks a remote or branch name that comes from configuration (`[git] default_remote`,
+/// `[branches] uat`) before it is put into a `git` argument list or a refspec. Refuses
+/// rather than sanitizes: a value that starts with `-` would be read as an option, and
+/// whitespace, `:`, `+`, `..`, `~^?*[\`, control characters, `@{`, a leading or trailing `/`
+/// (or `.`), `//` or a `.lock` suffix are dangerous in a refspec or not a valid name at all.
+pub fn validate_ref_component(what: &str, value: &str) -> eyre::Result<()> {
+    let refuse = |why: &str| Err(eyre!("{what} {value:?} is not usable: {why}"));
+    if value.is_empty() {
+        return refuse("it is empty");
+    }
+    if value.starts_with('-') {
+        return refuse("it starts with '-' and would be read as an option");
+    }
+    if value.starts_with('/') || value.ends_with('/') {
+        return refuse("it starts or ends with '/'");
+    }
+    if value.contains("//") {
+        return refuse("it contains '//'");
+    }
+    if value.contains("..") {
+        return refuse("it contains '..'");
+    }
+    if value.contains("@{") || value == "@" {
+        return refuse("it contains '@{' or is '@'");
+    }
+    if value.starts_with('.') || value.ends_with('.') || value.ends_with(".lock") {
+        return refuse("it starts or ends with '.' or ends with '.lock'");
+    }
+    if let Some(c) = value
+        .chars()
+        .find(|c| c.is_control() || c.is_whitespace() || ":+~^?*[\\".contains(*c))
+    {
+        return refuse(&format!("it contains {c:?}"));
+    }
+    Ok(())
+}
+
 impl GitRepo {
-    /// `git fetch <remote>`. Does not prune.
+    /// `git fetch -- <remote>`. Does not prune. The remote is validated first.
     pub fn fetch(&self, remote: &str) -> eyre::Result<()> {
+        validate_ref_component("remote", remote)?;
         self.runner()
-            .run(&["fetch", remote])
+            .run(&["fetch", "--", remote])
             .wrap_err_with(|| format!("Failed to fetch '{remote}'"))?;
         Ok(())
     }
@@ -260,10 +298,15 @@ impl GitRepo {
                     .find(|b| b.name == branch)
                     .ok_or_else(|| eyre!("Branch '{branch}' not found locally or on any remote"))?;
                 let args = if logical.is_local() {
-                    vec!["switch".into(), branch.into()]
+                    vec!["switch".into(), "--".into(), branch.into()]
                 } else {
                     match logical.remotes.as_slice() {
-                        [only] => vec!["switch".into(), "--track".into(), only.refname.clone()],
+                        [only] => vec![
+                            "switch".into(),
+                            "--track".into(),
+                            "--".into(),
+                            only.refname.clone(),
+                        ],
                         many => {
                             let names: Vec<_> = many.iter().map(|r| r.refname.as_str()).collect();
                             return Err(eyre!(
@@ -284,7 +327,7 @@ impl GitRepo {
                 }
                 (
                     format!("detached {}", short_sha(&sha)),
-                    vec!["switch".into(), "--detach".into(), sha],
+                    vec!["switch".into(), "--detach".into(), "--".into(), sha],
                 )
             }
         };
@@ -337,7 +380,7 @@ impl GitRepo {
 
         let runner = self.runner();
         if logical.is_local() {
-            runner.run(&["worktree", "add", path_str, branch])
+            runner.run(&["worktree", "add", "--", path_str, branch])
         } else {
             let remote = logical
                 .remotes
@@ -350,6 +393,7 @@ impl GitRepo {
                 "--track",
                 "-b",
                 branch,
+                "--",
                 path_str,
                 &remote.refname,
             ])
@@ -388,7 +432,7 @@ impl GitRepo {
         let head_before = before.head;
 
         let runner = self.runner();
-        let merged = runner.run_raw(&["merge", "--no-ff", "--no-edit", branch])?;
+        let merged = runner.run_raw(&["merge", "--no-ff", "--no-edit", "--", branch])?;
 
         if merged.success {
             let head_after = self.rev_parse("HEAD")?;

@@ -752,6 +752,26 @@ fn probe_runs_only_read_only_commands_and_never_fails() {
     assert_eq!(probe(&Fake::default(), None).len(), 3);
 }
 
+#[test]
+fn a_hung_acli_is_an_environmental_error_and_is_killed() {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = tempfile::tempdir().unwrap();
+    let stub = bin.path().join("acli");
+    std::fs::write(&stub, "#!/bin/sh\nexec sleep 30\n").unwrap();
+    std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let runner = ProcessRunner::new()
+        .with_path_prefix(bin.path())
+        .with_timeout(Duration::from_millis(200));
+    let jira = AcliJira::with_runner(runner, None);
+
+    let started = std::time::Instant::now();
+    let err = jira.search("assignee = currentUser()").unwrap_err();
+    assert!(started.elapsed() < Duration::from_secs(5));
+    assert_eq!(err.kind(), ProviderErrorKind::Network, "{err}");
+    assert!(err.is_environmental());
+    assert!(err.to_string().contains("timed out"), "{err}");
+}
+
 // ---- live (opt-in): cargo test -p de-core -- --ignored live_ ---------------------------
 //
 // These run the real installed `acli`, read-only, against whatever Jira it is logged in to.

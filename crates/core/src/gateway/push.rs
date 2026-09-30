@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use super::{Gateway, GatewayError, PushUat, PushUatRepo, actions};
 use crate::{
     domain::{AuditOutcome, LocalStatus},
-    git::{GitRepo, GitRunner},
+    git::{GitRepo, GitRunner, validate_ref_component},
     overlay::check_range_for_overlay,
     store::{
         audit::{self, NewAuditEntry},
@@ -219,8 +219,13 @@ impl Gateway<'_> {
         warnings: &mut Vec<String>,
     ) -> PushResult {
         let refspec = format!("{}:refs/heads/{}", repo.merge_commit, repo.uat_branch);
-        // No --force, ever.
-        let outcome = GitRunner::new(&repo.repo_dir).run_raw(&["push", &repo.remote, &refspec]);
+        // Refuse a remote or branch that could be read as an option or another refspec.
+        let outcome = validate_ref_component("remote", &repo.remote)
+            .and_then(|()| validate_ref_component("uat branch", &repo.uat_branch))
+            .and_then(|()| {
+                // No --force, ever.
+                GitRunner::new(&repo.repo_dir).run_raw(&["push", "--", &repo.remote, &refspec])
+            });
         let mut result = match outcome {
             Err(e) => PushResult::Failed {
                 error: format!("{e:#}"),

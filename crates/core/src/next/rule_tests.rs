@@ -118,7 +118,38 @@ fn sync_is_suggested_for_missing_or_old_sources_only() {
         last_error: Some("offline".into()),
     };
     assert!(only(&s, RuleId::SyncStale).is_empty());
+    // A failing source backs off for 15 minutes, not one.
     s.sync.states[0].last_attempt_at = NOW - 61;
+    assert!(only(&s, RuleId::SyncStale).is_empty());
+    s.sync.states[0].last_attempt_at = NOW - 899;
+    assert!(only(&s, RuleId::SyncStale).is_empty());
+    s.sync.states[0].last_attempt_at = NOW - 901;
+    assert_eq!(only(&s, RuleId::SyncStale).len(), 1);
+}
+
+#[test]
+fn a_persistently_partial_source_backs_off_but_a_merely_stale_one_does_not() {
+    let mut s = snap(vec![]);
+    s.sync.expected = vec!["jira".into()];
+    // Partial: it has synced before (old data) but the last attempt ended in an error.
+    let partial = |attempt_age: i64| SourceState {
+        source: "jira".into(),
+        last_ok_at: Some(NOW - 5000),
+        last_attempt_at: NOW - attempt_age,
+        last_error: Some("2 tickets failed".into()),
+    };
+    s.sync.states = vec![partial(120)];
+    assert!(only(&s, RuleId::SyncStale).is_empty());
+    s.sync.states = vec![partial(16 * 60)];
+    assert_eq!(only(&s, RuleId::SyncStale).len(), 1);
+
+    // Stale but the last attempt succeeded (no error): back to the one-minute retry.
+    s.sync.states = vec![SourceState {
+        source: "jira".into(),
+        last_ok_at: Some(NOW - 5000),
+        last_attempt_at: NOW - 120,
+        last_error: None,
+    }];
     assert_eq!(only(&s, RuleId::SyncStale).len(), 1);
 }
 
@@ -851,19 +882,28 @@ fn approval_skips_approved_own_closed_and_untested_prs() {
 }
 
 #[test]
-fn testing_complete_needs_alpha_and_a_uat_or_done_status() {
+fn testing_complete_needs_alpha_and_a_signed_off_status() {
     let st = StatusNames::default();
-    assert!(is_testing_complete(&st, Some("UAT"), true));
+    // The uat status is still testing, not sign-off.
+    assert!(!is_testing_complete(&st, Some("UAT"), true));
     assert!(is_testing_complete(&st, Some("done"), true));
     assert!(!is_testing_complete(&st, Some("UAT"), false));
     assert!(!is_testing_complete(&st, Some("Alpha Testing"), true));
     assert!(!is_testing_complete(&st, None, true));
     let custom = StatusNames {
         done: vec!["Closed".into()],
+        signed_off: vec!["Closed".into()],
         ..StatusNames::default()
     };
     assert!(is_testing_complete(&custom, Some("Closed"), true));
     assert!(!is_testing_complete(&custom, Some("Done"), true));
+    let uat_passed = StatusNames::from(&crate::config::JiraStatuses {
+        signed_off: vec!["UAT Passed".into()],
+        ..Default::default()
+    });
+    assert!(is_testing_complete(&uat_passed, Some("uat passed"), true));
+    assert!(!is_testing_complete(&uat_passed, Some("UAT"), true));
+    assert!(!is_testing_complete(&uat_passed, Some("Done"), true));
 }
 
 // -------------------------------------------------------- adapters, purity

@@ -54,6 +54,11 @@ pub struct JiraStatuses {
     /// Every status that means finished.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<String>,
+    /// Statuses that mean UAT was signed off, so the PRs may be approved
+    /// (`signed_off = ["UAT Passed"]`). Defaults to the `done` statuses only: the `uat`
+    /// status itself means testing is still going on and never triggers approval.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signed_off: Vec<String>,
 }
 
 impl JiraStatuses {
@@ -88,6 +93,16 @@ impl JiraStatuses {
             vec![Self::DEFAULT_DONE]
         } else {
             self.done.iter().map(String::as_str).collect()
+        }
+    }
+
+    /// The statuses that mean UAT is signed off: `signed_off` when set, else the done
+    /// statuses. Never the `uat` status.
+    pub fn signed_off_names(&self) -> Vec<&str> {
+        if self.signed_off.is_empty() {
+            self.done_names()
+        } else {
+            self.signed_off.iter().map(String::as_str).collect()
         }
     }
 }
@@ -248,6 +263,7 @@ mod tests {
             uat = "UAT"
             returned = "Sent Back"
             done = ["Done", "Closed"]
+            signed_off = ["UAT Passed"]
             [bitbucket]
             workspace = "acme"
             [pipelines]
@@ -262,6 +278,7 @@ mod tests {
         assert_eq!(s.alpha_testing_name(), "Alpha");
         assert_eq!(s.returned_name(), "Sent Back");
         assert_eq!(s.done_names(), ["Done", "Closed"]);
+        assert_eq!(s.signed_off_names(), ["UAT Passed"]);
         assert_eq!(c.bitbucket_workspace(), Some("acme"));
         assert_eq!(c.deploy_environment(), Some("alpha"));
     }
@@ -275,6 +292,7 @@ mod tests {
         assert_eq!(s.uat_name(), "UAT");
         assert_eq!(s.returned_name(), "Returned");
         assert_eq!(s.done_names(), ["Done"]);
+        assert_eq!(s.signed_off_names(), ["Done"]);
         assert_eq!(c.bitbucket_workspace(), None);
         assert_eq!(c.deploy_environment(), None);
         assert_eq!(Config::default().jira_account_id(), None);

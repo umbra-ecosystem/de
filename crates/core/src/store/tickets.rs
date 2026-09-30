@@ -101,7 +101,7 @@ pub fn active(store: &Store) -> eyre::Result<Option<TicketTracking>> {
 pub fn list(store: &Store) -> eyre::Result<Vec<TicketTracking>> {
     query_list(
         store,
-        &format!("SELECT {COLUMNS} FROM tickets ORDER BY manual_order, key"),
+        &format!("SELECT {COLUMNS} FROM tickets ORDER BY manual_order"),
         params![],
     )
 }
@@ -110,7 +110,7 @@ pub fn list(store: &Store) -> eyre::Result<Vec<TicketTracking>> {
 pub fn list_by_status(store: &Store, status: LocalStatus) -> eyre::Result<Vec<TicketTracking>> {
     query_list(
         store,
-        &format!("SELECT {COLUMNS} FROM tickets WHERE status = ?1 ORDER BY manual_order, key"),
+        &format!("SELECT {COLUMNS} FROM tickets WHERE status = ?1 ORDER BY manual_order"),
         params![status],
     )
 }
@@ -125,6 +125,13 @@ fn query_list(
         .query_map(params, from_row)?
         .collect::<Result<Vec<_>, _>>()
         .wrap_err("Failed to list tickets")?;
+    // Ties (which should not exist) resolve by key, numerically: SQL would sort the text.
+    let mut rows = rows;
+    rows.sort_by(|a, b| {
+        a.manual_order
+            .cmp(&b.manual_order)
+            .then_with(|| a.key.cmp(&b.key))
+    });
     Ok(rows)
 }
 
@@ -210,11 +217,11 @@ pub fn reorder(store: &Store, key: &TicketKey, position: usize) -> eyre::Result<
     let tx = store.conn().unchecked_transaction()?;
 
     let mut order: Vec<(TicketKey, i64)> = {
-        let mut stmt =
-            tx.prepare("SELECT key, manual_order FROM tickets ORDER BY manual_order, key")?;
+        let mut stmt = tx.prepare("SELECT key, manual_order FROM tickets")?;
         stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<Result<_, _>>()?
     };
+    order.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
 
     let from = order
         .iter()

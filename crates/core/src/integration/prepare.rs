@@ -12,7 +12,7 @@ use crate::{
     gateway::{
         Action, CommitLine, Confirmed, Executed, Gateway, Outcome, PushReport, PushUat, PushUatRepo,
     },
-    git::{GitRepo, GitRunner, MergeOutcome},
+    git::{GitRepo, GitRunner, MergeOutcome, validate_ref_component},
     overlay::{
         CommandRunner, ExternalCommand, check_range_for_overlay, run_checked,
         working_tree_has_overlay,
@@ -115,6 +115,13 @@ impl IntegrationPrep {
                 .repos
                 .iter()
                 .any(|r| matches!(r.outcome, RepoOutcome::Ready(_)))
+    }
+
+    /// Nothing is left to merge or push: every ticket repo was pushed and restored already
+    /// and only the rest of the finalize (baseline repos, overlays) remains. Finalizing is
+    /// idempotent, so integrating again simply resumes it.
+    pub fn is_resume(&self) -> bool {
+        self.repos.is_empty()
     }
 
     /// Whether finalize could run once everything ready is pushed.
@@ -243,7 +250,11 @@ pub fn prepare_integration(
         .filter(|r| r.role == RepoRole::Ticket)
         .collect();
     if touched.is_empty() {
-        bail!("{ticket} has no repo on its ticket branch; nothing to integrate");
+        // Everything was pushed and recorded, and an earlier finalize restored the ticket
+        // repos before failing on another one: what is left is finalizing, not merging.
+        if uat_details::list_for_ticket(store, ticket)?.is_empty() {
+            bail!("{ticket} has no repo on its ticket branch; nothing to integrate");
+        }
     }
 
     let ctx = Ctx {
@@ -340,6 +351,9 @@ fn prepare_inner(
     repo: &WorkspaceRepo,
     r: &mut RepoIntegration,
 ) -> eyre::Result<RepoOutcome> {
+    // Values from `de.toml` that end up in git's argv and refspecs: refuse odd ones.
+    validate_ref_component("[git] default_remote", &r.remote)?;
+    validate_ref_component("[branches] uat", &r.uat_branch)?;
     let git = GitRepo::open(&r.repo_dir)?;
     let branch_ref = format!("refs/heads/{}", r.ticket_branch);
     let tip = git
@@ -429,7 +443,16 @@ fn prepare_inner(
         .to_str()
         .ok_or_else(|| eyre!("worktree path is not valid UTF-8"))?;
     GitRunner::new(&r.repo_dir)
-        .run(&["worktree", "add", "--no-track", "-b", &tmp, wt, &uat_before])
+        .run(&[
+            "worktree",
+            "add",
+            "--no-track",
+            "-b",
+            &tmp,
+            "--",
+            wt,
+            &uat_before,
+        ])
         .wrap_err("Failed to create the integration worktree")?;
     r.worktree = Some(worktree.clone());
 

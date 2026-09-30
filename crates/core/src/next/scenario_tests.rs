@@ -490,8 +490,16 @@ fn the_top_suggestion_follows_the_workflow_from_review_to_uat_sign_off() {
         "new facts resurface it"
     );
 
-    // 9. Back through UAT: signed off, so the PRs can be approved.
-    let mut signed_off = ticket("PROJ-1", "UAT");
+    // 9. In UAT the testing is still going on: no approval yet. Once Jira shows a
+    // signed-off status (Done by default) the PRs can be approved.
+    let mut in_uat = ticket("PROJ-1", "UAT");
+    in_uat.updated_at = w.now.get();
+    w.jira.add_ticket(in_uat.clone());
+    w.jira.on_search("REVIEW", vec![in_uat]);
+    w.sync();
+    w.assert_absent(RuleId::ApprovePrs);
+    w.tick();
+    let mut signed_off = ticket("PROJ-1", "Done");
     signed_off.updated_at = w.now.get();
     w.jira.add_ticket(signed_off.clone());
     w.jira.on_search("REVIEW", vec![signed_off]);

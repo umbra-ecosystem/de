@@ -23,6 +23,7 @@ use de_core::{
     store::{
         Kind, Store,
         drafts::{self, DraftKind, DraftStatus},
+        overlays,
         restore::{self, RepoRole},
         tickets, uat_details,
     },
@@ -279,6 +280,7 @@ fn integrate_from_prep(
     if !prep.is_ready() {
         // Nothing to push: every touched repo is already in uat.
         ui.info_item("Nothing to push: every touched repo is already in uat.")?;
+        print_lines(ui, &render_remaining(state, key)?)?;
         if dry_run {
             ui.info_item("Dry run: nothing was changed.")?;
             return Ok(());
@@ -325,6 +327,33 @@ fn integrate_from_prep(
     finish(ui, state, runner, data, prep, repos)
 }
 
+/// What finishing an integration still has to do: the repos to put back on their branches
+/// and the overlays to revert (pure over what is recorded).
+fn render_remaining(state: &Store, key: &TicketKey) -> eyre::Result<Vec<String>> {
+    let repos: Vec<String> = restore::list(state, key)?
+        .into_iter()
+        .map(|r| r.repo)
+        .collect();
+    let overlays: Vec<String> = overlays::list(state, key)?
+        .into_iter()
+        .map(|o| o.repo)
+        .collect();
+    let mut lines = Vec::new();
+    if !repos.is_empty() {
+        lines.push(format!(
+            "Still to restore to their branches: {}",
+            repos.join(", ")
+        ));
+    }
+    if !overlays.is_empty() {
+        lines.push(format!(
+            "Test overlays still to revert: {}",
+            overlays.join(", ")
+        ));
+    }
+    Ok(lines)
+}
+
 fn finish(
     ui: &UserInterface,
     state: &Store,
@@ -338,7 +367,8 @@ fn finish(
     print_lines(ui, &render_deactivation(&report.deactivation))?;
     if !report.deactivation.is_complete() {
         bail!(
-            "{} is pushed but still active because some repos could not be restored; fix them and run `de ticket deactivate {}`",
+            "{} is pushed and recorded but still active because some repos could not be restored; fix them and run `de ticket integrate {}` again (it will not push again). \
+             Do not use `de ticket deactivate`: that parks the ticket instead of marking it integrated",
             prep.ticket,
             prep.ticket
         );
