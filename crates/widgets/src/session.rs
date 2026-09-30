@@ -1659,6 +1659,32 @@ mod tests {
     }
 
     #[test]
+    fn a_claim_suggestion_states_its_facts_as_chips() {
+        let s = Session::demo();
+        let ScreenVm::Next(n) = s.view().screen else {
+            panic!()
+        };
+        let card = n
+            .cards
+            .iter()
+            .find(|c| c.title == "Claim PROJ-139")
+            .expect("the hotfix claim");
+        let texts: Vec<&str> = card.chips.iter().map(|c| c.text.as_str()).collect();
+        assert!(texts.contains(&"Hotfix"), "{texts:?}");
+        // Priority is a mark beside the key and the place in the queue is the order: neither is a chip.
+        assert!(!texts.iter().any(|t| t.contains("queue") || ["Highest", "High", "Medium", "Low"].contains(t)), "{texts:?}");
+        // The sentence is still there for search, and other kinds of row keep showing it.
+        assert!(card.reason.contains("Review column"));
+        assert!(n.cards.iter().any(|c| c.chips.is_empty()));
+        // Only a high priority gets the mark.
+        assert!(n.cards.iter().all(|c| c
+            .priority
+            .as_ref()
+            .is_none_or(|p| p.text == "High" || p.text == "Highest")));
+        assert!(n.cards.iter().any(|c| c.priority.is_some()));
+    }
+
+    #[test]
     fn diagnose_shows_raw_output_and_reflects_sign_out() {
         let mut s = Session::demo();
         s.handle(Intent::Do(Command::SetProvider {

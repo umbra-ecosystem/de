@@ -70,6 +70,10 @@ impl Sim {
             hotfix: s.hotfix,
             info: s.info,
             ticket: s.ticket.clone(),
+            priority: s
+                .ticket_priority
+                .filter(|p| matches!(p, Priority::High | Priority::Highest))
+                .map(|p| Badge::new(p.label(), priority_tone(p))),
             open: s
                 .ticket
                 .clone()
@@ -77,6 +81,7 @@ impl Sim {
                 .map(|(k, tab)| Intent::go_ticket(k, tab)),
             title: s.title.clone(),
             reason: s.reason.clone(),
+            chips: s.chips.clone(),
             level: s.level,
             state: s.state,
             primary,

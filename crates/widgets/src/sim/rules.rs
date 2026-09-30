@@ -3,7 +3,9 @@
 
 use super::Sim;
 use super::model::*;
-use crate::vm::{Command, Intent, Level, Route, SugState, SuggestionId, TicketKey, TicketTab};
+use crate::vm::{
+    Badge, Command, Intent, Level, Route, SugState, SuggestionId, TicketKey, TicketTab, Tone,
+};
 
 #[derive(Clone, Debug)]
 pub struct Sug {
@@ -12,6 +14,8 @@ pub struct Sug {
     pub rule: Rule,
     pub title: String,
     pub reason: String,
+    /// What the row shows instead of the sentence when there are any: short facts, exceptions only.
+    pub chips: Vec<Badge>,
     pub level: Level,
     pub info: bool,
     pub hotfix: bool,
@@ -22,6 +26,9 @@ pub struct Sug {
     pub hash: String,
     /// The ticket's Jira priority and its place in the claim queue: inputs to the ranking (`ranking.rs`).
     pub ticket_priority: Option<Priority>,
+    /// The ticket has no pull request yet and its grace period has not run out (or has not started): nothing
+    /// can be done about it yet, so it must not lead the list.
+    pub awaiting_pr: bool,
     pub queue: Option<usize>,
     pub rank: usize,
     pub state: SugState,
@@ -177,6 +184,19 @@ fn plural(n: usize) -> &'static str {
 }
 
 impl Sim {
+    /// The facts of a claim suggestion as chips: a hotfix and a missing pull request. The priority is the mark
+    /// beside the key (as in the ticket table) and the place in the queue is the order of the rows.
+    fn claim_chips(hot: bool, no_pr: bool) -> Vec<Badge> {
+        let mut chips = Vec::new();
+        if hot {
+            chips.push(Badge::new("Hotfix", Tone::Hot));
+        }
+        if no_pr {
+            chips.push(Badge::new("No pull request", Tone::Warn));
+        }
+        chips
+    }
+
     pub(super) fn base_sug(
         rule: Rule,
         id: String,
@@ -191,6 +211,7 @@ impl Sim {
             rule,
             title,
             reason,
+            chips: Vec::new(),
             level: Level::Local,
             info: false,
             hotfix: false,
@@ -199,6 +220,7 @@ impl Sim {
             alt: None,
             hash,
             ticket_priority: None,
+            awaiting_pr: false,
             queue: None,
             rank: 0,
             state: SugState::Open,
@@ -216,6 +238,11 @@ impl Sim {
                 .as_ref()
                 .and_then(|k| self.tk(k))
                 .map(|t| t.priority);
+            s.awaiting_pr = s
+                .ticket
+                .as_ref()
+                .and_then(|k| self.tk(k))
+                .is_some_and(|t| self.pr_gap(t).is_some() && !self.pr_wait_expired(t));
             out.push(s);
         };
 
@@ -857,7 +884,7 @@ impl Sim {
                 format!("{}:claim_new", t.key),
                 format!("Claim {}", t.key),
                 format!(
-                    "In the Review column, priority {}{}{}, #{} in your queue.",
+                    "In the Review column, priority {}{}{}.",
                     t.priority.label(),
                     if hot {
                         ", targets production (hotfix)"
@@ -868,14 +895,14 @@ impl Sim {
                         ", but it has no pull request yet"
                     } else {
                         ""
-                    },
-                    i + 1
+                    }
                 ),
                 cmd(Command::Claim(t.key.clone())),
                 "q".to_string(),
             );
             s.ticket = Some(t.key.clone());
             s.hotfix = hot;
+            s.chips = Self::claim_chips(hot, self.pr_gap(t).is_some());
             push(s, Some(i));
         }
 
@@ -899,6 +926,7 @@ impl Sim {
                             n.tool(),
                             n.tool()
                         ),
+                        chips: Vec::new(),
                         level: Level::Automatic,
                         info: true,
                         hotfix: s.hotfix,
@@ -907,6 +935,7 @@ impl Sim {
                         alt: None,
                         hash: "ad".to_string(),
                         ticket_priority: s.ticket_priority,
+                        awaiting_pr: s.awaiting_pr,
                         queue: None,
                         rank: 0,
                         state: SugState::Open,

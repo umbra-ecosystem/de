@@ -132,6 +132,18 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
             )
         })
         .when_some(s.ticket.clone(), |d, k| d.child(key_text(ui, &k)))
+        .when_some(s.priority.clone(), |d, p| {
+            d.child(icon_tip(
+                SharedString::from(format!("prio-{}", s.id)),
+                IconName::TriangleAlert,
+                pal.tone(p.tone),
+                if p.text == "Highest" {
+                    "Highest priority"
+                } else {
+                    "High priority"
+                },
+            ))
+        })
         .child(
             div()
                 .truncate()
@@ -238,13 +250,21 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
                 .min_w_0()
                 .gap_0p5()
                 .child(title)
-                .child(
+                .child(if s.chips.is_empty() {
                     div()
                         .truncate()
                         .text_xs()
                         .text_color(pal.muted)
-                        .child(s.reason.clone()),
-                ),
+                        .child(s.reason.clone())
+                } else {
+                    // Facts as chips, so a column of similar rows can be scanned for what differs.
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .overflow_hidden()
+                        .children(s.chips.iter().map(|c| pill(pal, c)))
+                }),
         )
         .child(
             div()

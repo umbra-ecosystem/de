@@ -114,10 +114,14 @@ pub struct SuggestionCard {
     pub hotfix: bool,
     pub info: bool,
     pub ticket: Option<TicketKey>,
+    /// The ticket's priority when it is High or Highest: drawn as a mark beside the key, as in the ticket table.
+    pub priority: Option<Badge>,
     /// Where clicking the row goes (the ticket, at the tab that matters). `None`: the row is not clickable.
     pub open: Option<Intent>,
     pub title: String,
     pub reason: String,
+    /// Short facts shown in place of the reason when there are any.
+    pub chips: Vec<Badge>,
     pub level: Level,
     pub state: SugState,
     pub primary: Btn,
