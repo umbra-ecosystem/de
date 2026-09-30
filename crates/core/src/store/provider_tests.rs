@@ -96,7 +96,10 @@ fn state_upgrades_to_uat_merges_keeping_tickets_and_activation() {
     };
     uat_merges::record(&store, &merge).unwrap();
     uat_merges::record(&store, &merge).unwrap();
-    assert_eq!(uat_merges::list(&store).unwrap(), [merge.clone()]);
+    assert_eq!(
+        uat_merges::list(&store).unwrap(),
+        std::slice::from_ref(&merge)
+    );
     assert_eq!(
         uat_merges::list_for_ticket(&store, &key("PROJ-2")).unwrap(),
         []
@@ -226,7 +229,7 @@ fn pr_comments_are_replaced_as_a_set_and_deleted_with_the_pr() {
         [general.clone(), inline]
     );
 
-    prs::replace_comments(&store, "acme/web", 1, &[general.clone()]).unwrap();
+    prs::replace_comments(&store, "acme/web", 1, std::slice::from_ref(&general)).unwrap();
     assert_eq!(prs::comments(&store, "acme/web", 1).unwrap(), [general]);
 
     assert!(prs::delete(&store, "acme/web", 1).unwrap());
@@ -244,7 +247,7 @@ fn pipeline_upsert_is_idempotent_and_keeps_steps_a_list_fetch_lacks() {
     pipelines::upsert(&store, &full, 2).unwrap();
     assert_eq!(
         pipelines::list_for_repo(&store, "acme/web").unwrap(),
-        [full.clone()]
+        std::slice::from_ref(&full)
     );
 
     // A list result (no steps) updates the run but keeps the steps from the detail fetch.

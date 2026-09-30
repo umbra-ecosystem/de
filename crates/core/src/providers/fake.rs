@@ -308,6 +308,7 @@ struct HostState {
     strip_steps_in_lists: bool,
     health: Option<Health>,
     failure: Option<ProviderError>,
+    fail_pr_lookup: Option<ProviderError>,
     fail_repos: HashMap<String, ProviderError>,
     next_id: u64,
 }
@@ -395,6 +396,12 @@ impl FakeBitbucket {
         self
     }
 
+    /// Fails only `pr` (single-PR lookups); list, comments and pipelines keep working.
+    pub fn fail_pr_lookup(&self, error: Option<ProviderError>) -> &Self {
+        lock(&self.state).fail_pr_lookup = error;
+        self
+    }
+
     pub fn clear_repo_failures(&self) -> &Self {
         lock(&self.state).fail_repos.clear();
         self
@@ -457,6 +464,9 @@ impl CodeHost for FakeBitbucket {
     fn pr(&self, repo: &str, id: u64) -> ProviderResult<Pr> {
         self.log.record("pr", format!("{repo} #{id}"));
         self.check(repo)?;
+        if let Some(e) = &lock(&self.state).fail_pr_lookup {
+            return Err(e.clone());
+        }
         lock(&self.state)
             .prs
             .iter()
