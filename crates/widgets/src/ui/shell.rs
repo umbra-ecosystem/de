@@ -311,7 +311,13 @@ fn right_row(ui: &Ui, r: &RightRow) -> AnyElement {
                     .text_color(pal.faint)
                     .child(at.clone()),
             )
-            .child(div().text_color(pal.muted).child(text.clone()))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_color(pal.muted)
+                    .child(text.clone()),
+            )
             .when(*failed, |d| {
                 d.child(pill(pal, &Badge::new("failed", Tone::Bad)))
             })
@@ -323,6 +329,8 @@ fn right_row(ui: &Ui, r: &RightRow) -> AnyElement {
             .child(dot(if *ok { pal.ok } else { pal.bad }))
             .child(
                 div()
+                    .flex_1()
+                    .min_w_0()
                     .text_color(pal.muted)
                     .child(format!("{source}: {text}")),
             )
@@ -784,7 +792,7 @@ pub fn sheet(ui: &Ui, cx: &App, inputs: &Inputs, sheet: &SheetVm) -> Div {
                         .text_sm()
                         .child(div().text_color(if row.ok { pal.ok } else { pal.bad }).child(if row.ok { "✓" } else { "✕" }))
                         .child(div().w(px(100.0)).flex_none().font_family(ui.mono.clone()).child(row.repo.to_string()))
-                        .child(div().child(row.detail.clone()))
+                        .child(div().flex_1().min_w_0().child(row.detail.clone()))
                 }))
                 .children(r.notes.iter().map(|n| faint(pal, n.clone()))),
             div().flex().child(button(ui, &Btn::new("Done", Intent::CancelSheet).primary())),

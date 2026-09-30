@@ -289,8 +289,14 @@ pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
     let kv_row = |k: &str, val: String| {
         row(pal)
             .justify_between()
-            .child(div().text_sm().text_color(pal.muted).child(k.to_string()))
-            .child(div().text_sm().child(val))
+            .child(
+                div()
+                    .flex_none()
+                    .text_sm()
+                    .text_color(pal.muted)
+                    .child(k.to_string()),
+            )
+            .child(div().flex_1().min_w_0().text_sm().text_right().child(val))
     };
     div()
         .flex()

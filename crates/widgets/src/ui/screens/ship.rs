@@ -74,6 +74,7 @@ fn row(ui: &Ui) -> Div {
         .items_center()
         .gap_3()
         .py_1p5()
+        .flex_wrap()
         .border_b_1()
         .border_color(ui.pal.border.opacity(0.4))
 }
@@ -187,7 +188,7 @@ fn prep_row(ui: &Ui, r: &PrepRow) -> Div {
         PrepRow::Conflict { repo, with, files, comment, sent } => row(ui)
             .child(repo_cell(ui, repo))
             .child(pill(pal, &Badge::new("conflict", Tone::Bad)))
-            .child(div().text_sm().flex_1().child(format!(
+            .child(div().text_sm().flex_1().min_w_0().child(format!(
                 "Conflicts with {with} in {files}. The merge was aborted; nothing was pushed."
             )))
             .when_some(comment.clone(), |d, a| d.child(button(ui, &a)))
@@ -197,7 +198,7 @@ fn prep_row(ui: &Ui, r: &PrepRow) -> Div {
         PrepRow::Blocked { repo, reason } => row(ui)
             .child(repo_cell(ui, repo))
             .child(pill(pal, &Badge::new("blocked", Tone::Bad)))
-            .child(div().text_sm().child(reason.clone())),
+            .child(div().text_sm().flex_1().min_w_0().child(reason.clone())),
     }
 }
 

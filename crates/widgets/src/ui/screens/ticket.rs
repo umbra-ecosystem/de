@@ -181,13 +181,14 @@ fn audit_table(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
                 .child(
                     div()
                         .flex_1()
+                        .min_w_0()
                         .px_2()
                         .flex()
                         .gap_2()
                         .when(show_ticket, |d| {
                             d.when_some(a.ticket.clone(), |d, k| d.child(key_text(ui, &k)))
                         })
-                        .child(div().text_xs().child(a.details.clone())),
+                        .child(div().flex_1().min_w_0().text_xs().child(a.details.clone())),
                 )
         }))
 }

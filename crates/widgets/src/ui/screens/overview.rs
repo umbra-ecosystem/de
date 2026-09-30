@@ -138,12 +138,12 @@ fn checks(ui: &Ui, items: Vec<(bool, String)>) -> Div {
                 .flex()
                 .gap_2()
                 .text_sm()
-                .child(
-                    div()
-                        .text_color(pal.muted)
-                        .child(if done { "☑" } else { "☐" }),
-                )
-                .child(text)
+                .child(div().flex_none().text_color(pal.muted).child(if done {
+                    "☑"
+                } else {
+                    "☐"
+                }))
+                .child(div().flex_1().min_w_0().child(text))
         }))
 }
 
