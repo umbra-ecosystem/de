@@ -51,6 +51,7 @@ mod wire;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use serde_json::Value;
 
@@ -59,7 +60,7 @@ use super::model::{Health, RemoteComment, RemoteTicket};
 use super::traits::{TicketProvider, TicketWriter};
 use crate::config::Config;
 use crate::domain::TicketKey;
-use crate::overlay::{CommandOutput, CommandRunner, ExternalCommand, ProcessRunner};
+use crate::overlay::{CommandOutput, CommandRunner, ExternalCommand, ProcessRunner, TimedOut};
 
 pub use adf::{adf_to_text, body_to_text};
 pub use time::parse_timestamp;
@@ -129,8 +130,14 @@ fn is_not_found(e: &eyre::Report) -> bool {
     })
 }
 
+/// How long one `acli` call may run before it is killed (a hung acli must not hang sync).
+pub const ACLI_TIMEOUT: Duration = Duration::from_secs(120);
+
 fn spawn_error(e: &eyre::Report) -> ProviderError {
-    if is_not_found(e) {
+    if let Some(t) = e.chain().find_map(|c| c.downcast_ref::<TimedOut>()) {
+        // Environmental: sync stops talking to Jira and keeps its cache.
+        ProviderError::Network(format!("acli did not answer: {t}"))
+    } else if is_not_found(e) {
         ProviderError::not_installed(TOOL, "`acli` was not found on PATH")
     } else {
         ProviderError::Command {
@@ -250,7 +257,10 @@ pub struct AcliJira<R = ProcessRunner> {
 
 impl AcliJira<ProcessRunner> {
     pub fn new(config: &Config) -> ProviderResult<Self> {
-        Ok(Self::with_runner(ProcessRunner::new(), site_of(config)))
+        Ok(Self::with_runner(
+            ProcessRunner::new().with_timeout(ACLI_TIMEOUT),
+            site_of(config),
+        ))
     }
 }
 
@@ -416,7 +426,10 @@ pub struct AcliJiraWriter<R = ProcessRunner> {
 impl AcliJiraWriter<ProcessRunner> {
     /// `pub(crate)`: code outside `de-core` (the CLI, a GUI) cannot build a writer at all.
     pub(crate) fn new(config: &Config) -> ProviderResult<Self> {
-        Ok(Self::with_runner(ProcessRunner::new(), site_of(config)))
+        Ok(Self::with_runner(
+            ProcessRunner::new().with_timeout(ACLI_TIMEOUT),
+            site_of(config),
+        ))
     }
 }
 

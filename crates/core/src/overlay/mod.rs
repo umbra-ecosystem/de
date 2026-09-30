@@ -27,7 +27,7 @@ pub use guard::{
     LeakedChange, OverlayGuardError, OverlayLeak, check_range_for_overlay,
     working_tree_has_overlay, working_tree_overlay,
 };
-pub use runner::{CommandOutput, CommandRunner, ExternalCommand, ProcessRunner, run_checked};
+pub use runner::{CommandOutput, CommandRunner, ExternalCommand, ProcessRunner, TimedOut, run_checked};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OverlayError {

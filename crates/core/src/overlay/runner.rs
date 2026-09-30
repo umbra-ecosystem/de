@@ -3,8 +3,11 @@
 
 use std::{
     ffi::OsString,
+    io::Read,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, Instant},
 };
 
 use eyre::{Context, eyre};
@@ -122,6 +125,40 @@ fn tail(text: &str) -> Option<String> {
 pub struct ProcessRunner {
     /// Directories put in front of `PATH` for the child (tests use this for a stub `composer`).
     path_prefix: Vec<PathBuf>,
+    /// Kill the child after this long. `None` (the default) waits forever, which the
+    /// long-running callers (`composer update`, rebuild tasks) rely on.
+    timeout: Option<Duration>,
+}
+
+/// The error a [`ProcessRunner`] with a timeout returns after killing a child that ran too
+/// long. Downcast from the `eyre::Report` to tell it from a spawn failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimedOut {
+    pub program: String,
+    pub after: Duration,
+}
+
+impl std::fmt::Display for TimedOut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "`{}` timed out after {:.1}s and was killed",
+            self.program,
+            self.after.as_secs_f32()
+        )
+    }
+}
+
+impl std::error::Error for TimedOut {}
+
+fn drain<T: Read + Send + 'static>(stream: Option<T>) -> thread::JoinHandle<Vec<u8>> {
+    thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut s) = stream {
+            let _ = s.read_to_end(&mut buf);
+        }
+        buf
+    })
 }
 
 impl ProcessRunner {
@@ -133,6 +170,55 @@ impl ProcessRunner {
     pub fn with_path_prefix(mut self, dir: impl Into<PathBuf>) -> Self {
         self.path_prefix.push(dir.into());
         self
+    }
+
+    /// Kill (and reap) the child if it runs longer than `timeout`, failing with [`TimedOut`].
+    /// Output is read concurrently, so a chatty child cannot block on a full pipe.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    fn run_with_timeout(
+        &self,
+        mut process: Command,
+        program: &str,
+        timeout: Duration,
+    ) -> eyre::Result<CommandOutput> {
+        let mut child = process
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .wrap_err_with(|| format!("Failed to start `{program}`"))?;
+        let out = drain(child.stdout.take());
+        let err = drain(child.stderr.take());
+        let deadline = Instant::now() + timeout;
+        let status = loop {
+            match child
+                .try_wait()
+                .wrap_err("Failed to wait for the process")?
+            {
+                Some(status) => break status,
+                None if Instant::now() >= deadline => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    // A grandchild may still hold the pipes open; do not join the readers.
+                    return Err(TimedOut {
+                        program: program.to_string(),
+                        after: timeout,
+                    }
+                    .into());
+                }
+                None => thread::sleep(Duration::from_millis(10)),
+            }
+        };
+        Ok(CommandOutput {
+            success: status.success(),
+            code: status.code(),
+            stdout: String::from_utf8_lossy(&out.join().unwrap_or_default()).into_owned(),
+            stderr: String::from_utf8_lossy(&err.join().unwrap_or_default()).into_owned(),
+        })
     }
 }
 
@@ -146,6 +232,10 @@ impl CommandRunner for ProcessRunner {
             let existing: OsString = std::env::var_os("PATH").unwrap_or_default();
             paths.extend(std::env::split_paths(&existing));
             process.env("PATH", std::env::join_paths(paths)?);
+        }
+
+        if let Some(timeout) = self.timeout {
+            return self.run_with_timeout(process, &command.program, timeout);
         }
 
         let output = process
@@ -180,6 +270,71 @@ mod tests {
 
         let missing = ExternalCommand::new(dir.path(), "definitely-not-a-program", &[], "x");
         assert!(run_checked(&runner, &missing).is_err());
+    }
+
+    fn pid_alive(pid: &str) -> bool {
+        Command::new("kill")
+            .args(["-0", pid])
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    }
+
+    #[test]
+    fn timeout_kills_a_hung_child_promptly() {
+        let dir = tempfile::tempdir().unwrap();
+        let pidfile = dir.path().join("pid");
+        let script = format!("echo $$ > {}; exec sleep 30", pidfile.display());
+        let runner = ProcessRunner::new().with_timeout(Duration::from_millis(200));
+        let started = Instant::now();
+        let err = runner
+            .run(&ExternalCommand::new(
+                dir.path(),
+                "sh",
+                &["-c", &script],
+                "hang",
+            ))
+            .unwrap_err();
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(err.downcast_ref::<TimedOut>().is_some(), "{err:#}");
+        let pid = std::fs::read_to_string(&pidfile).unwrap();
+        assert!(!pid_alive(pid.trim()), "child must be dead and reaped");
+    }
+
+    #[test]
+    fn timeout_does_not_deadlock_on_a_chatty_child() {
+        let dir = tempfile::tempdir().unwrap();
+        // Far more than a pipe buffer on both streams, then hang.
+        let script = "yes x | head -c 1000000; yes y | head -c 1000000 >&2; exec sleep 30";
+        let runner = ProcessRunner::new().with_timeout(Duration::from_millis(500));
+        let started = Instant::now();
+        let err = runner
+            .run(&ExternalCommand::new(
+                dir.path(),
+                "sh",
+                &["-c", script],
+                "chatty",
+            ))
+            .unwrap_err();
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(err.downcast_ref::<TimedOut>().is_some());
+    }
+
+    #[test]
+    fn timeout_leaves_fast_and_chatty_successes_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let runner = ProcessRunner::new().with_timeout(Duration::from_secs(20));
+        let out = runner
+            .run(&ExternalCommand::new(
+                dir.path(),
+                "sh",
+                &["-c", "yes x | head -c 500000; echo err >&2; exit 2"],
+                "ok",
+            ))
+            .unwrap();
+        assert_eq!(out.code, Some(2));
+        assert_eq!(out.stdout.len(), 500000);
+        assert_eq!(out.stderr.trim(), "err");
     }
 
     #[test]
