@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
+use gpui_kit::component::{Icon, IconName, Sizable};
 use gpui_kit::*;
 
 use super::app::AppView;
@@ -88,10 +89,14 @@ impl Inputs {
         }
     }
 
-    /// A taller single-line input for the search strips, which are 48px tall so it has some air.
+    /// The search field of a list strip: a search icon, a little taller than a plain input. The strip is 48px tall
+    /// so it has some air; the caller caps its width.
     pub fn search(&self, field: &Field) -> AnyElement {
         match self.map.get(field) {
-            Some(TextBox::Line(e)) => Input::new(e).h(px(36.0)).into_any_element(),
+            Some(TextBox::Line(e)) => Input::new(e)
+                .h(px(36.0))
+                .prefix(Icon::new(IconName::Search).small())
+                .into_any_element(),
             _ => div().into_any_element(),
         }
     }

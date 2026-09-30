@@ -1090,6 +1090,7 @@ impl Store for Sim {
             rows,
             repos,
             chosen: Vec::new(),
+            problems_only: false,
             total,
             overlaps,
         }

@@ -8,6 +8,7 @@ use gpui_kit::*;
 
 use super::ticket::audit_rows;
 use crate::ui::ctx::{Inputs, Ui};
+use crate::ui::filter_menu::{FilterGroup, FilterRow, filter_menu};
 use crate::ui::theme::Pal;
 use crate::ui::widgets::*;
 use crate::vm::*;
@@ -48,17 +49,44 @@ fn uat_cell(w: f32) -> Div {
 /// them. Overlaps are exceptions: they get a band under the table only when there are some.
 pub fn on_uat(ui: &Ui, inputs: &Inputs, v: &OnUatVm) -> AnyElement {
     let pal = &ui.pal;
+    let mut groups = vec![FilterGroup {
+        title: "Repos",
+        rows: v
+            .repos
+            .iter()
+            .map(|r| {
+                FilterRow::new(
+                    r.to_string(),
+                    v.chosen.contains(r),
+                    Intent::ToggleUatRepo(r.clone()),
+                )
+            })
+            .collect(),
+    }];
+    groups.push(FilterGroup {
+        title: "Deploy",
+        rows: vec![FilterRow::new(
+            "Problems only",
+            v.problems_only,
+            Intent::ToggleUatProblems,
+        )],
+    });
     let filters = strip(pal)
         .h(px(48.0))
-        .child(div().flex_1().child(inputs.search(&Field::UatFilter)))
-        .child(div().flex().gap_1().children(v.repos.iter().map(|r| {
-            chip(
-                ui,
-                r.to_string(),
-                v.chosen.contains(r),
-                Intent::ToggleUatRepo(r.clone()),
-            )
-        })));
+        .child(div().flex_1())
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .max_w(px(360.0))
+                .child(inputs.search(&Field::UatFilter)),
+        )
+        .child(filter_menu(
+            ui,
+            "uat-filters",
+            groups,
+            Some(Intent::ClearUatFilters),
+        ));
     let head_cell = |w: f32, t: &str| uat_cell(w).child(t.to_uppercase());
     let header = div()
         .flex()

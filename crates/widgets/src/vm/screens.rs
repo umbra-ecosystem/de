@@ -486,6 +486,7 @@ pub struct OnUatVm {
     /// Every repo that has something on uat (the filter chips) and the ones currently chosen.
     pub repos: Vec<RepoName>,
     pub chosen: Vec<RepoName>,
+    pub problems_only: bool,
     /// Rows before filtering, to tell "nothing on uat" from "nothing matches".
     pub total: usize,
     pub overlaps: Vec<String>,

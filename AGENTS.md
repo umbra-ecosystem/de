@@ -73,6 +73,7 @@ Configured once in the root `[workspace.lints]` and inherited by each crate via 
   4. Group with space and hairlines, never boxes or cards; sections in a side panel are separated by a hairline and a label.
   5. Side panels are summaries: what the main view does not already say, grouped (people, planning, tags, pull requests), at most about eight rows in view; detail goes down a step in brightness (title, then faint detail), not in weight.
   6. Hotspots get one loud thing (the bold title, the red alert), never several.
+- **List screens filter the same way**: a 48px strip with the search field (`Inputs::search`: icon, capped at 360px, right-aligned) and one `ui/filter_menu.rs` dropdown (groups of checkable rows, a count of what is on, "Show everything"). Add a filter as a `FilterRow` and an `Intent`; do not add chips or toggles.
 - Still hand-built and to be replaced by the kit's component when touched: navigation (`Sidebar`), toasts (`Notification`), sheets (`Dialog`), the palette (`Command`), the ticket stepper (`Stepper`), key/value rows (`DescriptionList`), and the audit/repo tables (`Table`).
 - Look at the showcase without grabbing the whole screen: `DE_SHOWCASE_ROUTE` (`next`, `tickets`, `uat`, `workspace`, `audit`, `settings`, `ticket:PROJ-142:review`) and `DE_SHOWCASE_THEME` (`light`, `dark`) open a specific screen; capture only the app's window, never the full display.
 - Run the showcase: `cargo run -p de-widgets --bin showcase` (it needs a desktop session; `gpui` opens a real window).

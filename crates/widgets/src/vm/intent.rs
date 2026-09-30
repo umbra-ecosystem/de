@@ -239,6 +239,9 @@ pub enum Intent {
     ToggleShowAll,
     /// Show only tickets that touch this repo (several repos: any of them).
     ToggleUatRepo(RepoName),
+    /// Show only tickets whose deploy is not healthy.
+    ToggleUatProblems,
+    ClearUatFilters,
     OpenPalette,
     ClosePalette,
     /// Send a command. A remote write always opens a confirm sheet first; some local ones do too.

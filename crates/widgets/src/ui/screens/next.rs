@@ -9,11 +9,12 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::menu::DropdownMenu;
 use gpui_kit::component::menu::PopupMenuItem;
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{Icon, IconName, Selectable, Sizable};
+use gpui_kit::component::{Icon, IconName, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::ui::ctx::{Inputs, Ui};
+use crate::ui::filter_menu::{FilterGroup, FilterRow, filter_menu};
 use crate::ui::widgets::*;
 use crate::vm::*;
 
@@ -253,21 +254,19 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
 /// The whole screen: a search field and the dismissed/snoozed toggle, then a uniform list that fills the rest.
 pub fn next(ui: &Ui, inputs: &Inputs, vm: &NextVm) -> AnyElement {
     let pal = &ui.pal;
-    let toggle = Button::new("show-all")
-        .ghost()
-        .small()
-        .icon(if vm.show_all {
-            IconName::Eye
-        } else {
-            IconName::EyeOff
-        })
-        .selected(vm.show_all)
-        .tooltip(format!(
-            "{} dismissed and snoozed ({})",
-            if vm.show_all { "Hide" } else { "Show" },
-            vm.hidden
-        ))
-        .on_click(ui.on_click(Intent::ToggleShowAll));
+    let menu = filter_menu(
+        ui,
+        "next-filters",
+        vec![FilterGroup {
+            title: "Show",
+            rows: vec![FilterRow::new(
+                format!("Dismissed and snoozed ({})", vm.hidden),
+                vm.show_all,
+                Intent::ToggleShowAll,
+            )],
+        }],
+        None,
+    );
     let header = div()
         .flex()
         .flex_none()
@@ -277,8 +276,15 @@ pub fn next(ui: &Ui, inputs: &Inputs, vm: &NextVm) -> AnyElement {
         .px_6()
         .border_b_1()
         .border_color(pal.border)
-        .child(div().flex_1().child(inputs.search(&Field::NextFilter)))
-        .child(toggle);
+        .child(div().flex_1())
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .max_w(px(360.0))
+                .child(inputs.search(&Field::NextFilter)),
+        )
+        .child(menu);
     let body = if vm.cards.is_empty() {
         empty_state(pal, "Nothing to do.").into_any_element()
     } else {

@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod ctx;
+pub mod filter_menu;
 pub mod panels;
 pub mod screens;
 pub mod shell;
