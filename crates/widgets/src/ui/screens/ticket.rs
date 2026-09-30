@@ -23,32 +23,32 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
                 .px_6()
                 .pt_4()
                 .pb_2()
+                // Two lines: what it is and what state it is in, then its title (wrapping) beside the actions.
                 .child(
                     div()
                         .flex()
-                        .items_center()
-                        .gap_3()
-                        .child(key_text(ui, &h.key))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .truncate()
-                                .text_lg()
-                                .child(h.title.clone()),
-                        )
+                        .flex_col()
+                        .gap_1()
                         .child(
                             div()
                                 .flex()
+                                .flex_wrap()
                                 .items_center()
-                                .gap_1()
-                                .flex_none()
+                                .gap_2()
+                                .child(key_text(ui, &h.key))
                                 .child(pill(pal, &h.jira))
                                 .when_some(h.local.clone(), |d, b| d.child(pill(pal, &b)))
                                 .when(h.hotfix, |d| d.child(hotfix_pill(pal)))
                                 .when_some(h.uat_flag.clone(), |d, b| d.child(pill(pal, &b))),
                         )
-                        .child(buttons(ui, &h.actions)),
+                        .child(
+                            div()
+                                .flex()
+                                .items_start()
+                                .gap_3()
+                                .child(div().flex_1().min_w_0().text_lg().child(h.title.clone()))
+                                .child(div().flex_none().child(buttons(ui, &h.actions))),
+                        ),
                 )
                 .child(stepper(pal, &h.stepper)),
         )
