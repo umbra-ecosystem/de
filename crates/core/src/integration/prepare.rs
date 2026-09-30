@@ -174,7 +174,7 @@ fn tmp_ref(ticket: &TicketKey) -> String {
 }
 
 fn temp_branch(ticket: &TicketKey) -> String {
-    format!("de/integrate/{ticket}")
+    format!("{}{ticket}", crate::git::INTEGRATION_BRANCH_PREFIX)
 }
 
 fn audit_local(
@@ -352,15 +352,6 @@ fn prepare_inner(
     let tmp = temp_branch(ctx.ticket);
     remove_worktree(&r.repo_dir, &worktree, &tmp);
 
-    // Something an earlier (partial) run already pushed.
-    for rec in uat_details::list_for_ticket(ctx.store, ctx.ticket)? {
-        if rec.merge.repo == r.repo && git.is_ancestor(&tip, &rec.merge.commit).unwrap_or(false) {
-            return Ok(RepoOutcome::AlreadyPushed {
-                merge_commit: rec.merge.commit,
-            });
-        }
-    }
-
     let status = git.status()?;
     if !status.is_clean() {
         r.warnings.push(format!(
@@ -389,6 +380,21 @@ fn prepare_inner(
     let uat_before = git
         .rev_parse(&uat_ref)
         .wrap_err_with(|| format!("{}/{} does not exist on the remote", r.remote, r.uat_branch))?;
+
+    // Something an earlier (partial) run already pushed. The recorded merge only counts while
+    // the remote uat still contains it: uat can be reset, and then the ticket is not in it.
+    for rec in uat_details::list_for_ticket(ctx.store, ctx.ticket)? {
+        if rec.merge.repo == r.repo
+            && git.is_ancestor(&tip, &rec.merge.commit).unwrap_or(false)
+            && git
+                .is_ancestor(&rec.merge.commit, &uat_before)
+                .unwrap_or(false)
+        {
+            return Ok(RepoOutcome::AlreadyPushed {
+                merge_commit: rec.merge.commit,
+            });
+        }
+    }
 
     // A local uat with commits the remote lacks: someone committed there; do not guess.
     if let Some(local) = git

@@ -176,6 +176,55 @@ fn audited_as_sent(state: &Store, ticket: &TicketKey, action: &str, id: i64) -> 
     }))
 }
 
+/// An attempt for this draft was audited (before acting) that has no outcome entry yet:
+/// another process is sending it right now, or one died mid-send. Either way it may have gone
+/// out, so it is not sent again; the author checks Jira and discards the draft if needed. A
+/// failed send has its failure entry and does not count.
+fn attempt_unresolved(
+    state: &Store,
+    ticket: &TicketKey,
+    action: &str,
+    id: i64,
+) -> eyre::Result<bool> {
+    let attempted = format!("{action}{}", crate::gateway::actions::ATTEMPTED_SUFFIX);
+    let mut open: i64 = 0;
+    for e in audit::list(state, Some(ticket), 10_000)? {
+        let for_draft = e
+            .details
+            .pointer("/gateway/facts/draft_id")
+            .and_then(Value::as_i64)
+            == Some(id);
+        if !for_draft {
+            continue;
+        }
+        if e.action == attempted {
+            open += 1;
+        } else if e.action == action {
+            open -= 1;
+        }
+    }
+    Ok(open > 0)
+}
+
+/// Refuses when the audit log shows the draft was sent, or may be being sent.
+fn ensure_not_sent(
+    state: &Store,
+    ticket: &TicketKey,
+    action: &str,
+    id: i64,
+    already: &str,
+) -> eyre::Result<()> {
+    if audited_as_sent(state, ticket, action, id)? {
+        bail!("{already}");
+    }
+    if attempt_unresolved(state, ticket, action, id)? {
+        bail!(
+            "Draft {id} may already have been sent: the audit log has an attempt with no outcome (another de is sending it, or one stopped midway). Check Jira; discard the draft if it went out"
+        );
+    }
+    Ok(())
+}
+
 fn open_draft(state: &Store, id: i64, kind: DraftKind) -> eyre::Result<StoredDraft> {
     let draft = drafts::get(state, id)?.ok_or_else(|| eyre!("There is no draft {id}"))?;
     if draft.kind != kind {
@@ -191,14 +240,13 @@ fn open_draft(state: &Store, id: i64, kind: DraftKind) -> eyre::Result<StoredDra
 /// The gateway preview of posting the deploy comment `id`, exactly as it will be sent.
 pub fn preview_post_comment(gateway: &Gateway<'_>, state: &Store, id: i64) -> eyre::Result<Draft> {
     let draft = open_draft(state, id, DraftKind::DeployComment)?;
-    if audited_as_sent(
+    ensure_not_sent(
         state,
         &draft.ticket,
         crate::gateway::actions::JIRA_COMMENT,
         id,
-    )? {
-        bail!("The audit log shows draft {id} was already posted; not posting it again");
-    }
+        &format!("The audit log shows draft {id} was already posted; not posting it again"),
+    )?;
     let action = Action::PostJiraComment {
         ticket: draft.ticket.clone(),
         body: draft.body.clone(),
@@ -224,14 +272,13 @@ pub fn post_comment(
                 && draft_id_of(&confirmed) == Some(id) => {}
         _ => bail!("The confirmation is not for the current text of draft {id}; preview it again"),
     }
-    if audited_as_sent(
+    ensure_not_sent(
         state,
         &draft.ticket,
         crate::gateway::actions::JIRA_COMMENT,
         id,
-    )? {
-        bail!("The audit log shows draft {id} was already posted; not posting it again");
-    }
+        &format!("The audit log shows draft {id} was already posted; not posting it again"),
+    )?;
 
     let executed = gateway.execute(confirmed, now)?;
     let Outcome::JiraComment(comment) = executed.outcome else {
@@ -319,14 +366,13 @@ pub fn post_transition(
             draft.ticket
         );
     }
-    if audited_as_sent(
+    ensure_not_sent(
         state,
         &draft.ticket,
         crate::gateway::actions::JIRA_TRANSITION,
         id,
-    )? {
-        bail!("The audit log shows this transition was already made");
-    }
+        "The audit log shows this transition was already made",
+    )?;
     gateway.execute(confirmed, now)?;
     drafts::mark_posted(state, id, now, None).map_err(|e| {
         e.wrap_err(format!(

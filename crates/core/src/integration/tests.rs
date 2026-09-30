@@ -795,6 +795,174 @@ fn a_push_of_an_inactive_ticket_is_refused_by_the_gateway() {
     assert!(err.to_string().contains("not active"), "{err}");
 }
 
+#[test]
+fn a_recorded_merge_that_uat_no_longer_contains_is_pushed_again() {
+    // uat is long-lived but teams do reset it. A merge recorded earlier must not make the
+    // ticket count as "already pushed" when the remote uat no longer contains it.
+    let env = Env::active();
+    let prep = env.prepare();
+    assert!(env.push(&prep).all_done());
+    let first = prep.repos[0].repo.clone();
+    let before = ready(&prep.repos[0].outcome).uat_before.clone();
+    env.repo(&first).git(&[
+        "push",
+        "--force",
+        "origin",
+        &format!("{before}:refs/heads/uat"),
+    ]);
+
+    let again = env.prepare();
+    assert!(
+        matches!(env.outcome(&again, &first), RepoOutcome::Ready(_)),
+        "{:?}",
+        env.outcome(&again, &first)
+    );
+    // The repo whose uat still has the merge stays "already pushed".
+    let second = prep.repos[1].repo.clone();
+    assert!(matches!(
+        env.outcome(&again, &second),
+        RepoOutcome::AlreadyPushed { .. }
+    ));
+
+    // And it really is pushed again (the gateway does not skip it on the stale record), and
+    // the ticket can then be finalized.
+    let new_merge = ready(env.outcome(&again, &first)).merge_commit.clone();
+    assert!(env.push(&again).all_done());
+    assert_eq!(env.repo(&first).origin_sha("uat"), new_merge);
+    finalize_integration(
+        &env.fx.store,
+        &env.fx.runner,
+        env.data.path(),
+        &again,
+        &env.fx.repos(),
+        60,
+    )
+    .unwrap();
+    assert_eq!(env.status(), LocalStatus::Integrated);
+}
+
+#[test]
+fn the_temporary_integration_branch_is_never_taken_for_a_ticket_branch() {
+    // `de/integrate/PROJ-1` contains the ticket key, so key matching would find it as a second
+    // branch of the ticket (making the repo ambiguous, or activating it) while an integration
+    // is prepared or if a crash left it behind.
+    let env = Env::active();
+    let _prep = env.prepare();
+    assert_eq!(
+        env.repo("worker")
+            .git(&["branch", "--list", "de/integrate/*"]),
+        "+ de/integrate/PROJ-1"
+    );
+    let found = crate::activation::find_matches(&env.ticket, &env.fx.repos());
+    let worker = found.matches.iter().find(|m| m.repo == "worker").unwrap();
+    assert_eq!(worker.branches, ["feature/PROJ-1-work"], "{found:?}");
+}
+
+#[test]
+fn one_repo_already_in_uat_and_one_pushed_now_finalize_together() {
+    let env = Env::new();
+    // worker's branch is already in its uat; api-client still needs a push.
+    env.repo("worker")
+        .git(&["push", "origin", "feature/PROJ-1-work:refs/heads/uat"]);
+    env.activate();
+    let prep = env.prepare();
+    assert!(matches!(
+        env.outcome(&prep, "worker"),
+        RepoOutcome::UpToDate { .. }
+    ));
+    assert!(prep.is_ready());
+    let Action::PushUat(push) = prep.push_action().unwrap() else {
+        panic!()
+    };
+    assert_eq!(push.repos.len(), 1, "only api-client is pushed");
+    let worker_uat = env.repo("worker").origin_sha("uat");
+
+    assert!(env.push(&prep).all_done());
+    let report = finalize_integration(
+        &env.fx.store,
+        &env.fx.runner,
+        env.data.path(),
+        &prep,
+        &env.fx.repos(),
+        40,
+    )
+    .unwrap();
+    assert_eq!(report.already_in_uat, ["worker"]);
+    assert_eq!(env.status(), LocalStatus::Integrated);
+    assert_eq!(
+        env.repo("worker").origin_sha("uat"),
+        worker_uat,
+        "nothing was pushed for the repo that was already in uat"
+    );
+}
+
+#[test]
+fn a_crash_between_the_push_and_the_record_is_recovered_without_a_second_push() {
+    let env = Env::active();
+    let prep = env.prepare();
+    // The push reached the remote, then the process died before recording anything.
+    let mut pushed = Vec::new();
+    for r in &prep.repos {
+        let merge = ready(&r.outcome).merge_commit.clone();
+        env.repo(&r.repo)
+            .git(&["push", "origin", &format!("{merge}:refs/heads/uat")]);
+        pushed.push((r.repo.clone(), merge));
+    }
+    assert!(env.merges().is_empty());
+
+    let again = env.prepare();
+    assert!(!again.is_ready(), "nothing left to push");
+    for (repo, _) in &pushed {
+        assert!(matches!(
+            env.outcome(&again, repo),
+            RepoOutcome::UpToDate { .. }
+        ));
+    }
+    finalize_integration(
+        &env.fx.store,
+        &env.fx.runner,
+        env.data.path(),
+        &again,
+        &env.fx.repos(),
+        40,
+    )
+    .unwrap();
+    assert_eq!(env.status(), LocalStatus::Integrated);
+    for (repo, merge) in pushed {
+        assert_eq!(env.repo(&repo).origin_sha("uat"), merge, "not pushed again");
+        let rec = uat_details::latest(&env.fx.store, &env.ticket, &repo)
+            .unwrap()
+            .unwrap();
+        assert_eq!(rec.details.unwrap().kind, MergeKind::AlreadyInUat);
+        assert!(
+            env.repo(&repo)
+                .open()
+                .is_ancestor(&merge, &rec.merge.commit)
+                .unwrap(),
+            "the recorded uat commit contains the pushed merge"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn hooks_of_the_repo_do_not_stop_the_merge_commit_from_being_worded() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let env = Env::active();
+    for name in ["api-client", "worker"] {
+        let hook = env.repo(name).dir.join(".git/hooks/pre-commit");
+        std::fs::write(&hook, "#!/bin/sh\necho 'lint failed' >&2\nexit 1\n").unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let prep = env.prepare();
+    assert!(
+        prep.is_ready(),
+        "a failing pre-commit hook blocked the integration: {:?}",
+        prep.repos.iter().map(|r| &r.outcome).collect::<Vec<_>>()
+    );
+}
+
 // ---------------------------------------------------------- deploy status
 
 struct Deploys {
@@ -1257,6 +1425,80 @@ fn the_audit_log_alone_stops_a_double_post_even_if_the_draft_row_was_not_updated
         .to_string();
     assert!(err.contains("audit log shows"), "{err}");
     assert_eq!(an.jira.log().count("add_comment"), 1);
+}
+
+#[test]
+fn a_comment_whose_send_is_in_flight_or_died_midway_is_not_posted_a_second_time() {
+    let an = Announce::new();
+    an.dp.run(
+        "run-9",
+        &an.merge,
+        PipelineState::Succeeded,
+        Some(("alpha", PipelineState::Succeeded)),
+        10,
+    );
+    let draft = an.compose(false).unwrap();
+    let gw = an.gateway();
+    // Two processes both previewed and confirmed the same draft.
+    let ours = preview_post_comment(&gw, an.state(), draft.id)
+        .unwrap()
+        .confirm();
+
+    // The other one has audited its attempt and is (or was) talking to Jira: no outcome yet.
+    audit::append(
+        an.state(),
+        &audit::NewAuditEntry {
+            at: 70,
+            action: "jira.comment.attempted".into(),
+            ticket: Some(an.ticket.clone()),
+            repo: None,
+            details: serde_json::json!({
+                "phase": "attempted",
+                "gateway": { "draft": "draft-x", "facts": { "draft_id": draft.id } },
+            }),
+            outcome: crate::domain::AuditOutcome::Skipped,
+        },
+    )
+    .unwrap();
+
+    let err = post_comment(&gw, an.state(), draft.id, ours, 71)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("may already have been sent"), "{err}");
+    assert_eq!(an.jira.log().count("add_comment"), 0);
+
+    // Asking again is refused up front as well.
+    assert!(preview_post_comment(&gw, an.state(), draft.id).is_err());
+}
+
+#[test]
+fn a_failed_send_can_be_retried_but_a_second_attempt_after_it_is_not_confused_with_it() {
+    let an = Announce::new();
+    an.dp.run(
+        "run-9",
+        &an.merge,
+        PipelineState::Succeeded,
+        Some(("alpha", PipelineState::Succeeded)),
+        10,
+    );
+    let draft = an.compose(false).unwrap();
+    let gw = an.gateway();
+    an.jira.set_offline();
+    let confirmed = preview_post_comment(&gw, an.state(), draft.id)
+        .unwrap()
+        .confirm();
+    assert!(post_comment(&gw, an.state(), draft.id, confirmed, 71).is_err());
+
+    // The attempt failed (its outcome is a failure): posting again is allowed.
+    an.jira.set_failure(None);
+    let confirmed = preview_post_comment(&gw, an.state(), draft.id)
+        .unwrap()
+        .confirm();
+    post_comment(&gw, an.state(), draft.id, confirmed, 72).unwrap();
+    assert_eq!(
+        drafts::get(an.state(), draft.id).unwrap().unwrap().status,
+        DraftStatus::Posted
+    );
 }
 
 #[test]

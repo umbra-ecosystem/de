@@ -333,6 +333,39 @@ fn a_push_is_high_risk_and_previews_the_exact_git_commands() {
     assert!(text.contains(&"b".repeat(40)) && text.contains("risk: high"));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_payload_that_cannot_be_serialised_is_refused_not_hashed_as_nothing() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    let w = World::new();
+    let gw = w.gateway();
+    // A checkout path that is not UTF-8 cannot be written to the audit log or hashed.
+    let dir = PathBuf::from(OsString::from_vec(b"/x/\xff\xfe".to_vec()));
+    let push = Action::PushUat(PushUat {
+        ticket: key("PROJ-1"),
+        repos: vec![PushUatRepo {
+            repo: "web".into(),
+            repo_dir: dir,
+            remote: "origin".into(),
+            uat_branch: "uat".into(),
+            ticket_branch: "feature/PROJ-1-x".into(),
+            ticket_tip: "a".repeat(40),
+            uat_before: "b".repeat(40),
+            merge_commit: "c".repeat(40),
+            commits: vec![],
+            files: vec![],
+            overlay_packages: vec![],
+        }],
+    });
+    let err = gw.execute(gw.draft(push).confirm(), 1).unwrap_err();
+    assert!(matches!(err, GatewayError::Audit(_)), "{err}");
+    assert!(
+        w.audit().is_empty(),
+        "no attempt without a payload to record"
+    );
+}
+
 // ------------------------------------------------------------ source scan
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -364,7 +397,13 @@ fn only_the_gateway_and_the_providers_build_writers() {
             continue;
         }
         let source = std::fs::read_to_string(&path).unwrap();
-        for needle in ["build_ticket_writer", "build_code_host_writer"] {
+        for needle in [
+            "build_ticket_writer",
+            "build_code_host_writer",
+            // The concrete writers are `pub(crate)`; also keep them out of the rest of core.
+            "AcliJiraWriter",
+            "BktHostWriter",
+        ] {
             if source.contains(needle) {
                 offenders.push(format!("{text} uses {needle}"));
             }
@@ -374,6 +413,38 @@ fn only_the_gateway_and_the_providers_build_writers() {
         offenders.is_empty(),
         "writers built outside the gateway: {offenders:#?}"
     );
+}
+
+/// Nothing outside the gateway runs `git push` (a source scan: it cannot catch a command
+/// assembled from pieces, a macro or `include!`, but it catches the plain spellings, which is
+/// how an accident would happen).
+#[test]
+fn only_the_gateway_runs_git_push() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    rust_files(&crates, &mut files);
+    let mut offenders = Vec::new();
+    for file in files {
+        let path = file.canonicalize().unwrap().to_string_lossy().into_owned();
+        let is_test_code = path.ends_with("tests.rs")
+            || path.ends_with("_tests.rs")
+            || path.ends_with("testsupport.rs")
+            || path.ends_with("testutil.rs");
+        if path.contains("/src/gateway/") || path.contains("/target/") || is_test_code {
+            continue;
+        }
+        let source = std::fs::read_to_string(&path).unwrap();
+        for (n, line) in source.lines().enumerate() {
+            // `git stash push` is local; a `#[cfg(test)]` module inside a file is not scanned
+            // separately, so test-only pushes in production files would need an exemption here.
+            if (line.contains("\"push\"") || line.contains("git push"))
+                && !line.contains("\"stash\"")
+            {
+                offenders.push(format!("{path}:{}: {}", n + 1, line.trim()));
+            }
+        }
+    }
+    assert!(offenders.is_empty(), "{offenders:#?}");
 }
 
 #[test]

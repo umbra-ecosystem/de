@@ -184,9 +184,15 @@ impl Action {
         }
     }
 
-    /// The canonical payload the hash covers.
+    /// The canonical payload the hash covers. Fails (rather than yielding an empty payload
+    /// that every action would share) when the action cannot be serialised, e.g. a checkout
+    /// path that is not UTF-8.
+    pub(crate) fn try_canonical(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
+
     pub(crate) fn canonical(&self) -> String {
-        serde_json::to_string(self).unwrap_or_default()
+        self.try_canonical().unwrap_or_default()
     }
 
     pub(crate) fn hash(&self) -> String {
@@ -306,8 +312,9 @@ fn preview_push(push: &PushUat) -> ActionPreview {
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-/// An action, rendered for review. Nothing has been sent.
-#[derive(Debug, Clone)]
+/// An action, rendered for review. Nothing has been sent. Deliberately not `Clone`: a cloned
+/// draft could be confirmed twice, which would defeat the one-use `Confirmed`.
+#[derive(Debug)]
 pub struct Draft {
     id: String,
     action: Action,

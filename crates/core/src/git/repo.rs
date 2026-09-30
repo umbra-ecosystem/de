@@ -456,10 +456,16 @@ pub fn group_branches(infos: Vec<BranchInfo>) -> Vec<LogicalBranch> {
     branches
 }
 
-/// Keep the branches matching `key`, ordered local first then newest first.
+/// Prefix of the temporary branches `de` makes for an integration (`de/integrate/<KEY>`).
+/// They contain the ticket key but are never the ticket's branch.
+pub const INTEGRATION_BRANCH_PREFIX: &str = "de/integrate/";
+
+/// Keep the branches matching `key`, ordered local first then newest first. `de`'s own
+/// temporary integration branches never match.
 pub fn match_branches(branches: Vec<LogicalBranch>, key: &str) -> Vec<BranchMatch> {
     let mut matched: Vec<LogicalBranch> = branches
         .into_iter()
+        .filter(|b| !b.name.starts_with(INTEGRATION_BRANCH_PREFIX))
         .filter(|b| name_contains_key(&b.name, key))
         .collect();
 

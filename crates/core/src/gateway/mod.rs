@@ -183,7 +183,13 @@ impl<'a> Gateway<'a> {
         let action = &confirmed.action;
         let name = action.audit_name();
         let ticket = action.ticket().cloned();
-        let payload: Value = serde_json::from_str(&action.canonical()).unwrap_or(Value::Null);
+        // An action that cannot be recorded in full is not done (the audit entry would carry
+        // no payload, and every such action would hash alike).
+        let payload: Value = action
+            .try_canonical()
+            .map_err(|e| eyre::eyre!("the payload cannot be serialised: {e}"))
+            .and_then(|s| serde_json::from_str(&s).map_err(Into::into))
+            .map_err(GatewayError::Audit)?;
 
         // Never act unaudited: if this fails, nothing below runs.
         self.append(NewAuditEntry {
