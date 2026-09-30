@@ -249,14 +249,11 @@ impl Project {
             }));
         }
 
-        Ok(self
-            .detect_tasks()?
-            .remove(name)
-            .map(|detected| ResolvedTask {
-                command: detected.command,
-                dir: self.dir.clone(),
-                origin: TaskOrigin::Detected(detected.source),
-            }))
+        Ok(self.detect_tasks()?.remove(name).map(|detected| ResolvedTask {
+            command: detected.command,
+            dir: self.dir.clone(),
+            origin: TaskOrigin::Detected(detected.source),
+        }))
     }
 
     /// Detect tasks from project configuration files
