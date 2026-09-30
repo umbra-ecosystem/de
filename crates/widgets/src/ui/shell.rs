@@ -1,6 +1,8 @@
 //! The window chrome: toolbar, navigation, tab strip, right panel, status bar, and the overlays above everything.
 
-use gpui_kit::component::Disableable;
+use gpui_kit::component::badge::Badge as CountBadge;
+use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::{Disableable, IconName, Selectable, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
@@ -15,57 +17,73 @@ use crate::vm::*;
 /// Put inside a [`TitleBar`](gpui_kit::component::TitleBar).
 pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
     let pal = &ui.pal;
-    let flat = |id: &'static str, label: String, on: bool, intent: Intent| {
+    let n = vm.attention_count;
+    let alert = n > 0;
+
+    // Needs attention: a quiet bell until something needs you, then a red alert with the count that pulses.
+    let attention = Button::new("attn")
+        .ghost()
+        .small()
+        .icon(if alert {
+            IconName::TriangleAlert
+        } else {
+            IconName::Bell
+        })
+        .text_color(if alert { pal.bad } else { pal.muted })
+        .selected(vm.attention.is_some())
+        .tooltip(if alert {
+            format!("Needs attention ({n})")
+        } else {
+            "Nothing needs you".to_string()
+        })
+        .on_click(ui.on_click(Intent::ToggleAttention));
+    let attention = if alert {
         div()
-            .id(id)
-            .flex()
-            .items_center()
-            .gap_1()
-            .px_2()
-            .py_1()
-            .rounded_md()
-            .text_sm()
-            .cursor_pointer()
-            .text_color(if on { pal.accent } else { pal.muted })
-            .bg(if on {
-                pal.accent.opacity(0.15)
-            } else {
-                gpui_kit::transparent_black()
-            })
-            .hover(|s| s.bg(pal.hover))
-            .on_click(ui.on_click(intent))
-            .child(label)
+            .child(CountBadge::new().count(n).color(pal.bad).child(attention))
+            .with_animation(
+                "attention-pulse",
+                Animation::new(std::time::Duration::from_millis(1800))
+                    .repeat()
+                    .with_easing(pulsating_between(0.55, 1.0)),
+                |d, v| d.opacity(v),
+            )
+            .into_any_element()
+    } else {
+        div()
+            .child(CountBadge::new().count(0).child(attention))
+            .into_any_element()
     };
+
+    // The details dock: the icon shows what clicking does, and it never looks "selected".
+    let (panel_icon, panel_tip) = if vm.right_open {
+        (IconName::PanelRightClose, "Hide details")
+    } else {
+        (IconName::PanelRightOpen, "Show details")
+    };
+    let panel = Button::new("panel")
+        .ghost()
+        .small()
+        .icon(panel_icon)
+        .tooltip(panel_tip)
+        .on_click(ui.on_click(Intent::TogglePanel));
+    let simulate = Button::new("sim")
+        .ghost()
+        .small()
+        .label("Simulate")
+        .selected(simulate_on)
+        .on_click(ui.on_click(Intent::ToggleSimulate));
+
     div()
         .flex()
         .items_center()
-        .gap_3()
+        .gap_2()
         .w_full()
         .pr_3()
         .child(div().child("de"))
         .child(div().flex_1())
-        .child(flat(
-            "attn",
-            if vm.attention_count > 0 {
-                format!("Needs attention {}", vm.attention_count)
-            } else {
-                "Needs attention".to_string()
-            },
-            vm.attention.is_some(),
-            Intent::ToggleAttention,
-        ))
-        .child(flat(
-            "sim",
-            "Simulate".to_string(),
-            simulate_on,
-            Intent::ToggleSimulate,
-        ))
-        .child(flat(
-            "panel",
-            "▥".to_string(),
-            vm.right_open,
-            Intent::TogglePanel,
-        ))
+        .child(attention)
+        .child(simulate)
+        .child(panel)
 }
 
 /* ------------------------------ navigation ------------------------------ */
