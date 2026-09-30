@@ -19,13 +19,13 @@ fn thread(ui: &Ui, t: &ThreadVm) -> Div {
         .rounded_md()
         .border_1()
         .border_color(pal.border)
-        .bg(pal.raised)
+        .bg(pal.surface)
         .child(
             div()
                 .flex()
                 .items_center()
                 .gap_2()
-                .child(avatar(pal, &t.initials))
+                .child(avatar(&t.author))
                 .child(
                     div()
                         .text_sm()

@@ -112,6 +112,42 @@ fn focus_token(vm: &AppVm) -> Option<String> {
     }
 }
 
+/// `DE_SHOWCASE_ROUTE` (`next`, `tickets`, `uat`, `workspace`, `audit`, `settings`, `ticket:PROJ-142:review`) and
+/// `DE_SHOWCASE_THEME` (`light`, `dark`) open the showcase somewhere specific; handy for screenshots.
+fn apply_env(session: &mut Session) {
+    if let Ok(theme) = std::env::var("DE_SHOWCASE_THEME") {
+        match theme.as_str() {
+            "light" => session.handle(Intent::SetTheme(ThemeChoice::Light)),
+            "dark" => session.handle(Intent::SetTheme(ThemeChoice::Dark)),
+            _ => {}
+        }
+    }
+    let Ok(route) = std::env::var("DE_SHOWCASE_ROUTE") else {
+        return;
+    };
+    let mut parts = route.split(':');
+    let route = match parts.next() {
+        Some("tickets") => Route::Tickets(Group::All),
+        Some("uat") => Route::OnUat,
+        Some("workspace") => Route::Workspace,
+        Some("audit") => Route::Audit,
+        Some("settings") => Route::Settings,
+        Some("ticket") => {
+            let key = parts.next().unwrap_or("PROJ-142");
+            let tab = match parts.next() {
+                Some("review") => TicketTab::Review,
+                Some("test") => TicketTab::Test,
+                Some("ship") => TicketTab::Ship,
+                Some("timeline") => TicketTab::Timeline,
+                _ => TicketTab::Overview,
+            };
+            Route::ticket(key, tab)
+        }
+        _ => Route::Next,
+    };
+    session.handle(Intent::Go(route));
+}
+
 pub struct AppView {
     pub session: Session,
     inputs: Inputs,
@@ -123,6 +159,7 @@ pub struct AppView {
     /// The frame being drawn: built once per render of this view, read by the dock panels.
     vm: Rc<AppVm>,
     right_open: bool,
+    theme: ThemeChoice,
 }
 
 impl AppView {
@@ -145,7 +182,8 @@ impl AppView {
             }
         })
         .detach();
-        let session = Session::demo();
+        let mut session = Session::demo();
+        apply_env(&mut session);
         let vm = Rc::new(session.view());
 
         // The dock: navigation on the left, details on the right, the screen in the middle.
@@ -188,6 +226,7 @@ impl AppView {
             weak: app,
             vm,
             right_open: true,
+            theme: ThemeChoice::System,
         }
     }
 
@@ -341,22 +380,34 @@ impl AppView {
     pub(crate) fn draw_main(&self, cx: &App) -> AnyElement {
         let ui = self.ui(cx, self.weak.clone());
         let screen = self.screen(&ui, cx, &self.vm.screen);
+        // Lists own their scrolling (a uniform list needs a bounded height); every other screen scrolls as a page.
+        let is_list = matches!(self.vm.screen, ScreenVm::Next(_) | ScreenVm::Tickets(_));
+        let body = if is_list {
+            div()
+                .flex_1()
+                .min_h_0()
+                .px_4()
+                .pt_4()
+                .child(screen)
+                .into_any_element()
+        } else {
+            div()
+                .id("content")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .px_6()
+                .py_5()
+                .child(div().max_w(px(1180.0)).child(screen))
+                .into_any_element()
+        };
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(ui.pal.bg)
             .child(shell::tabstrip(&ui, &self.vm))
-            .child(
-                div()
-                    .id("content")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .px_6()
-                    .py_5()
-                    .child(div().max_w(px(1180.0)).child(screen)),
-            )
+            .child(body)
             .into_any_element()
     }
 
@@ -383,6 +434,10 @@ impl Render for AppView {
             self.area.update(cx, |area, cx| {
                 area.toggle_dock(DockPlacement::Right, window, cx);
             });
+        }
+        if vm.theme != self.theme {
+            self.theme = vm.theme;
+            super::theme::apply_theme(vm.theme, window, cx);
         }
         let ui = self.ui(cx, cx.entity().downgrade());
         let pal = ui.pal;

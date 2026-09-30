@@ -195,14 +195,21 @@ pub fn audit(ui: &Ui, rows: &[AuditRow]) -> Div {
         .gap_3()
         .child(heading("Audit log"))
         .child(if rows.is_empty() {
-            empty_state(pal, "Nothing yet. Do something.")
+            empty_state(pal, "Nothing yet. Do something.").into_any_element()
         } else {
-            audit_rows(ui, rows, true)
+            audit_rows(ui, rows, true).into_any_element()
         })
 }
 
 pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
     let pal = &ui.pal;
+    let appearance = section(pal, "Appearance").child(
+        div().flex().gap_2().children(
+            v.appearance
+                .iter()
+                .map(|(label, on, intent)| chip(ui, label.clone(), *on, intent.clone())),
+        ),
+    );
     let providers = section(pal, "Providers")
         .children(v.providers.iter().map(|p| {
             card(pal)
@@ -333,7 +340,15 @@ pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
                 .flex()
                 .gap_6()
                 .items_start()
-                .child(div().flex_1().child(providers))
+                .child(
+                    div()
+                        .flex_1()
+                        .flex()
+                        .flex_col()
+                        .gap_5()
+                        .child(appearance)
+                        .child(providers),
+                )
                 .child(div().flex_1().child(mapping))
                 .child(div().flex_1().child(repos)),
         )

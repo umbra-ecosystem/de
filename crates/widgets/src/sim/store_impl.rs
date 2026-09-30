@@ -1194,6 +1194,7 @@ impl Store for Sim {
                 .primary_if(!ready),
             };
         SettingsVm {
+            appearance: Vec::new(),
             providers: vec![
                 provider(
                     "acli · Jira",

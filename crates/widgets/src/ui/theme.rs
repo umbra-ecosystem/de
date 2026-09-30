@@ -1,15 +1,20 @@
-//! Colours: a tone from a view model becomes a theme colour here, and only here.
+//! Colours. Everything comes from the built-in theme (`gpui-component`'s `Theme`), so switching light, dark or the
+//! system appearance restyles the whole window; nothing here is a colour of our own.
+//!
+//! A tone from a view model becomes a theme colour here, and only here.
 
-use gpui_kit::component::ActiveTheme;
+use gpui_kit::component::{ActiveTheme, Theme, ThemeMode};
 use gpui_kit::*;
 
-use crate::vm::Tone;
+use crate::vm::{ThemeChoice, Tone};
 
 #[derive(Clone, Copy)]
 pub struct Pal {
     pub bg: Hsla,
+    /// Side panels and bars: the theme's sidebar colour.
     pub panel: Hsla,
-    pub raised: Hsla,
+    /// A quiet grouped area (the theme's group box).
+    pub surface: Hsla,
     pub border: Hsla,
     pub fg: Hsla,
     pub muted: Hsla,
@@ -18,25 +23,22 @@ pub struct Pal {
     pub ok: Hsla,
     pub warn: Hsla,
     pub bad: Hsla,
+    /// Hotfixes: the theme's magenta.
     pub hot: Hsla,
     pub add_bg: Hsla,
     pub del_bg: Hsla,
     pub hover: Hsla,
+    pub selected: Hsla,
     pub dark: bool,
 }
 
 impl Pal {
     pub fn of(cx: &App) -> Self {
         let t = cx.theme();
-        let dark = t.is_dark();
         Self {
             bg: t.background,
             panel: t.sidebar,
-            raised: if dark {
-                t.background.opacity(0.0).blend(t.secondary)
-            } else {
-                t.secondary
-            },
+            surface: t.group_box,
             border: t.border,
             fg: t.foreground,
             muted: t.muted_foreground,
@@ -45,11 +47,12 @@ impl Pal {
             ok: t.success,
             warn: t.warning,
             bad: t.danger,
-            hot: hsla(0.03, 0.85, if dark { 0.62 } else { 0.5 }, 1.0),
-            add_bg: t.success.opacity(if dark { 0.16 } else { 0.14 }),
-            del_bg: t.danger.opacity(if dark { 0.16 } else { 0.12 }),
+            hot: t.magenta,
+            add_bg: t.success.opacity(0.16),
+            del_bg: t.danger.opacity(0.16),
             hover: t.list_hover,
-            dark,
+            selected: t.list_active,
+            dark: t.is_dark(),
         }
     }
 
@@ -63,15 +66,17 @@ impl Pal {
             Tone::Hot => self.hot,
         }
     }
-
-    pub fn tone_bg(&self, tone: Tone) -> Hsla {
-        match tone {
-            Tone::Neutral => self.border.opacity(0.45),
-            t => self.tone(t).opacity(0.15),
-        }
-    }
 }
 
 pub fn mono(cx: &App) -> SharedString {
     cx.theme().mono_font_family.clone()
+}
+
+/// Apply the user's choice through the built-in theme system.
+pub fn apply_theme(choice: ThemeChoice, window: &mut Window, cx: &mut App) {
+    match choice {
+        ThemeChoice::System => Theme::sync_system_appearance(Some(window), cx),
+        ThemeChoice::Light => Theme::change(ThemeMode::Light, Some(window), cx),
+        ThemeChoice::Dark => Theme::change(ThemeMode::Dark, Some(window), cx),
+    }
 }

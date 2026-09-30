@@ -104,6 +104,7 @@ pub struct AppVm {
     pub simulate: Option<Vec<SimGroup>>,
     pub right: Vec<RightSection>,
     pub right_open: bool,
+    pub theme: ThemeChoice,
     pub screen: ScreenVm,
     pub sheet: Option<SheetVm>,
     pub toasts: Vec<Toast>,

@@ -5,7 +5,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::ctx::{Inputs, Ui};
-use super::screens::next::suggestion_card;
+use super::screens::next::suggestion_row;
 use super::widgets::*;
 use crate::vm::*;
 
@@ -408,7 +408,7 @@ fn scrim(ui: &Ui, intent: Intent, dim: bool) -> Stateful<Div> {
         .size_full()
         .occlude()
         .bg(if dim {
-            hsla(0.0, 0.0, 0.0, 0.45)
+            ui.pal.bg.opacity(0.7)
         } else {
             gpui_kit::transparent_black()
         })
@@ -464,7 +464,7 @@ pub fn attention_panel(ui: &Ui, a: &AttentionVm) -> Div {
                         .flex_col()
                         .gap_2()
                         .overflow_y_scroll()
-                        .children(a.items.iter().map(|s| suggestion_card(ui, s)))
+                        .children(a.items.iter().map(|s| suggestion_row(ui, s)))
                         .into_any_element()
                 }),
         )

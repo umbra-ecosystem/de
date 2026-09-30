@@ -513,6 +513,8 @@ pub struct ProviderVm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SettingsVm {
+    /// Theme choices `(label, selected, intent)`; filled in by the session, which owns the choice.
+    pub appearance: Vec<(String, bool, Intent)>,
     pub providers: Vec<ProviderVm>,
     pub wait_options: Vec<(String, bool, Btn)>,
     pub mapping: Vec<(String, String)>,

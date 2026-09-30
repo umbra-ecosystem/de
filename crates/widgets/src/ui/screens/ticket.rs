@@ -42,21 +42,19 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
         )
         .children(h.banners.iter().map(|b| banner(ui, b)))
         .child(stepper(pal, &h.stepper))
-        .child(
-            div()
-                .flex()
-                .border_b_1()
-                .border_color(pal.border)
-                .children(h.tabs.iter().map(|(t, dot_on)| {
-                    seg_tab(
-                        ui,
-                        t.label(),
-                        *t == tab,
-                        *dot_on,
-                        Intent::go_ticket(&h.key, *t),
-                    )
-                })),
-        )
+        .child(tab_bar(
+            ui,
+            "ticket-tabs",
+            h.tabs
+                .iter()
+                .map(|(t, dot_on)| (t.label().to_string(), *dot_on))
+                .collect(),
+            h.tabs.iter().position(|(t, _)| *t == tab).unwrap_or(0),
+            h.tabs
+                .iter()
+                .map(|(t, _)| Intent::go_ticket(h.key.clone(), *t))
+                .collect(),
+        ))
 }
 
 pub fn ticket(
@@ -148,8 +146,8 @@ pub fn audit_rows(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
 fn timeline(ui: &Ui, key: &str, rows: &[AuditRow]) -> Div {
     let pal = &ui.pal;
     section(pal, format!("Audit log for {key}")).child(if rows.is_empty() {
-        empty_state(pal, "No activity yet for this ticket.")
+        empty_state(pal, "No activity yet for this ticket.").into_any_element()
     } else {
-        audit_table(ui, rows, false)
+        audit_table(ui, rows, false).into_any_element()
     })
 }

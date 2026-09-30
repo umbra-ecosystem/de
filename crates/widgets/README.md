@@ -10,6 +10,7 @@ The view layer of the de GUI, built on `gpui-kit`, separated from state.
 This crate has no engine, data or SQLite dependency by design. New UI is built here and shown in the showcase before `de-app` uses it.
 
 ```
+# DE_SHOWCASE_ROUTE=ticket:PROJ-142:review DE_SHOWCASE_THEME=light opens a specific screen
 cargo run -p de-widgets --bin showcase
 cargo test -p de-widgets
 ```

@@ -231,3 +231,23 @@ pub enum Phase {
     Reviewing,
     Parked,
 }
+
+/// Which built-in theme mode the window uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThemeChoice {
+    System,
+    Light,
+    Dark,
+}
+
+impl ThemeChoice {
+    pub const LIST: [ThemeChoice; 3] = [ThemeChoice::System, ThemeChoice::Light, ThemeChoice::Dark];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ThemeChoice::System => "System",
+            ThemeChoice::Light => "Light",
+            ThemeChoice::Dark => "Dark",
+        }
+    }
+}

@@ -3,7 +3,7 @@
 //! `Intent` is UI state (navigation, selections, sheets). `Command` is a request to the [`Store`](crate::Store):
 //! the thing the engine will eventually do. A command the store previews is confirmed in a sheet first.
 
-use super::common::{Group, Phase, Route, TicketTab};
+use super::common::{Group, Phase, Route, ThemeChoice, TicketTab};
 use super::ids::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -228,6 +228,7 @@ pub enum Intent {
     ToggleAttention,
     ToggleSimulate,
     TogglePanel,
+    SetTheme(ThemeChoice),
     ToggleShowAll,
     OpenPalette,
     ClosePalette,

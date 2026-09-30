@@ -115,7 +115,7 @@ fn comment(ui: &Ui, cx: &App, c: &CommentVm) -> Div {
                         .flex()
                         .items_center()
                         .gap_2()
-                        .child(avatar(pal, &c.initials))
+                        .child(avatar(&c.who))
                         .child(
                             div()
                                 .font_weight(FontWeight::SEMIBOLD)

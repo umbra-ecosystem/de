@@ -56,6 +56,7 @@ pub struct Session {
     attention_open: bool,
     simulate_open: bool,
     right_open: bool,
+    theme: ThemeChoice,
     diff_mode: DiffMode,
     since: BTreeMap<TicketKey, SinceMode>,
     pr_sel: BTreeMap<TicketKey, PrNumber>,
@@ -80,6 +81,7 @@ impl Session {
             attention_open: false,
             simulate_open: false,
             right_open: true,
+            theme: ThemeChoice::System,
             diff_mode: DiffMode::Unified,
             since: BTreeMap::new(),
             pr_sel: BTreeMap::new(),
@@ -172,6 +174,7 @@ impl Session {
             Intent::ToggleAttention => self.attention_open = !self.attention_open,
             Intent::ToggleSimulate => self.simulate_open = !self.simulate_open,
             Intent::TogglePanel => self.right_open = !self.right_open,
+            Intent::SetTheme(t) => self.theme = t,
             Intent::ToggleShowAll => self.show_all = !self.show_all,
             Intent::OpenPalette => {
                 self.texts.remove(&Field::Palette);
@@ -625,7 +628,20 @@ impl Session {
             Route::OnUat => ScreenVm::OnUat(self.store.on_uat()),
             Route::Workspace => ScreenVm::Workspace(self.store.workspace()),
             Route::Audit => ScreenVm::Audit(self.store.audit()),
-            Route::Settings => ScreenVm::Settings(self.store.settings()),
+            Route::Settings => {
+                let mut v = self.store.settings();
+                v.appearance = ThemeChoice::LIST
+                    .iter()
+                    .map(|t| {
+                        (
+                            t.label().to_string(),
+                            *t == self.theme,
+                            Intent::SetTheme(*t),
+                        )
+                    })
+                    .collect();
+                ScreenVm::Settings(v)
+            }
             Route::Ticket { key, tab } => {
                 let Some(head) = self.store.ticket_head(key, *tab) else {
                     return ScreenVm::Missing(format!("{key} is not in the cache."));
@@ -669,6 +685,7 @@ impl Session {
             simulate: self.simulate_open.then(|| self.store.simulate()),
             right: self.store.right_panel(&self.route),
             right_open: self.right_open,
+            theme: self.theme,
             screen: self.screen_vm(),
             sheet: self.sheet_vm(),
             toasts: self.toasts.clone(),

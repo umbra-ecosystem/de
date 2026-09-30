@@ -2,9 +2,13 @@
 
 use std::hash::{Hash, Hasher};
 
+use gpui_kit::component::avatar::Avatar;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
-use gpui_kit::component::{Disableable, Sizable};
+use gpui_kit::component::empty::{Empty, EmptyHeader, EmptyTitle};
+use gpui_kit::component::tab::{Tab, TabBar};
+use gpui_kit::component::tag::Tag;
+use gpui_kit::component::{Disableable, Selectable, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
@@ -20,23 +24,15 @@ fn hash_id(prefix: &str, what: &impl std::fmt::Debug) -> SharedString {
 
 /* ------------------------------ atoms ------------------------------ */
 
-/// A small rounded label in a tone: status, priority, deploy state.
-pub fn pill(pal: &Pal, badge: &Badge) -> Div {
-    let c = pal.tone(badge.tone);
-    div()
-        .flex_none()
-        .px_1p5()
-        .py_0p5()
-        .rounded_md()
-        .text_xs()
-        .text_color(if badge.tone == Tone::Neutral {
-            pal.muted
-        } else {
-            c
-        })
-        .bg(pal.tone_bg(badge.tone))
-        .whitespace_nowrap()
-        .child(badge.text.clone())
+/// A small label in a tone: status, priority, deploy state. The kit's `Tag`, coloured from the theme.
+pub fn pill(pal: &Pal, badge: &Badge) -> Tag {
+    let tag = if badge.tone == Tone::Neutral {
+        Tag::secondary()
+    } else {
+        let c = pal.tone(badge.tone);
+        Tag::custom(c.opacity(0.15), c, c.opacity(0.35))
+    };
+    tag.small().child(badge.text.clone())
 }
 
 pub fn pills(pal: &Pal, badges: &[Badge]) -> Div {
@@ -47,7 +43,7 @@ pub fn pills(pal: &Pal, badges: &[Badge]) -> Div {
         .children(badges.iter().map(|b| pill(pal, b)))
 }
 
-pub fn hotfix_pill(pal: &Pal) -> Div {
+pub fn hotfix_pill(pal: &Pal) -> Tag {
     pill(pal, &Badge::new("HOTFIX", Tone::Hot))
 }
 
@@ -115,19 +111,8 @@ pub fn faint(pal: &Pal, text: impl Into<SharedString>) -> Div {
     div().text_xs().text_color(pal.faint).child(text.into())
 }
 
-pub fn avatar(pal: &Pal, initials: &str) -> Div {
-    div()
-        .flex_none()
-        .size_5()
-        .rounded_full()
-        .bg(pal.accent.opacity(0.22))
-        .text_color(pal.accent)
-        .text_xs()
-        .font_weight(FontWeight::SEMIBOLD)
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(initials.to_string())
+pub fn avatar(name: &str) -> Avatar {
+    Avatar::new().name(name.to_string()).small()
 }
 
 pub fn dot(color: Hsla) -> Div {
@@ -145,7 +130,6 @@ pub fn card(pal: &Pal) -> Div {
         .rounded_lg()
         .border_1()
         .border_color(pal.border)
-        .bg(pal.raised)
 }
 
 /// A titled block of a screen.
@@ -166,17 +150,8 @@ pub fn heading(title: impl Into<SharedString>) -> Div {
         .child(title.into())
 }
 
-pub fn empty_state(pal: &Pal, text: impl Into<SharedString>) -> Div {
-    div()
-        .flex()
-        .items_center()
-        .justify_center()
-        .p_8()
-        .rounded_lg()
-        .border_1()
-        .border_color(pal.border)
-        .text_color(pal.muted)
-        .child(text.into())
+pub fn empty_state(_pal: &Pal, text: impl Into<SharedString>) -> Empty {
+    Empty::new().header(EmptyHeader::new().title(EmptyTitle::new().child(text.into())))
 }
 
 pub fn warn_box(pal: &Pal, tone: Tone, children: impl IntoIterator<Item = AnyElement>) -> Div {
@@ -240,9 +215,12 @@ pub fn kv(pal: &Pal, k: &Kv) -> Div {
                 .gap_1()
                 .children(k.value.iter().map(|b| {
                     if b.tone == Tone::Neutral && k.value.len() == 1 {
-                        div().text_color(pal.fg).child(b.text.clone())
+                        div()
+                            .text_color(pal.fg)
+                            .child(b.text.clone())
+                            .into_any_element()
                     } else {
-                        pill(pal, b)
+                        pill(pal, b).into_any_element()
                     }
                 })),
         )
@@ -261,63 +239,39 @@ pub fn check_row(
         .on_click(ui.on_toggle(intent))
 }
 
-/// A segmented row of tabs (ticket tabs, ticket groups, diff mode).
-pub fn seg_tab(
+/// A row of tabs (the kit's `TabBar`). `items` are `(label, marker dot)`; clicking tab `i` emits `intents[i]`.
+pub fn tab_bar(
     ui: &Ui,
-    label: impl Into<SharedString>,
-    on: bool,
-    dot_on: bool,
-    intent: Intent,
-) -> Stateful<Div> {
-    let pal = &ui.pal;
-    let label: SharedString = label.into();
-    div()
-        .id(hash_id("seg", &(&label, &intent)))
-        .flex()
-        .items_center()
-        .gap_1()
-        .px_3()
-        .py_1()
-        .text_sm()
-        .cursor_pointer()
-        .border_b_2()
-        .border_color(if on {
-            pal.accent
-        } else {
-            gpui_kit::transparent_black()
+    id: &'static str,
+    items: Vec<(String, bool)>,
+    selected: usize,
+    intents: Vec<Intent>,
+) -> TabBar {
+    let pal = ui.pal;
+    let ui = ui.clone();
+    TabBar::new(id)
+        .underline()
+        .selected_index(selected)
+        .children(items.into_iter().map(move |(label, dot_on)| {
+            let t = Tab::new().label(label);
+            if dot_on { t.suffix(dot(pal.accent)) } else { t }
+        }))
+        .on_click(move |ix, _, cx| {
+            if let Some(i) = intents.get(*ix) {
+                ui.send(i.clone(), cx);
+            }
         })
-        .text_color(if on { pal.fg } else { pal.muted })
-        .font_weight(if on {
-            FontWeight::SEMIBOLD
-        } else {
-            FontWeight::NORMAL
-        })
-        .hover(|s| s.text_color(pal.fg))
-        .on_click(ui.on_click(intent))
-        .child(label)
-        .when(dot_on, |d| d.child(dot(pal.accent)))
 }
 
-pub fn chip(ui: &Ui, label: impl Into<SharedString>, on: bool, intent: Intent) -> Stateful<Div> {
-    let pal = &ui.pal;
+/// A toggle-style filter button (ticket groups, diff mode, theme).
+pub fn chip(ui: &Ui, label: impl Into<SharedString>, on: bool, intent: Intent) -> Button {
     let label: SharedString = label.into();
-    div()
-        .id(hash_id("chip", &(&label, &intent)))
-        .px_2()
-        .py_0p5()
-        .rounded_full()
-        .text_xs()
-        .cursor_pointer()
-        .border_1()
-        .border_color(if on { pal.accent } else { pal.border })
-        .bg(if on {
-            pal.accent.opacity(0.18)
-        } else {
-            gpui_kit::transparent_black()
-        })
-        .text_color(if on { pal.accent } else { pal.muted })
+    Button::new(hash_id("chip", &(&label, &intent)))
+        .label(label)
+        .small()
+        .ghost()
+        .selected(on)
         .on_click(ui.on_click(intent))
-        .child(label)
 }
 
 /// A monospace block: commands, logs, drafts.
@@ -368,16 +322,17 @@ pub fn blocks(pal: &Pal, cx: &App, items: &[Block]) -> Div {
         }))
 }
 
-/// Text with `@[name]` mentions highlighted.
+/// Text with `@[name]` mentions highlighted. Words are separate flex items so it wraps like a paragraph.
 pub fn inline_text(pal: &Pal, text: &str) -> Div {
-    let mut row = div().flex().flex_wrap().items_baseline();
+    let mut row = div().flex().flex_wrap().items_baseline().gap_x_1();
     let mut rest = text;
+    let word = |w: &str| div().child(w.to_string());
     while let Some(start) = rest.find("@[") {
         let Some(len) = rest[start..].find(']') else {
             break;
         };
-        if start > 0 {
-            row = row.child(rest[..start].to_string());
+        for w in rest[..start].split_whitespace() {
+            row = row.child(word(w));
         }
         let name = &rest[start + 2..start + len];
         let me = name.eq_ignore_ascii_case("you");
@@ -395,8 +350,8 @@ pub fn inline_text(pal: &Pal, text: &str) -> Div {
         );
         rest = &rest[start + len + 1..];
     }
-    if !rest.is_empty() {
-        row = row.child(rest.to_string());
+    for w in rest.split_whitespace() {
+        row = row.child(word(w));
     }
     row
 }
