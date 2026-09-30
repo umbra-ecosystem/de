@@ -12,7 +12,7 @@ use crate::{
     gateway::{
         Action, CommitLine, Confirmed, Executed, Gateway, Outcome, PushReport, PushUat, PushUatRepo,
     },
-    git::{GitRepo, GitRunner, MergeOutcome},
+    git::{GitRepo, GitRunner, MergeOutcome, validate_ref_component},
     overlay::{
         CommandRunner, ExternalCommand, check_range_for_overlay, run_checked,
         working_tree_has_overlay,
@@ -351,6 +351,9 @@ fn prepare_inner(
     repo: &WorkspaceRepo,
     r: &mut RepoIntegration,
 ) -> eyre::Result<RepoOutcome> {
+    // Values from `de.toml` that end up in git's argv and refspecs: refuse odd ones.
+    validate_ref_component("[git] default_remote", &r.remote)?;
+    validate_ref_component("[branches] uat", &r.uat_branch)?;
     let git = GitRepo::open(&r.repo_dir)?;
     let branch_ref = format!("refs/heads/{}", r.ticket_branch);
     let tip = git
@@ -440,7 +443,16 @@ fn prepare_inner(
         .to_str()
         .ok_or_else(|| eyre!("worktree path is not valid UTF-8"))?;
     GitRunner::new(&r.repo_dir)
-        .run(&["worktree", "add", "--no-track", "-b", &tmp, wt, &uat_before])
+        .run(&[
+            "worktree",
+            "add",
+            "--no-track",
+            "-b",
+            &tmp,
+            "--",
+            wt,
+            &uat_before,
+        ])
         .wrap_err("Failed to create the integration worktree")?;
     r.worktree = Some(worktree.clone());
 

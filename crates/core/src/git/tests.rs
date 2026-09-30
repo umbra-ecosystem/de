@@ -1214,3 +1214,36 @@ fn stop_guard_data_lists_risky_repos_and_never_blocks_on_unreadable_ones() {
     assert!(safe.is_safe());
     assert!(safe.unreadable.is_empty());
 }
+
+// ------------------------------------------------- config values in argv
+
+#[test]
+fn ref_components_from_config_are_validated_not_sanitized() {
+    for bad in [
+        "", "-x", "--force", "a b", "a:b", "+a", "a+b", "a..b", "/a", "a/", "a//b", ".a", "a.",
+        "a.lock", "a\tb", "a\nb", "a\u{7}b", "a@{1}", "@", "a~1", "a^", "a?", "a*", "a[b", "a\\b",
+    ] {
+        let err = validate_ref_component("remote", bad)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("not usable"), "{bad:?}: {err}");
+    }
+    for good in [
+        "uat",
+        "release/uat-2",
+        "origin",
+        "my_remote.v2",
+        "feature/PROJ-1-x",
+    ] {
+        validate_ref_component("remote", good).unwrap();
+    }
+}
+
+#[test]
+fn fetch_refuses_an_option_looking_remote_before_running_git() {
+    let repo = TestRepo::init();
+    repo.commit("a.txt", "one\n", "initial");
+    let err = repo.open().fetch("--upload-pack=touch pwned").unwrap_err();
+    assert!(format!("{err:#}").contains("not usable"), "{err:#}");
+    assert!(repo.open().fetch("-x").is_err());
+}

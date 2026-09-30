@@ -20,7 +20,9 @@ pub(crate) mod testutil;
 pub use diff::{DiffLine, FileDiff, FileStatus, Hunk, LineKind, RepoDiff};
 pub use keymatch::name_contains_key;
 pub use multi::{AtRisk, RiskReport, assess_risks, status_all};
-pub use ops::{FastForward, MergeOutcome, OnDirty, StashEntry, StashRef, SwitchOutcome};
+pub use ops::{
+    FastForward, MergeOutcome, OnDirty, StashEntry, StashRef, SwitchOutcome, validate_ref_component,
+};
 pub use repo::{
     BaseBranch, BranchInfo, BranchKind, BranchMatch, CommitInfo, GitRepo,
     INTEGRATION_BRANCH_PREFIX, LogicalBranch, RepoStatus, group_branches, match_branches, pick_base, short_sha,

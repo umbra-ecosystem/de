@@ -677,6 +677,112 @@ fn a_finalize_that_fails_midway_is_resumed_by_integrating_again_without_a_second
     assert!(restore::list_all(&env.fx.store).unwrap().is_empty());
 }
 
+// ------------------------------------------------- config values in git argv
+
+fn set_remote(repos: &mut [WorkspaceRepo], name: &str, remote: &str) {
+    let repo = repos.iter_mut().find(|r| r.name == name).unwrap();
+    repo.manifest.git = Some(crate::project::config::ProjectGitSettings {
+        enabled: true,
+        default_remote: remote.into(),
+    });
+}
+
+fn set_uat(repos: &mut [WorkspaceRepo], name: &str, uat: &str) {
+    let repo = repos.iter_mut().find(|r| r.name == name).unwrap();
+    repo.manifest.branches.uat = Some(uat.into());
+}
+
+#[test]
+fn a_remote_or_uat_branch_that_git_could_misread_blocks_that_repo() {
+    for bad in ["-x", "--force", "a b", "a:b", "+a", "a..b", ""] {
+        let env = Env::active();
+        let mut repos = env.fx.repos();
+        set_remote(&mut repos, "api-client", bad);
+        let prep = env.prepare_with(&repos);
+        let reason = blocked(env.outcome(&prep, "api-client"));
+        assert!(reason.contains("not usable"), "remote {bad:?}: {reason}");
+        assert!(!prep.is_pushable(), "remote {bad:?}");
+        assert!(prep.push_action().is_err());
+
+        let mut repos = env.fx.repos();
+        set_uat(&mut repos, "worker", bad);
+        let prep = env.prepare_with(&repos);
+        let reason = blocked(env.outcome(&prep, "worker"));
+        assert!(reason.contains("not usable"), "uat {bad:?}: {reason}");
+        // Nothing was created for the blocked repo.
+        assert!(
+            prep.repos
+                .iter()
+                .find(|r| r.repo == "worker")
+                .unwrap()
+                .worktree
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn the_gateway_refuses_to_push_an_unusable_remote_or_branch() {
+    let env = Env::active();
+    let prep = env.prepare();
+    let Action::PushUat(mut push) = prep.push_action().unwrap() else {
+        panic!("not a push")
+    };
+    push.repos[0].uat_branch = "--force".into();
+    let uats = env.origin_uats();
+    let gw = env.gateway();
+    let (report, _) = execute_push(&gw, gw.draft(Action::PushUat(push)).confirm(), 30).unwrap();
+    assert!(!report.all_done(), "{report:?}");
+    assert!(matches!(report.repos[0].result, PushResult::Failed { .. }));
+    assert_eq!(env.origin_uats(), uats);
+    assert!(env.merges().is_empty());
+}
+
+#[test]
+fn valid_configured_names_still_integrate_end_to_end() {
+    let env = Env::active();
+    // A `release/uat-2` branch and a second remote named `mirror`, both on the same origins.
+    for name in ["api-client", "worker"] {
+        let repo = env.repo(name);
+        repo.git(&["push", "origin", "origin/uat:refs/heads/release/uat-2"]);
+        let origin = repo.git(&["remote", "get-url", "origin"]);
+        repo.git(&["remote", "add", "mirror", &origin]);
+    }
+    let mut repos = env.fx.repos();
+    set_uat(&mut repos, "api-client", "release/uat-2");
+    set_uat(&mut repos, "worker", "release/uat-2");
+    set_remote(&mut repos, "api-client", "mirror");
+    let prep = env.prepare_with(&repos);
+    assert!(prep.is_ready(), "{prep:?}");
+    assert_eq!(
+        prep.repos
+            .iter()
+            .find(|r| r.repo == "api-client")
+            .unwrap()
+            .remote,
+        "mirror"
+    );
+
+    let report = env.push(&prep);
+    assert!(report.all_done(), "{report:?}");
+    for name in ["api-client", "worker"] {
+        let repo = env.repo(name);
+        let merge = &env.merges().into_iter().find(|(r, _)| r == name).unwrap().1;
+        assert_eq!(&repo.origin_sha("release/uat-2"), merge);
+    }
+    let done = finalize_integration(
+        &env.fx.store,
+        &env.fx.runner,
+        env.data.path(),
+        &prep,
+        &repos,
+        40,
+    )
+    .unwrap();
+    assert!(done.deactivation.is_complete());
+    assert_eq!(env.status(), LocalStatus::Integrated);
+}
+
 #[test]
 fn finalize_refuses_until_every_repo_is_pushed_and_integrated_has_no_other_door() {
     let env = Env::active();
