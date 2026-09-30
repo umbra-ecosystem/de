@@ -462,7 +462,10 @@ fn integrated_cannot_be_set_through_the_public_status_api() {
     tickets::set_status(&store, &k, LocalStatus::Active, 1).unwrap();
     let err = tickets::set_status(&store, &k, LocalStatus::Integrated, 2).unwrap_err();
     assert!(format!("{err:#}").contains("pushed to uat"), "{err:#}");
-    assert_eq!(tickets::get(&store, &k).unwrap().unwrap().status, LocalStatus::Active);
+    assert_eq!(
+        tickets::get(&store, &k).unwrap().unwrap().status,
+        LocalStatus::Active
+    );
     // The crate-private path still validates the transition.
     tickets::set_status(&store, &k, LocalStatus::Parked, 3).unwrap();
     assert!(tickets::mark_integrated(&store, &k, 4).is_err());

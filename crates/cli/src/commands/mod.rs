@@ -9,6 +9,7 @@ mod list;
 pub(crate) mod run;
 mod scan;
 pub mod self_;
+pub mod ship;
 mod start;
 mod stop;
 pub mod sync;
