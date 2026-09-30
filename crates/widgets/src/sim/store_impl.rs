@@ -199,6 +199,7 @@ impl Sim {
         })
     }
 
+    /// The right panel on Next: what you are in the middle of, then what is waiting.
     fn right_next(&self) -> Vec<RightSection> {
         let mut out = Vec::new();
         if let Some(t) = self.active_key().and_then(|k| self.tk(&k)) {
@@ -216,10 +217,36 @@ impl Sim {
                             t.checklist.len()
                         )),
                     },
-                    RightRow::Button(Btn::new("Open", Intent::go_ticket(&t.key, TicketTab::Test))),
+                    RightRow::Button(Btn::new(
+                        "Open",
+                        Intent::go_ticket(t.key.clone(), TicketTab::Test),
+                    )),
                 ],
             });
         }
+        let queue: Vec<RightRow> = self
+            .sorted_group(Group::Pool)
+            .into_iter()
+            .take(4)
+            .map(|t| RightRow::Item {
+                head: Vec::new(),
+                key: Some(t.key.clone()),
+                title: t.title.clone(),
+                sub: Some(if self.is_hotfix(t) {
+                    format!("{} · hotfix", t.priority.label())
+                } else {
+                    t.priority.label().to_string()
+                }),
+            })
+            .collect();
+        out.push(RightSection {
+            title: "Claim queue".to_string(),
+            rows: if queue.is_empty() {
+                vec![RightRow::Muted("Empty.".to_string())]
+            } else {
+                queue
+            },
+        });
         let today: Vec<&Ticket> = self
             .tickets
             .iter()
@@ -234,36 +261,11 @@ impl Sim {
                     .map(|t| RightRow::Kv(Kv::text(&t.key, Self::fmt_dur(self.duration_ms(t))))),
             );
             out.push(RightSection {
-                title: "Today".to_string(),
+                title: "Time today".to_string(),
                 rows,
             });
         }
         out.extend(self.sync_section());
-        let queue: Vec<RightRow> = self
-            .sorted_group(Group::Pool)
-            .into_iter()
-            .take(4)
-            .map(|t| {
-                let mut head = vec![Badge::new(t.priority.label(), priority_tone(t.priority))];
-                if self.is_hotfix(t) {
-                    head.push(Badge::new("HOTFIX", Tone::Hot));
-                }
-                RightRow::Item {
-                    head,
-                    key: Some(t.key.clone()),
-                    title: t.title.clone(),
-                    sub: None,
-                }
-            })
-            .collect();
-        out.push(RightSection {
-            title: "Claim queue".to_string(),
-            rows: if queue.is_empty() {
-                vec![RightRow::Muted("Empty.".to_string())]
-            } else {
-                queue
-            },
-        });
         out.push(RightSection {
             title: "Recent activity".to_string(),
             rows: self.activity(None, 6),
@@ -271,90 +273,74 @@ impl Sim {
         out
     }
 
+    /// The right panel on a ticket: who and when, the tags, the pull requests. What the header and the stepper
+    /// already say (Jira status, local status, kind, reviewed) is not repeated here.
     fn right_ticket(&self, t: &Ticket) -> Vec<RightSection> {
-        let hot = self.is_hotfix(t);
-        let mut out = vec![RightSection {
-            title: "Status".to_string(),
-            rows: vec![
-                RightRow::Kv(Kv::badges("Jira", vec![jira_badge(t.jira)])),
-                RightRow::Kv(Kv::badges(
-                    "Local",
-                    vec![
-                        local_badge(t.local())
-                            .unwrap_or_else(|| Badge::new("not claimed", Tone::Neutral)),
-                    ],
-                )),
-                RightRow::Kv(Kv::badges(
-                    "Kind",
-                    vec![if hot {
-                        Badge::new("HOTFIX", Tone::Hot)
-                    } else {
-                        Badge::new("Normal", Tone::Neutral)
-                    }],
-                )),
-                RightRow::Kv(Kv::text("Time", Self::fmt_dur(self.duration_ms(t)))),
-                RightRow::Kv(Kv::badges(
-                    "Reviewed",
-                    vec![if t.reviewed() {
-                        Badge::new("yes", Tone::Ok)
-                    } else {
-                        Badge::new("no", Tone::Neutral)
-                    }],
-                )),
-            ],
-        }];
-        let badges = |v: &[&str]| -> Vec<Badge> {
-            if v.is_empty() {
-                vec![Badge::new("–", Tone::Neutral)]
-            } else {
-                v.iter().map(|x| Badge::new(*x, Tone::Neutral)).collect()
-            }
+        let tags = |v: &[&str]| -> Vec<Badge> {
+            v.iter().map(|x| Badge::new(*x, Tone::Neutral)).collect()
         };
-        out.push(RightSection {
-            title: "Details".to_string(),
+        let mut out = vec![RightSection {
+            title: "People".to_string(),
             rows: vec![
-                RightRow::Kv(Kv::text("Type", t.kind)),
-                RightRow::Kv(Kv::badges(
-                    "Priority",
-                    vec![Badge::new(t.priority.label(), priority_tone(t.priority))],
-                )),
                 RightRow::Kv(Kv::text("Assignee", t.assignee)),
                 RightRow::Kv(Kv::text("Reporter", t.reporter)),
-                RightRow::Kv(Kv::text("Sprint", t.sprint)),
-                RightRow::Kv(Kv::text("Epic", t.epic)),
-                RightRow::Kv(Kv::text("Fix version", t.fix_version)),
-                RightRow::Kv(Kv::text("Estimate", t.estimate)),
-                RightRow::Kv(Kv::badges("Components", badges(&t.components))),
-                RightRow::Kv(Kv::badges("Labels", badges(&t.labels))),
-                RightRow::Kv(Kv::text("Created", t.created)),
-                RightRow::Kv(Kv::text("Updated", t.updated)),
             ],
+        }];
+        let mut plan = vec![
+            RightRow::Kv(Kv::text("Type", t.kind)),
+            RightRow::Kv(Kv::badges(
+                "Priority",
+                vec![Badge::new(t.priority.label(), priority_tone(t.priority))],
+            )),
+            RightRow::Kv(Kv::text("Sprint", t.sprint)),
+            RightRow::Kv(Kv::text("Epic", t.epic)),
+            RightRow::Kv(Kv::text("Fix version", t.fix_version)),
+            RightRow::Kv(Kv::text("Estimate", t.estimate)),
+        ];
+        if self.duration_ms(t) > 0 {
+            plan.push(RightRow::Kv(Kv::text(
+                "Time spent",
+                Self::fmt_dur(self.duration_ms(t)),
+            )));
+        }
+        plan.push(RightRow::Muted(format!(
+            "Created {} · updated {}",
+            t.created, t.updated
+        )));
+        out.push(RightSection {
+            title: "Planning".to_string(),
+            rows: plan,
         });
+        let mut all_tags = tags(&t.components);
+        all_tags.extend(tags(&t.labels));
+        if !all_tags.is_empty() {
+            out.push(RightSection {
+                title: "Tags".to_string(),
+                rows: vec![RightRow::Tags(all_tags)],
+            });
+        }
         let prs: Vec<RightRow> = t
             .prs
             .iter()
             .map(|p| {
-                let cfg = self.repo(&p.repo);
                 let ap = p.reviewers.iter().filter(|r| r.approved).count();
-                let d = t.landing(&p.repo).map(|l| &l.deploy);
                 let mut sub = format!(
-                    "{} → {} · {ap}/{} approvals",
+                    "{} #{} · {} → {} · {ap}/{} approved",
+                    p.repo,
+                    p.id,
                     p.src,
                     p.dst,
                     p.reviewers.len()
                 );
-                if let Some(d) = d {
-                    sub.push_str(&format!(" · run #{} {}", d.run, d.state.word()));
+                if let Some(l) = t.landing(&p.repo) {
+                    sub.push_str(&format!(
+                        " · run #{} {}",
+                        l.deploy.run,
+                        l.deploy.state.word()
+                    ));
                 }
                 RightRow::Item {
-                    head: vec![Badge::new(
-                        format!("{} #{}", p.repo, p.id),
-                        if p.dst == cfg.prod && cfg.prod != cfg.base {
-                            Tone::Hot
-                        } else {
-                            Tone::Neutral
-                        },
-                    )],
+                    head: Vec::new(),
                     key: None,
                     title: p.title.clone(),
                     sub: Some(sub),
@@ -380,10 +366,10 @@ impl Sim {
                     .links
                     .iter()
                     .map(|l| RightRow::Item {
-                        head: vec![Badge::new(l.rel, Tone::Neutral), jira_badge(l.status)],
+                        head: Vec::new(),
                         key: self.tk(&l.key).map(|_| l.key.clone()),
-                        title: format!("{} {}", l.key, l.title),
-                        sub: None,
+                        title: l.title.to_string(),
+                        sub: Some(format!("{} · {}", l.rel, l.status.label())),
                     })
                     .collect(),
             });
@@ -1109,16 +1095,14 @@ impl Store for Sim {
             .repos
             .iter()
             .map(|r| {
-                let mut badges = vec![if self.ws.up {
-                    Badge::new("up", Tone::Ok)
-                } else {
-                    Badge::new("down", Tone::Neutral)
-                }];
-                badges.push(if self.ws.dirty.contains(&r.name) {
-                    Badge::new("uncommitted changes", Tone::Warn)
-                } else {
-                    Badge::new("clean", Tone::Neutral)
-                });
+                // Only what is out of the ordinary gets a badge: the defaults (up, clean) are silence.
+                let mut badges = Vec::new();
+                if !self.ws.up {
+                    badges.push(Badge::new("down", Tone::Neutral));
+                }
+                if self.ws.dirty.contains(&r.name) {
+                    badges.push(Badge::new("uncommitted changes", Tone::Warn));
+                }
                 if active
                     .and_then(|t| t.act())
                     .and_then(|a| a.overlay.as_ref())

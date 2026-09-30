@@ -102,6 +102,7 @@ pub struct AppVm {
     pub attention_count: usize,
     pub attention: Option<AttentionVm>,
     pub simulate: Option<Vec<SimGroup>>,
+    pub right_title: String,
     pub right: Vec<RightSection>,
     pub right_open: bool,
     pub theme: ThemeChoice,

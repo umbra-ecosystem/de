@@ -696,6 +696,12 @@ impl Session {
             attention_count: counts.attention,
             attention: self.attention_open.then(|| self.store.attention()),
             simulate: self.simulate_open.then(|| self.store.simulate()),
+            right_title: match &self.route {
+                Route::Ticket { .. } => "Details",
+                Route::Next => "Today",
+                _ => "Activity",
+            }
+            .to_string(),
             right: self.store.right_panel(&self.route),
             right_open: self.right_open,
             theme: self.theme,

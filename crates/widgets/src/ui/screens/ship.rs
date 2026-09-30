@@ -17,7 +17,7 @@ fn step(ui: &Ui, n: usize, title: &str, state: StepState, body: Div) -> Div {
             .flex_1()
             .min_w_0()
             .pb_4()
-            .child(div().child(title.to_string()))
+            .child(div().text_base().child(title.to_string()))
             .child(body),
     )
 }
@@ -223,7 +223,7 @@ fn announce(ui: &Ui, cx: &App, inputs: &Inputs, key: &TicketKey, b: &AnnounceBod
     let pal = &ui.pal;
     match b {
         AnnounceBody::Unavailable => muted(pal, "Available when every touched repo is deployed."),
-        AnnounceBody::Compose(a) => div().child(button(ui, a)),
+        AnnounceBody::Compose(a) => div().flex().child(button(ui, a)),
         AnnounceBody::Draft { id, post, .. } => div()
             .flex()
             .flex_col()
@@ -232,7 +232,7 @@ fn announce(ui: &Ui, cx: &App, inputs: &Inputs, key: &TicketKey, b: &AnnounceBod
                 key: key.clone(),
                 id: id.clone(),
             }))
-            .child(div().child(button(ui, post))),
+            .child(div().flex().child(button(ui, post))),
         AnnounceBody::Posted {
             text,
             moved,
@@ -250,7 +250,7 @@ fn announce(ui: &Ui, cx: &App, inputs: &Inputs, key: &TicketKey, b: &AnnounceBod
                     .when_some(moved.clone(), |d, b| d.child(pill(pal, &b))),
             )
             .when_some(transition.clone(), |d, a| {
-                d.child(div().child(button(ui, &a)))
+                d.child(div().flex().child(button(ui, &a)))
             }),
     }
 }
@@ -263,7 +263,7 @@ pub fn ship(ui: &Ui, cx: &App, inputs: &Inputs, s: &ShipVm) -> Div {
         .gap_2()
         .child(muted(pal, s.after_text.clone()))
         .when_some(s.approve_all.clone(), |d, a| {
-            d.child(div().child(button(ui, &a)))
+            d.child(div().flex().child(button(ui, &a)))
         })
         .children(s.after.iter().map(|r| {
             row(ui)

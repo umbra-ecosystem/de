@@ -139,27 +139,20 @@ pub fn tickets(ui: &Ui, vm: &TicketListVm) -> AnyElement {
                 .collect::<Vec<_>>()
         })
         .collect();
-    let head = div()
-        .flex()
-        .flex_col()
-        .flex_none()
-        .gap_3()
-        .pb_2()
-        .child(heading(vm.group.label()))
-        .child(
-            div()
-                .flex()
-                .flex_wrap()
-                .gap_1()
-                .children(vm.tabs.iter().map(|(g, n)| {
-                    chip(
-                        ui,
-                        format!("{} {n}", g.label()),
-                        *g == vm.group,
-                        Intent::go_tickets(*g),
-                    )
-                })),
-        );
+    let head = div().flex().flex_col().flex_none().gap_3().pb_2().child(
+        div()
+            .flex()
+            .flex_wrap()
+            .gap_1()
+            .children(vm.tabs.iter().map(|(g, n)| {
+                chip(
+                    ui,
+                    format!("{} {n}", g.label()),
+                    *g == vm.group,
+                    Intent::go_tickets(*g),
+                )
+            })),
+    );
     let body = if items.is_empty() {
         empty_state(pal, "No tickets here.").into_any_element()
     } else {

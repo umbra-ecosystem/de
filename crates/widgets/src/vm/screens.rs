@@ -54,6 +54,8 @@ pub enum RightRow {
     Kv(Kv),
     Text(String),
     Muted(String),
+    /// A wrapped run of tags (components, labels).
+    Tags(Vec<Badge>),
     Item {
         head: Vec<Badge>,
         key: Option<TicketKey>,

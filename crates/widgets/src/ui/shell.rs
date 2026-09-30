@@ -134,7 +134,7 @@ pub fn nav(ui: &Ui, vm: &AppVm) -> Div {
                                     .pb_1()
                                     .text_xs()
                                     .text_color(pal.faint)
-                                    .child(s.title.to_uppercase()),
+                                    .child(s.title.clone()),
                             )
                         })
                         .children(s.items.iter().map(|i| {
@@ -259,9 +259,78 @@ fn short(s: &str, n: usize) -> String {
 
 /* ------------------------------ right panel ------------------------------ */
 
-pub fn right_panel(ui: &Ui, sections: &[RightSection]) -> Div {
+/// One row of the right panel, by kind.
+fn right_row(ui: &Ui, r: &RightRow) -> AnyElement {
     let pal = &ui.pal;
-    let title = sections.first().map_or("Details", |s| s.title.as_str());
+    match r {
+        RightRow::Kv(k) => kv(pal, k).into_any_element(),
+        RightRow::Text(t) => div().text_sm().child(t.clone()).into_any_element(),
+        RightRow::Muted(t) => faint(pal, t.clone()).into_any_element(),
+        RightRow::Tags(tags) => pills(pal, tags).into_any_element(),
+        // An item reads key, then title, then detail: three steps down in brightness.
+        RightRow::Item {
+            head,
+            key,
+            title,
+            sub,
+        } => div()
+            .flex()
+            .flex_col()
+            .gap_0p5()
+            .when(!head.is_empty() || key.is_some(), |d| {
+                d.child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap_1()
+                        .children(head.iter().map(|b| pill(pal, b)))
+                        .when_some(key.clone(), |d, k| {
+                            d.child(key_link(
+                                ui,
+                                &k,
+                                Intent::go_ticket(k.clone(), TicketTab::Overview),
+                            ))
+                        }),
+                )
+            })
+            .child(div().text_sm().child(title.clone()))
+            .when_some(sub.clone(), |d, s| d.child(faint(pal, s)))
+            .into_any_element(),
+        RightRow::Activity { at, text, failed } => div()
+            .flex()
+            .gap_2()
+            .text_xs()
+            .child(
+                div()
+                    .flex_none()
+                    .font_family(ui.mono.clone())
+                    .text_color(pal.faint)
+                    .child(at.clone()),
+            )
+            .child(div().text_color(pal.muted).child(text.clone()))
+            .when(*failed, |d| {
+                d.child(pill(pal, &Badge::new("failed", Tone::Bad)))
+            })
+            .into_any_element(),
+        RightRow::Report { ok, source, text } => div()
+            .flex()
+            .gap_2()
+            .text_xs()
+            .child(dot(if *ok { pal.ok } else { pal.bad }))
+            .child(
+                div()
+                    .text_color(pal.muted)
+                    .child(format!("{source}: {text}")),
+            )
+            .into_any_element(),
+        RightRow::Button(a) => div().flex().child(button(ui, a)).into_any_element(),
+    }
+}
+
+/// The right dock: a header strip, then sections grouped by hairlines rather than boxes.
+pub fn right_panel(ui: &Ui, title: &str, sections: &[RightSection]) -> Div {
+    let pal = &ui.pal;
     div()
         .flex()
         .flex_col()
@@ -277,85 +346,20 @@ pub fn right_panel(ui: &Ui, sections: &[RightSection]) -> Div {
                 .flex_col()
                 .flex_1()
                 .min_h_0()
-                .gap_4()
-                .p_3()
+                .px_3()
+                .pb_3()
                 .overflow_y_scroll()
                 .children(sections.iter().enumerate().map(|(n, s)| {
-                    section(
-                        pal,
-                        if n == 0 {
-                            String::new()
-                        } else {
-                            s.title.clone()
-                        },
-                    )
-                    .child(div().flex().flex_col().gap_2().children(
-                        s.rows.iter().map(|r| {
-                            match r {
-                                RightRow::Kv(k) => kv(pal, k).into_any_element(),
-                                RightRow::Text(t) => {
-                                    div().text_sm().child(t.clone()).into_any_element()
-                                }
-                                RightRow::Muted(t) => muted(pal, t.clone()).into_any_element(),
-                                RightRow::Item {
-                                    head,
-                                    key,
-                                    title,
-                                    sub,
-                                } => div()
-                                    .flex()
-                                    .flex_col()
-                                    .gap_0p5()
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .flex_wrap()
-                                            .items_center()
-                                            .gap_1()
-                                            .children(head.iter().map(|b| pill(pal, b)))
-                                            .when_some(key.clone(), |d, k| {
-                                                d.child(key_link(
-                                                    ui,
-                                                    &k,
-                                                    Intent::go_ticket(&k, TicketTab::Overview),
-                                                ))
-                                            }),
-                                    )
-                                    .child(div().text_sm().child(title.clone()))
-                                    .when_some(sub.clone(), |d, s| d.child(faint(pal, s)))
-                                    .into_any_element(),
-                                RightRow::Activity { at, text, failed } => div()
-                                    .flex()
-                                    .gap_2()
-                                    .text_xs()
-                                    .child(
-                                        div()
-                                            .font_family(ui.mono.clone())
-                                            .text_color(pal.faint)
-                                            .child(at.clone()),
-                                    )
-                                    .child(div().child(text.clone()))
-                                    .when(*failed, |d| {
-                                        d.child(pill(pal, &Badge::new("failed", Tone::Bad)))
-                                    })
-                                    .into_any_element(),
-                                RightRow::Report { ok, source, text } => div()
-                                    .flex()
-                                    .gap_2()
-                                    .text_xs()
-                                    .child(dot(if *ok { pal.ok } else { pal.bad }))
-                                    .child(
-                                        div()
-                                            .child(div().child(source.clone()))
-                                            .child(text.clone()),
-                                    )
-                                    .into_any_element(),
-                                RightRow::Button(a) => {
-                                    div().child(button(ui, a)).into_any_element()
-                                }
-                            }
-                        }),
-                    ))
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .py_3()
+                        .when(n > 0, |d| {
+                            d.border_t_1().border_color(pal.border.opacity(0.6))
+                        })
+                        .child(div().text_xs().text_color(pal.muted).child(s.title.clone()))
+                        .children(s.rows.iter().map(|r| right_row(ui, r)))
                 })),
         )
 }
@@ -754,7 +758,7 @@ pub fn sheet(ui: &Ui, cx: &App, inputs: &Inputs, sheet: &SheetVm) -> Div {
                 .gap_2()
                 .child(muted(pal, "Untouched repos should run on:"))
                 .children(b.choices.iter().map(|(choice, label)| {
-                    div().child(button(
+                    div().flex().child(button(
                         ui,
                         &Btn::new(label.clone(), Intent::PickBaseline(*choice)).primary_if(*choice == Baseline::Develop),
                     ))
@@ -780,7 +784,7 @@ pub fn sheet(ui: &Ui, cx: &App, inputs: &Inputs, sheet: &SheetVm) -> Div {
                         .child(div().child(row.detail.clone()))
                 }))
                 .children(r.notes.iter().map(|n| faint(pal, n.clone()))),
-            div().child(button(ui, &Btn::new("Done", Intent::CancelSheet).primary())),
+            div().flex().child(button(ui, &Btn::new("Done", Intent::CancelSheet).primary())),
         ),
         SheetVm::Compose { title, placeholder, confirm_label, text, .. } => sheet_frame(
             ui,
@@ -928,7 +932,7 @@ pub fn sheet(ui: &Ui, cx: &App, inputs: &Inputs, sheet: &SheetVm) -> Div {
                         .into_any_element()],
                 ))
                 .child(code_block(pal, cx, text.clone())),
-            div().child(button(ui, &Btn::new("Close", Intent::CancelSheet).primary())),
+            div().flex().child(button(ui, &Btn::new("Close", Intent::CancelSheet).primary())),
         ),
         SheetVm::CloseTab(key) => sheet_frame(
             ui,

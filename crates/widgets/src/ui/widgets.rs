@@ -138,12 +138,7 @@ pub fn section(pal: &Pal, title: impl Into<SharedString>) -> Div {
         .flex_col()
         .gap_2()
         .when(!title.is_empty(), |d| {
-            d.child(
-                div()
-                    .text_xs()
-                    .text_color(pal.muted)
-                    .child(title.to_uppercase()),
-            )
+            d.child(div().text_xs().text_color(pal.muted).child(title.clone()))
         })
 }
 
@@ -299,7 +294,7 @@ pub fn blocks(pal: &Pal, cx: &App, items: &[Block]) -> Div {
                     .text_sm()
                     .child(inline_text(pal, x))
                     .into_any_element(),
-                Block::Heading(x) => div().text_sm().pt_1().child(x.clone()).into_any_element(),
+                Block::Heading(x) => div().text_base().pt_2().child(x.clone()).into_any_element(),
                 Block::List(items) => div()
                     .flex()
                     .flex_col()

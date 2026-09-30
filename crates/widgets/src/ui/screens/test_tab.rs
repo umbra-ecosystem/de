@@ -25,7 +25,16 @@ fn env_table(ui: &Ui, rows: &[EnvRow]) -> Div {
                     .text_sm()
                     .child(r.repo.to_string()),
             )
-            .child(div().w(px(110.0)).flex_none().child(pill(pal, &r.role)))
+            .child(
+                div()
+                    .w(px(110.0))
+                    .flex_none()
+                    .child(if r.role.tone == Tone::Accent {
+                        pill(pal, &r.role).into_any_element()
+                    } else {
+                        faint(pal, r.role.text.clone()).into_any_element()
+                    }),
+            )
             .child(
                 div()
                     .font_family(ui.mono.clone())
@@ -57,13 +66,8 @@ pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &TicketKey, t: &TestVm) ->
         } => div()
             .flex()
             .flex_col()
-            .gap_3()
-            .p_4()
-            .rounded_lg()
-            .border_1()
-            .border_color(pal.border)
-            .child(div().child("Not active."))
-            .child(muted(pal, why.clone()))
+            .gap_4()
+            .child(muted(pal, format!("Not active. {why}")))
             .when(!errors.is_empty(), |d| {
                 d.child(warn_box(
                     pal,
@@ -76,7 +80,7 @@ pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &TicketKey, t: &TestVm) ->
             .child(section(pal, "If you activate now").child(env_table(ui, plan)))
             .when_some(overlay.clone(), |d, o| d.child(overlay_note(ui, &o)))
             .when_some(activate.clone(), |d, a| {
-                d.child(div().child(button(ui, &a)))
+                d.child(div().flex().child(button(ui, &a)))
             }),
         TestVm::Active {
             checklist,

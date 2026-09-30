@@ -14,7 +14,6 @@ pub fn on_uat(ui: &Ui, v: &OnUatVm) -> Div {
         .flex()
         .flex_col()
         .gap_4()
-        .child(heading("On uat"))
         .child(
             div()
                 .flex()
@@ -172,7 +171,11 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                                 .flex_wrap()
                                 .items_center()
                                 .gap_1()
-                                .child(pills(pal, &r.badges))
+                                .child(if r.badges.is_empty() {
+                                    faint(pal, "clean").into_any_element()
+                                } else {
+                                    pills(pal, &r.badges).into_any_element()
+                                })
                                 .when_some(r.break_lock.clone(), |d, a| d.child(button(ui, &a))),
                         )
                 })),
@@ -184,16 +187,11 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
 
 pub fn audit(ui: &Ui, rows: &[AuditRow]) -> Div {
     let pal = &ui.pal;
-    div()
-        .flex()
-        .flex_col()
-        .gap_3()
-        .child(heading("Audit log"))
-        .child(if rows.is_empty() {
-            empty_state(pal, "Nothing yet. Do something.").into_any_element()
-        } else {
-            audit_rows(ui, rows, true).into_any_element()
-        })
+    div().flex().flex_col().gap_3().child(if rows.is_empty() {
+        empty_state(pal, "Nothing yet. Do something.").into_any_element()
+    } else {
+        audit_rows(ui, rows, true).into_any_element()
+    })
 }
 
 pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
@@ -235,7 +233,7 @@ pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
                         p.login_hint
                     )))
                 })
-                .child(div().child(button(ui, &p.toggle)))
+                .child(div().flex().child(button(ui, &p.toggle)))
         }))
         .child(
             div()
@@ -320,27 +318,22 @@ pub fn settings(ui: &Ui, v: &SettingsVm) -> Div {
                     .map(|(k, val)| kv(pal, &Kv::text(k, val.clone()))),
             ),
         )
-        .child(div().child(button(ui, &v.reset)));
-    div()
-        .flex()
-        .flex_col()
-        .gap_4()
-        .child(heading("Settings"))
-        .child(
-            div()
-                .flex()
-                .gap_6()
-                .items_start()
-                .child(
-                    div()
-                        .flex_1()
-                        .flex()
-                        .flex_col()
-                        .gap_5()
-                        .child(appearance)
-                        .child(providers),
-                )
-                .child(div().flex_1().child(mapping))
-                .child(div().flex_1().child(repos)),
-        )
+        .child(div().flex().child(button(ui, &v.reset)));
+    div().flex().flex_col().gap_4().child(
+        div()
+            .flex()
+            .gap_6()
+            .items_start()
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .flex_col()
+                    .gap_5()
+                    .child(appearance)
+                    .child(providers),
+            )
+            .child(div().flex_1().child(mapping))
+            .child(div().flex_1().child(repos)),
+    )
 }

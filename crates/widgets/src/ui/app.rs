@@ -419,7 +419,11 @@ impl AppView {
         let ui = self.ui(cx, self.weak.clone());
         div()
             .size_full()
-            .child(shell::right_panel(&ui, &self.vm.right))
+            .child(shell::right_panel(
+                &ui,
+                &self.vm.right_title,
+                &self.vm.right,
+            ))
             .into_any_element()
     }
 }
