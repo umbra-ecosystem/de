@@ -69,7 +69,8 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
     let simulate = Button::new("sim")
         .ghost()
         .small()
-        .label("Simulate")
+        .icon(IconName::Globe)
+        .tooltip("Simulate the outside world")
         .selected(simulate_on)
         .on_click(ui.on_click(Intent::ToggleSimulate));
 
@@ -80,9 +81,9 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
         .w_full()
         .pr_3()
         .child(div().child("de"))
+        .child(simulate)
         .child(div().flex_1())
         .child(attention)
-        .child(simulate)
         .child(panel)
 }
 
@@ -454,7 +455,7 @@ pub fn simulate_panel(ui: &Ui, groups: &[SimGroup]) -> Div {
     div()
         .absolute()
         .top(px(44.0))
-        .right(px(12.0))
+        .left(px(112.0))
         .w(px(280.0))
         .occlude()
         .flex()
