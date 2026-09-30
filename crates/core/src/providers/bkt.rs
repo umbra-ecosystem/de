@@ -1,9 +1,12 @@
 //! Bitbucket adapter over the community `bkt` CLI (avivsinai/bitbucket-cli, Go, MIT).
 //!
-//! **Nothing here was run against a real `bkt`.** It was written from the tool's source
-//! (master, v0.32.1, `pkg/cmd/*`, `pkg/bbcloud/*`) and README. Every command is marked
-//! VERIFIED (read in source) or `UNVERIFIED:` below. Use [`probe`] on a real install and
-//! paste the output to confirm or repair the parsers.
+//! **Only a little of this was run against a real `bkt` (0.32.1, not logged in).** Verified
+//! for real: `bkt --version` prints `bkt version 0.32.1`; `bkt auth status --json` when logged
+//! out exits 0 with `{"hosts": null, "contexts": null}`; every command that needs a context
+//! exits 1 with ``Error: no active context; run `bkt context use <name>` ``. Everything else
+//! was written from the tool's source (master, v0.32.1, `pkg/cmd/*`, `pkg/bbcloud/*`) and
+//! README; "VERIFIED" below means read in that source, `UNVERIFIED:` means assumed. Use
+//! [`probe`] on a logged-in install and paste the output to confirm or repair the parsers.
 //!
 //! # Cloud only
 //! `bkt pipeline *` is Cloud-only in the source ("commands are no-ops for Data Center"), and
@@ -129,8 +132,8 @@ fn encode_pipeline_id(id: &str) -> ProviderResult<String> {
 }
 
 /// Maps a failed `bkt` run onto a typed error. The stderr wording is from `bkt`'s source
-/// (`pkg/cmdutil/context.go`, `pkg/httpx/client.go`); matching is loose and UNVERIFIED
-/// against real output.
+/// (`pkg/cmdutil/context.go`, `pkg/httpx/client.go`); matching is loose. Only the
+/// `no active context` wording is verified against a real bkt 0.32.1.
 fn classify(out: &RawOutput) -> ProviderError {
     let text = format!("{} {}", out.stderr, out.stdout);
     let lower = text.to_ascii_lowercase();
@@ -140,8 +143,18 @@ fn classify(out: &RawOutput) -> ProviderError {
             "bkt is pointed at a Bitbucket Data Center context; only Cloud is supported".into(),
         );
     }
+    if has(&["no active context"]) {
+        // Verified against bkt 0.32.1: every command needing a context exits 1 with
+        // "Error: no active context; run `bkt context use <name>`".
+        return ProviderError::not_authenticated(
+            TOOL,
+            format!(
+                "{}; log in with `bkt auth login https://bitbucket.org --kind cloud --web`, then select a context with `bkt context use <name>`",
+                snippet(&out.stderr)
+            ),
+        );
+    }
     if has(&[
-        "no active context",
         "no hosts configured",
         "auth login",
         "credentials for host",
@@ -241,7 +254,8 @@ impl<R: BktRunner> Client<R> {
         if status.hosts.is_empty() {
             return Err(ProviderError::not_authenticated(
                 TOOL,
-                "no hosts configured; run `bkt auth login https://bitbucket.org --kind cloud --web`",
+                "no hosts configured (`bkt auth status` reports null hosts and contexts when logged out); \
+                 run `bkt auth login https://bitbucket.org --kind cloud --web`, then `bkt context use <name>`",
             ));
         }
         let active_kind = status
