@@ -690,3 +690,105 @@ fn revert_of_an_untouched_overlay_saves_nothing() {
     assert!(matches!(outcome, RevertOutcome::Reverted { saved, .. } if saved.is_empty()));
     assert!(!fx.web.exists("composer.json.de-edited"));
 }
+
+#[test]
+fn an_overlay_next_to_an_existing_path_repository_is_still_a_leak() {
+    // A consumer that already has a plain path repository: git's diff can line the
+    // overlay's `"type": "path"` line up with the existing one and show it as context,
+    // leaving only the url and symlink lines as additions.
+    let fx = Fixture::new();
+    let web = &fx.web;
+    let with_shared = WEB_COMPOSER_JSON.replace(
+        "\"repositories\": [\n",
+        "\"repositories\": [\n        {\n            \"type\": \"path\",\n            \"url\": \"../shared\"\n        },\n",
+    );
+    web.commit(
+        "composer.json",
+        &with_shared,
+        "add a shared path repository",
+    );
+    let base = web.git(&["rev-parse", "HEAD"]);
+    web.git(&["switch", "-c", "feature/PROJ-1-web"]);
+
+    let leaked = composer::apply_overlay(
+        with_shared.as_bytes(),
+        &[("acme/api-client".into(), "../api-client".into())],
+    )
+    .unwrap();
+    web.write("composer.json", &String::from_utf8(leaked).unwrap());
+    web.commit_all("oops");
+
+    assert_leak(web, &base);
+}
+
+#[test]
+fn a_lock_path_dist_next_to_an_existing_one_is_still_a_leak() {
+    let fx = Fixture::new();
+    let web = &fx.web;
+    let entry = |name: &str, url: &str| {
+        format!(
+            "        {{\n            \"name\": \"{name}\",\n            \"dist\": {{\n                \"type\": \"path\",\n                \"url\": \"{url}\"\n            }}\n        }}"
+        )
+    };
+    let lock = |entries: &[String]| {
+        format!(
+            "{{\n    \"packages\": [\n{}\n    ]\n}}\n",
+            entries.join(",\n")
+        )
+    };
+    web.commit(
+        "composer.lock",
+        &lock(&[entry("acme/shared", "../shared")]),
+        "a legit path package",
+    );
+    let base = web.git(&["rev-parse", "HEAD"]);
+    web.git(&["switch", "-c", "feature/PROJ-1-web"]);
+    web.commit(
+        "composer.lock",
+        &lock(&[
+            entry("acme/api-client", "../api-client"),
+            entry("acme/shared", "../shared"),
+        ]),
+        "oops",
+    );
+
+    assert_leak(web, &base);
+}
+
+#[test]
+fn symlinking_an_existing_path_repository_is_a_leak_even_when_only_context_lines_show_it() {
+    let fx = Fixture::new();
+    let web = &fx.web;
+    let plain = WEB_COMPOSER_JSON.replace(
+        "\"repositories\": [\n",
+        "\"repositories\": [\n        {\n            \"type\": \"path\",\n            \"url\": \"../api-client\"\n        },\n",
+    );
+    web.commit("composer.json", &plain, "a plain path repository");
+    let base = web.git(&["rev-parse", "HEAD"]);
+    web.git(&["switch", "-c", "feature/PROJ-1-web"]);
+
+    // Same entry, now symlinked: `"type": "path"` is an unchanged line.
+    let symlinked = plain.replace(
+        "\"url\": \"../api-client\"\n",
+        "\"url\": \"../api-client\",\n            \"options\": {\n                \"symlink\": true\n            }\n",
+    );
+    web.commit("composer.json", &symlinked, "symlink it");
+
+    assert_leak(web, &base);
+}
+
+#[test]
+fn a_wildcard_written_over_an_existing_constraint_on_a_shared_line_is_a_leak() {
+    // Everything on one line, so any change to the line is "added" (control), and minified
+    // JSON with the package name in another case.
+    let fx = Fixture::new();
+    let web = &fx.web;
+    let base = web.head();
+    web.git(&["switch", "-c", "feature/PROJ-1-web"]);
+    web.write(
+        "composer.json",
+        "{\"require\":{\"Acme/API-Client\":\"*\",\"php\":\"^8\"}}",
+    );
+    web.commit_all("minified");
+    assert_leak(web, &base);
+}

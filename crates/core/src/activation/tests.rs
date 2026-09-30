@@ -1026,3 +1026,123 @@ fn double_overlay_apply_error_is_typed() {
         Some(OverlayError::AlreadyApplied { .. })
     ));
 }
+
+// ------------------------------------------------------ adversarial repo states
+
+/// Every file of a checkout outside `.git` with its bytes, plus what `git status` says.
+fn tree_state(repo: &Repo) -> (Vec<(String, Vec<u8>)>, String) {
+    fn walk(dir: &std::path::Path, root: &std::path::Path, out: &mut Vec<(String, Vec<u8>)>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap()).collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            let path = e.path();
+            let rel = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+            // .git is not the tree; vendor/state is what the fake composer writes.
+            if rel == ".git" || rel == "vendor/state" {
+                continue;
+            }
+            let meta = std::fs::symlink_metadata(&path).unwrap();
+            if meta.is_dir() {
+                walk(&path, root, out);
+            } else if meta.file_type().is_symlink() {
+                out.push((
+                    rel,
+                    format!("-> {}", std::fs::read_link(&path).unwrap().display()).into_bytes(),
+                ));
+            } else {
+                out.push((rel, std::fs::read(&path).unwrap()));
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(&repo.dir, &repo.dir, &mut files);
+    (files, repo.git(&["status", "--porcelain=v1", "-z", "--ignored"]))
+}
+
+#[test]
+fn awkward_file_names_staged_changes_ignored_files_and_symlinks_survive_a_round_trip() {
+    let fx = Fixture::with_ticket();
+    let web = &fx.web;
+    web.git(&["switch", "-c", "wip"]);
+    // Staged and unstaged edits to the same tracked file, in different hunks.
+    web.write("app.php", "<?php // staged\n");
+    web.git(&["add", "app.php"]);
+    web.write("app.php", "<?php // staged then edited again\n");
+    // Names git has to quote: spaces, unicode, a newline, a leading dash.
+    web.write("sp ace/ünï\ncode.txt", "odd\n");
+    web.write("-dash.txt", "dash\n");
+    web.write("tab\there.txt", "tab\n");
+    // Ignored files (vendor/, build.log) and a symlink.
+    web.write("vendor/keep.txt", "ignored\n");
+    web.write("build.log", "log\n");
+    std::os::unix::fs::symlink("app.php", web.dir.join("link-to-app")).unwrap();
+    // A new file that is only added to the index.
+    web.write("new-staged.txt", "staged new\n");
+    web.git(&["add", "new-staged.txt"]);
+    let before = tree_state(web);
+
+    activate_ticket(&fx, "PROJ-1").unwrap();
+    // Nothing of the user's is left in the way, and the ignored files were not touched.
+    assert!(!web.exists("-dash.txt"));
+    assert_eq!(web.read("vendor/keep.txt"), "ignored\n");
+
+    let report = deactivate_ticket(&fx, "PROJ-1");
+    assert!(report.is_complete(), "{report:?}");
+    assert!(web.stashes().is_empty());
+    assert_eq!(tree_state(web), before);
+}
+
+#[test]
+fn a_users_own_stash_with_a_colliding_label_is_never_popped_or_dropped() {
+    let fx = Fixture::with_ticket();
+    let web = &fx.web;
+    // The user's own stash, labelled exactly like the one de is about to make.
+    web.write("app.php", "<?php // the user's precious stash\n");
+    web.git(&["stash", "push", "-m", "de:PROJ-1:web"]);
+    let users_stash = web.git(&["rev-parse", "refs/stash"]);
+    // And dirty work for de to stash.
+    web.write("app.php", "<?php // work in progress\n");
+
+    activate_ticket(&fx, "PROJ-1").unwrap();
+    let report = deactivate_ticket(&fx, "PROJ-1");
+    assert!(report.is_complete(), "{report:?}");
+
+    assert_eq!(web.read("app.php"), "<?php // work in progress\n");
+    // The user's stash is still there, untouched.
+    assert_eq!(web.git(&["rev-parse", "refs/stash"]), users_stash);
+    assert_eq!(web.stashes().len(), 1);
+}
+
+#[test]
+fn an_uncommitted_composer_json_edit_survives_activation_and_deactivation() {
+    let fx = Fixture::with_ticket();
+    fx.api_client.git(&["switch", TICKET_BRANCH]);
+    let web = &fx.web;
+    let edited = WEB_COMPOSER_JSON.replace("^3.0", "^3.5");
+    web.write("composer.json", &edited);
+
+    activate_ticket(&fx, "PROJ-1").unwrap();
+    assert!(!web.read("composer.json").contains("^3.5"));
+    deactivate_ticket(&fx, "PROJ-1");
+
+    assert_eq!(web.read("composer.json"), edited);
+    assert_eq!(web.read("composer.lock"), WEB_COMPOSER_LOCK);
+    assert!(web.stashes().is_empty());
+}
+
+#[test]
+fn a_ticket_key_that_prefixes_another_never_picks_the_other_tickets_branch() {
+    let fx = Fixture::new();
+    crate::store::tickets::claim(&fx.store, &key("PROJ-1"), 100).unwrap();
+    fx.api_client
+        .add_branch("feature/PROJ-12-something", "src/Client.php", false);
+    let before = fx.snapshot();
+
+    let report = activate_ticket(&fx, "PROJ-1").unwrap();
+
+    // Nothing matches PROJ-1, so every repo is on its baseline, not on PROJ-12's branch.
+    assert!(report.repos.iter().all(|r| matches!(r.action, RepoAction::FallBackToBaseline(_))));
+    assert_eq!(fx.api_client.branch(), "develop");
+    deactivate_ticket(&fx, "PROJ-1");
+    assert_eq!(fx.snapshot(), before);
+}

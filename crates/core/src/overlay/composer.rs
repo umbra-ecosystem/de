@@ -137,6 +137,20 @@ pub struct Finding {
     pub text: String,
 }
 
+/// Whether a constraint means "any version": `*`, possibly with spaces or a stability flag
+/// (`*@dev`).
+pub fn is_wildcard_constraint(constraint: &str) -> bool {
+    let constraint = constraint.trim();
+    let flag = constraint.strip_prefix('*').map(str::trim_start);
+    match flag {
+        Some("") => true,
+        Some(rest) => rest
+            .strip_prefix('@')
+            .is_some_and(|f| !f.is_empty() && f.chars().all(|c| c.is_ascii_alphanumeric())),
+        None => false,
+    }
+}
+
 static TYPE_PATH: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#""type"\s*:\s*"path""#).expect("valid regex"));
 static SYMLINK: LazyLock<Regex> =
