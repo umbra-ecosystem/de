@@ -1082,7 +1082,17 @@ impl Store for Sim {
             });
         }
         rows.sort_by(|a, b| a.key.cmp(&b.key));
-        OnUatVm { rows, overlaps }
+        let mut repos: Vec<RepoName> = rows.iter().flat_map(|r| r.repos.clone()).collect();
+        repos.sort();
+        repos.dedup();
+        let total = rows.len();
+        OnUatVm {
+            rows,
+            repos,
+            chosen: Vec::new(),
+            total,
+            overlaps,
+        }
     }
 
     fn workspace(&self) -> WorkspaceVm {

@@ -53,6 +53,7 @@ pub struct Session {
     toasts: Vec<Toast>,
     next_toast: u64,
     show_all: bool,
+    uat_repos: Vec<RepoName>,
     attention_open: bool,
     simulate_open: bool,
     right_open: bool,
@@ -78,6 +79,7 @@ impl Session {
             toasts: Vec::new(),
             next_toast: 0,
             show_all: false,
+            uat_repos: Vec::new(),
             attention_open: false,
             simulate_open: false,
             right_open: true,
@@ -176,6 +178,12 @@ impl Session {
             Intent::TogglePanel => self.right_open = !self.right_open,
             Intent::SetTheme(t) => self.theme = t,
             Intent::ToggleShowAll => self.show_all = !self.show_all,
+            Intent::ToggleUatRepo(r) => match self.uat_repos.iter().position(|x| x == &r) {
+                Some(i) => {
+                    self.uat_repos.remove(i);
+                }
+                None => self.uat_repos.push(r),
+            },
             Intent::OpenPalette => {
                 self.texts.remove(&Field::Palette);
                 self.sheet = Some(Sheet::Palette);
@@ -638,7 +646,19 @@ impl Session {
                 ScreenVm::Next(n)
             }
             Route::Tickets(g) => ScreenVm::Tickets(self.store.tickets(*g)),
-            Route::OnUat => ScreenVm::OnUat(self.store.on_uat()),
+            Route::OnUat => {
+                let mut v = self.store.on_uat();
+                let q = self.text(&Field::UatFilter).trim().to_lowercase();
+                v.chosen = self.uat_repos.clone();
+                v.rows.retain(|r| {
+                    (v.chosen.is_empty() || r.repos.iter().any(|x| v.chosen.contains(x)))
+                        && (q.is_empty()
+                            || r.title.to_lowercase().contains(&q)
+                            || r.key.to_lowercase().contains(&q)
+                            || r.jira.text.to_lowercase().contains(&q))
+                });
+                ScreenVm::OnUat(v)
+            }
             Route::Workspace => ScreenVm::Workspace(self.store.workspace()),
             Route::Audit => ScreenVm::Audit(self.store.audit()),
             Route::Settings => {
@@ -1457,6 +1477,26 @@ mod tests {
             panic!()
         };
         assert!(s.store().preview(&r).is_err());
+    }
+
+    #[test]
+    fn the_uat_table_filters_by_text_and_by_repo() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::OnUat));
+        let rows = |s: &Session| match s.view().screen {
+            ScreenVm::OnUat(v) => v.rows.len(),
+            _ => panic!("not the uat screen"),
+        };
+        let all = rows(&s);
+        assert!(all >= 2);
+        s.handle(Intent::SetText(Field::UatFilter, "zzz-no-such".into()));
+        assert_eq!(rows(&s), 0);
+        s.handle(Intent::SetText(Field::UatFilter, String::new()));
+        assert_eq!(rows(&s), all);
+        s.handle(Intent::ToggleUatRepo(RepoName::from("worker")));
+        assert_eq!(rows(&s), 0, "nothing on uat touches worker");
+        s.handle(Intent::ToggleUatRepo(RepoName::from("worker")));
+        assert_eq!(rows(&s), all, "toggling again clears the filter");
     }
 
     #[test]

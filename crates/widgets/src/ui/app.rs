@@ -78,6 +78,9 @@ fn needs(vm: &AppVm) -> Vec<Need> {
     if matches!(vm.screen, ScreenVm::Next(_)) {
         add(Field::NextFilter, false, "Search suggestions…");
     }
+    if matches!(vm.screen, ScreenVm::OnUat(_)) {
+        add(Field::UatFilter, false, "Filter tickets on uat…");
+    }
     match &vm.sheet {
         Some(SheetVm::Confirm { preview, .. }) if preview.type_key.is_some() => {
             add(Field::TypedKey, false, "type the key");
@@ -350,7 +353,7 @@ impl AppView {
                 checklist_add,
             )
             .into_any_element(),
-            ScreenVm::OnUat(v) => env::on_uat(ui, v),
+            ScreenVm::OnUat(v) => env::on_uat(ui, &self.inputs, v),
             ScreenVm::Workspace(v) => env::workspace(ui, v).into_any_element(),
             ScreenVm::Audit(rows) => env::audit(ui, rows).into_any_element(),
             ScreenVm::Settings(v) => env::settings(ui, v).into_any_element(),

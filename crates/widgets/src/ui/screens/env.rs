@@ -7,7 +7,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::ticket::audit_rows;
-use crate::ui::ctx::Ui;
+use crate::ui::ctx::{Inputs, Ui};
 use crate::ui::theme::Pal;
 use crate::ui::widgets::*;
 use crate::vm::*;
@@ -38,12 +38,52 @@ fn row(pal: &Pal) -> Div {
         .border_color(pal.border.opacity(0.4))
 }
 
-/// Tickets on uat as a uniform list, like the ticket lists; each row names the repos it touches. Overlaps are
-/// exceptions: they get a line under the list only when there are some.
-pub fn on_uat(ui: &Ui, v: &OnUatVm) -> AnyElement {
+const UAT_ROW_H: f32 = 44.0;
+
+fn uat_cell(w: f32) -> Div {
+    div().flex_none().w(px(w)).px_2()
+}
+
+/// Tickets on uat as a table: a filter strip and a column header that stay put, a uniform list of rows under
+/// them. Overlaps are exceptions: they get a band under the table only when there are some.
+pub fn on_uat(ui: &Ui, inputs: &Inputs, v: &OnUatVm) -> AnyElement {
     let pal = &ui.pal;
+    let filters = strip(pal)
+        .child(div().flex_1().child(inputs.line(&Field::UatFilter)))
+        .child(div().flex().gap_1().children(v.repos.iter().map(|r| {
+            chip(
+                ui,
+                r.to_string(),
+                v.chosen.contains(r),
+                Intent::ToggleUatRepo(r.clone()),
+            )
+        })));
+    let head_cell = |w: f32, t: &str| uat_cell(w).child(t.to_uppercase());
+    let header = div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .px_4()
+        .py_1()
+        .border_b_1()
+        .border_color(pal.border.opacity(0.6))
+        .text_xs()
+        .text_color(pal.faint)
+        .child(head_cell(90.0, "Key"))
+        .child(div().flex_1().px_2().child("TITLE"))
+        .child(head_cell(200.0, "Repos"))
+        .child(head_cell(130.0, "Jira"))
+        .child(head_cell(130.0, "Deploy"));
     let body = if v.rows.is_empty() {
-        empty_state(pal, "Nothing of yours is on uat.").into_any_element()
+        empty_state(
+            pal,
+            if v.total == 0 {
+                "Nothing of yours is on uat."
+            } else {
+                "No ticket on uat matches."
+            },
+        )
+        .into_any_element()
     } else {
         let rows = Rc::new(v.rows.clone());
         let ui = ui.clone();
@@ -56,40 +96,42 @@ pub fn on_uat(ui: &Ui, v: &OnUatVm) -> AnyElement {
                         .id(SharedString::from(format!("uat-{}", r.key)))
                         .flex()
                         .items_center()
-                        .gap_3()
                         .w_full()
-                        .h(px(52.0))
-                        .px_6()
+                        .h(px(UAT_ROW_H))
+                        .px_4()
                         .border_b_1()
                         .border_color(pal.border.opacity(0.5))
                         .cursor_pointer()
                         .hover(|s| s.bg(pal.hover))
                         .on_click(ui.on_click(Intent::go_ticket(r.key.clone(), TicketTab::Ship)))
-                        .child(div().flex_none().w(px(90.0)).child(key_text(&ui, &r.key)))
+                        .child(uat_cell(90.0).child(key_text(&ui, &r.key)))
                         .child(
                             div()
-                                .flex()
-                                .flex_col()
                                 .flex_1()
                                 .min_w_0()
-                                .child(div().truncate().child(r.title.clone()))
+                                .px_2()
+                                .truncate()
+                                .child(r.title.clone()),
+                        )
+                        .child(
+                            uat_cell(200.0)
+                                .truncate()
+                                .text_xs()
+                                .font_family(ui.mono.clone())
+                                .text_color(pal.muted)
                                 .child(
-                                    div()
-                                        .truncate()
-                                        .text_xs()
-                                        .font_family(ui.mono.clone())
-                                        .text_color(pal.faint)
-                                        .child(
-                                            r.repos
-                                                .iter()
-                                                .map(|x| x.to_string())
-                                                .collect::<Vec<_>>()
-                                                .join(", "),
-                                        ),
+                                    r.repos
+                                        .iter()
+                                        .map(|x| x.to_string())
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
                                 ),
                         )
-                        .when_some(r.problem.clone(), |d, c| d.child(deploy_chip(pal, &c)))
-                        .child(pill(pal, &r.jira))
+                        .child(uat_cell(130.0).child(pill(pal, &r.jira)))
+                        .child(
+                            uat_cell(130.0)
+                                .when_some(r.problem.clone(), |d, c| d.child(deploy_chip(pal, &c))),
+                        )
                         .into_any_element()
                 })
                 .collect::<Vec<_>>()
@@ -102,6 +144,8 @@ pub fn on_uat(ui: &Ui, v: &OnUatVm) -> AnyElement {
         .flex()
         .flex_col()
         .size_full()
+        .child(filters)
+        .child(header)
         .child(body)
         .when(!v.overlaps.is_empty(), |d| {
             d.child(band(

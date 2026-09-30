@@ -220,6 +220,8 @@ pub enum Field {
     Checklist(TicketKey),
     /// The filter box of the Next list.
     NextFilter,
+    /// The filter box of On uat.
+    UatFilter,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -235,6 +237,8 @@ pub enum Intent {
     TogglePanel,
     SetTheme(ThemeChoice),
     ToggleShowAll,
+    /// Show only tickets that touch this repo (several repos: any of them).
+    ToggleUatRepo(RepoName),
     OpenPalette,
     ClosePalette,
     /// Send a command. A remote write always opens a confirm sheet first; some local ones do too.

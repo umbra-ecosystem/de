@@ -481,7 +481,13 @@ pub struct UatRow {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct OnUatVm {
+    /// Rows after the filters.
     pub rows: Vec<UatRow>,
+    /// Every repo that has something on uat (the filter chips) and the ones currently chosen.
+    pub repos: Vec<RepoName>,
+    pub chosen: Vec<RepoName>,
+    /// Rows before filtering, to tell "nothing on uat" from "nothing matches".
+    pub total: usize,
     pub overlaps: Vec<String>,
 }
 
