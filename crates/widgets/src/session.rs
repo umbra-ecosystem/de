@@ -623,7 +623,20 @@ impl Session {
 
     fn screen_vm(&self) -> ScreenVm {
         match &self.route {
-            Route::Next => ScreenVm::Next(self.store.next(self.show_all)),
+            Route::Next => {
+                let mut n = self.store.next(self.show_all);
+                let q = self.text(&Field::NextFilter).trim().to_lowercase();
+                if !q.is_empty() {
+                    n.cards.retain(|c| {
+                        c.title.to_lowercase().contains(&q)
+                            || c.reason.to_lowercase().contains(&q)
+                            || c.ticket
+                                .as_ref()
+                                .is_some_and(|k| k.to_lowercase().contains(&q))
+                    });
+                }
+                ScreenVm::Next(n)
+            }
             Route::Tickets(g) => ScreenVm::Tickets(self.store.tickets(*g)),
             Route::OnUat => ScreenVm::OnUat(self.store.on_uat()),
             Route::Workspace => ScreenVm::Workspace(self.store.workspace()),
@@ -1438,5 +1451,30 @@ mod tests {
             panic!()
         };
         assert!(s.store().preview(&r).is_err());
+    }
+
+    #[test]
+    fn the_next_filter_narrows_the_list_by_ticket_title_or_reason() {
+        let mut s = Session::demo();
+        let count = |s: &Session| match s.view().screen {
+            ScreenVm::Next(n) => n.cards.len(),
+            _ => panic!("not on Next"),
+        };
+        let all = count(&s);
+        s.handle(Intent::SetText(Field::NextFilter, "proj-139".into()));
+        let some = count(&s);
+        assert!(some > 0 && some < all, "{some} of {all}");
+        s.handle(Intent::SetText(Field::NextFilter, "zzz-no-such".into()));
+        assert_eq!(count(&s), 0);
+        s.handle(Intent::SetText(Field::NextFilter, String::new()));
+        assert_eq!(count(&s), all);
+    }
+
+    #[test]
+    fn snooze_choices_say_their_unit() {
+        let s = Session::demo();
+        let card = &s.store().next(false).cards[0];
+        let labels: Vec<&str> = card.snooze.iter().map(|b| b.label.as_str()).collect();
+        assert_eq!(labels, ["2 minutes", "10 minutes"]);
     }
 }

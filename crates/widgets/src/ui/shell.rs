@@ -43,26 +43,6 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
         .w_full()
         .pr_3()
         .child(div().font_weight(FontWeight::BOLD).child("de"))
-        .child(
-            div()
-                .id("search")
-                .flex()
-                .items_center()
-                .gap_3()
-                .w(px(320.0))
-                .px_3()
-                .py_1()
-                .rounded_md()
-                .border_1()
-                .border_color(pal.border)
-                .text_sm()
-                .text_color(pal.muted)
-                .cursor_pointer()
-                .hover(|s| s.bg(pal.hover))
-                .on_click(ui.on_click(Intent::OpenPalette))
-                .child(div().flex_1().child("Go to…"))
-                .child(div().text_xs().text_color(pal.faint).child("⌘K")),
-        )
         .child(div().flex_1())
         .child(flat(
             "attn",

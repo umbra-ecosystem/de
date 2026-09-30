@@ -211,10 +211,15 @@ pub enum Field {
     Compose,
     Palette,
     Notes(TicketKey),
-    Draft { key: TicketKey, id: DraftId },
+    Draft {
+        key: TicketKey,
+        id: DraftId,
+    },
     Comment(TicketKey),
     Inline,
     Checklist(TicketKey),
+    /// The filter box of the Next list.
+    NextFilter,
 }
 
 #[derive(Clone, Debug, PartialEq)]

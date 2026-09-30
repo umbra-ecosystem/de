@@ -80,7 +80,7 @@ impl Sim {
                 .iter()
                 .map(|m| {
                     Btn::new(
-                        format!("{m}m"),
+                        format!("{m} minutes"),
                         cmd(Command::Snooze {
                             id: s.id.clone(),
                             minutes: *m,

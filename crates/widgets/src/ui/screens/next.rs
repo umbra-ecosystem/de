@@ -1,75 +1,187 @@
 //! Next: the ranked suggestions, each with the reason it exists. A uniform list of fixed-height rows, like Zed's.
+//!
+//! The row is the control: clicking it does the suggestion's primary action. Snooze and dismiss are icon buttons
+//! that appear on hover; what a suggestion is (hotfix, automatic, sends to a remote) is an icon with a tooltip.
 
 use std::rc::Rc;
 
+use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::menu::DropdownMenu;
+use gpui_kit::component::menu::PopupMenuItem;
+use gpui_kit::component::tooltip::Tooltip;
+use gpui_kit::component::{Icon, IconName, Selectable, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::ui::ctx::Ui;
+use crate::ui::ctx::{Inputs, Ui};
 use crate::ui::widgets::*;
 use crate::vm::*;
 
-pub const ROW_H: f32 = 64.0;
+pub const ROW_H: f32 = 56.0;
 
-/// One suggestion as a list row: rank, badges, key, title and reason on the left, its actions on the right.
-pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Div {
+/// A small icon that explains itself on hover.
+fn icon_tip(
+    id: impl Into<ElementId>,
+    icon: IconName,
+    color: Hsla,
+    tip: &'static str,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .flex_none()
+        .child(Icon::new(icon).small().text_color(color))
+        .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+}
+
+fn icon_button(id: impl Into<ElementId>, icon: IconName, tip: &'static str) -> Button {
+    Button::new(id).ghost().small().icon(icon).tooltip(tip)
+}
+
+/// One suggestion as a list row.
+pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
     let pal = &ui.pal;
     let dim = matches!(s.state, SugState::Dismissed | SugState::Snoozed);
-    let level = match s.level {
-        Level::External => Some(Badge::new("sends to a remote", Tone::Bad)),
-        Level::Automatic => Some(Badge::new("automatic", Tone::Neutral)),
-        Level::Local => None,
-    };
+    let group = SharedString::from(format!("row-{}", s.id));
+
+    let mut marks: Vec<AnyElement> = Vec::new();
+    if s.hotfix {
+        marks.push(
+            icon_tip(
+                SharedString::from(format!("hot-{}", s.id)),
+                IconName::TriangleAlert,
+                pal.hot,
+                "Hotfix",
+            )
+            .into_any_element(),
+        );
+    }
+    match s.level {
+        Level::External => {
+            marks.push(
+                icon_tip(
+                    SharedString::from(format!("ext-{}", s.id)),
+                    IconName::ExternalLink,
+                    pal.bad,
+                    "Sends to a remote, after a confirmation",
+                )
+                .into_any_element(),
+            );
+        }
+        Level::Automatic => {
+            marks.push(
+                icon_tip(
+                    SharedString::from(format!("auto-{}", s.id)),
+                    IconName::Bot,
+                    pal.muted,
+                    "Automatic",
+                )
+                .into_any_element(),
+            );
+        }
+        Level::Local => {}
+    }
+    if s.info {
+        marks.push(
+            icon_tip(
+                SharedString::from(format!("info-{}", s.id)),
+                IconName::Info,
+                pal.muted,
+                "Informational: nothing to send",
+            )
+            .into_any_element(),
+        );
+    }
+
     let title = div()
         .flex()
         .items_center()
         .gap_2()
         .min_w_0()
-        .when(s.hotfix, |d| d.child(hotfix_pill(pal)))
-        .when_some(s.ticket.clone(), |d, k| {
-            d.child(key_link(
-                ui,
-                &k,
-                Intent::go_ticket(k.clone(), TicketTab::Overview),
-            ))
+        .when(!marks.is_empty(), |d| {
+            d.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1p5()
+                    .flex_none()
+                    .children(marks),
+            )
         })
+        .when_some(s.ticket.clone(), |d, k| d.child(key_text(ui, &k)))
         .child(
             div()
                 .truncate()
                 .font_weight(FontWeight::SEMIBOLD)
                 .child(s.title.clone()),
         )
-        .when(s.info, |d| d.child(faint(pal, "info")))
         .when(s.state == SugState::Resurfaced, |d| {
             d.child(dot(pal.accent))
-                .child(faint(pal, "back: the facts changed"))
         });
-    let actions = if dim {
-        div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(faint(
-                pal,
-                if s.state == SugState::Dismissed {
-                    "dismissed"
-                } else {
-                    "snoozed"
-                },
-            ))
-            .child(button_ghost(ui, &s.undo))
+
+    // Hover actions. Clicks on them must not also click the row.
+    let mut actions = div()
+        .id(SharedString::from(format!("acts-{}", s.id)))
+        .flex()
+        .items_center()
+        .gap_0p5()
+        .flex_none()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation());
+    if dim {
+        actions = actions.child(
+            icon_button(
+                SharedString::from(format!("undo-{}", s.id)),
+                IconName::Undo2,
+                "Bring it back",
+            )
+            .on_click(ui.on_click(s.undo.intent.clone())),
+        );
     } else {
-        div()
-            .flex()
-            .items_center()
-            .gap_1()
-            .when_some(level, |d, b| d.child(pill(pal, &b)))
-            .child(button(ui, &s.primary))
-            .when_some(s.alt.clone(), |d, a| d.child(button(ui, &a)))
-            .children(s.snooze.iter().map(|a| button_ghost(ui, a)))
-            .child(button_ghost(ui, &s.dismiss))
-    };
+        if let Some(alt) = s.alt.clone() {
+            actions = actions.child(
+                Button::new(SharedString::from(format!("alt-{}", s.id)))
+                    .ghost()
+                    .small()
+                    .icon(IconName::Check)
+                    .tooltip(alt.label.clone())
+                    .on_click(ui.on_click(alt.intent.clone())),
+            );
+        }
+        let snoozes: Vec<Btn> = s.snooze.clone();
+        let menu_ui = ui.clone();
+        actions = actions
+            .child(
+                icon_button(
+                    SharedString::from(format!("snooze-{}", s.id)),
+                    IconName::Bell,
+                    "Snooze",
+                )
+                .dropdown_menu(move |menu, _, _| {
+                    let mut menu = menu;
+                    for a in &snoozes {
+                        let ui = menu_ui.clone();
+                        let intent = a.intent.clone();
+                        menu = menu.item(
+                            PopupMenuItem::new(format!("Snooze for {}", a.label))
+                                .on_click(move |_, _, cx| ui.send(intent.clone(), cx)),
+                        );
+                    }
+                    menu
+                }),
+            )
+            .child(
+                icon_button(
+                    SharedString::from(format!("dismiss-{}", s.id)),
+                    IconName::Close,
+                    "Dismiss",
+                )
+                .on_click(ui.on_click(s.dismiss.intent.clone())),
+            );
+    }
+
     div()
+        .id(SharedString::from(format!("suggestion-{}", s.id)))
+        .group(group.clone())
         .flex()
         .items_center()
         .gap_3()
@@ -78,15 +190,10 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Div {
         .px_3()
         .border_b_1()
         .border_color(pal.border.opacity(0.5))
+        .cursor_pointer()
         .hover(|d| d.bg(pal.hover))
         .when(dim, |d| d.opacity(0.55))
-        .child(
-            div()
-                .flex_none()
-                .w_5()
-                .text_color(pal.faint)
-                .child(s.rank.to_string()),
-        )
+        .on_click(ui.on_click(s.primary.intent.clone()))
         .child(
             div()
                 .flex()
@@ -103,26 +210,40 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Div {
                         .child(s.reason.clone()),
                 ),
         )
-        .child(div().flex_none().child(actions))
+        .child(
+            div()
+                .opacity(if dim { 1.0 } else { 0.0 })
+                .group_hover(group, |d| d.opacity(1.0))
+                .child(actions),
+        )
 }
 
-/// The whole screen: a header and a uniform list that fills the rest.
-pub fn next(ui: &Ui, vm: &NextVm) -> AnyElement {
+/// The whole screen: a search field and the dismissed/snoozed toggle, then a uniform list that fills the rest.
+pub fn next(ui: &Ui, inputs: &Inputs, vm: &NextVm) -> AnyElement {
     let pal = &ui.pal;
+    let toggle = Button::new("show-all")
+        .ghost()
+        .small()
+        .icon(if vm.show_all {
+            IconName::Eye
+        } else {
+            IconName::EyeOff
+        })
+        .selected(vm.show_all)
+        .tooltip(format!(
+            "{} dismissed and snoozed ({})",
+            if vm.show_all { "Hide" } else { "Show" },
+            vm.hidden
+        ))
+        .on_click(ui.on_click(Intent::ToggleShowAll));
     let header = div()
         .flex()
         .flex_none()
         .items_center()
-        .justify_between()
+        .gap_2()
         .pb_3()
-        .child(heading("Next"))
-        .child(check_row(
-            ui,
-            "show-all",
-            &format!("show dismissed and snoozed ({})", vm.hidden),
-            vm.show_all,
-            Intent::ToggleShowAll,
-        ));
+        .child(div().flex_1().child(inputs.line(&Field::NextFilter)))
+        .child(toggle);
     let body = if vm.cards.is_empty() {
         empty_state(pal, "Nothing to do.").into_any_element()
     } else {

@@ -20,7 +20,7 @@ use super::theme::Pal;
 use crate::session::Session;
 use crate::vm::*;
 
-gpui_kit::actions!(de_widgets, [OpenPaletteAction, CancelAction]);
+gpui_kit::actions!(de_widgets, [OpenPaletteAction, CancelAction, Quit]);
 
 /// What a text input needs: which field, single or multi-line, and its placeholder.
 struct Need {
@@ -79,6 +79,9 @@ fn needs(vm: &AppVm) -> Vec<Need> {
             }
             _ => {}
         }
+    }
+    if matches!(vm.screen, ScreenVm::Next(_)) {
+        add(Field::NextFilter, false, "Search suggestions…");
     }
     match &vm.sheet {
         Some(SheetVm::Confirm { preview, .. }) if preview.type_key.is_some() => {
@@ -333,7 +336,7 @@ impl AppView {
 
     fn screen(&self, ui: &Ui, cx: &App, vm: &ScreenVm) -> AnyElement {
         match vm {
-            ScreenVm::Next(n) => next::next(ui, n).into_any_element(),
+            ScreenVm::Next(n) => next::next(ui, &self.inputs, n).into_any_element(),
             ScreenVm::Tickets(t) => tickets::tickets(ui, t).into_any_element(),
             ScreenVm::Ticket {
                 head,
@@ -482,7 +485,22 @@ pub fn run() {
         .run(|cx| {
             gpui_kit::init(cx);
             Theme::sync_system_appearance(None, cx);
+            // The app menu bar: "Go to…" lives here (with its ⌘K shortcut), not in the window.
+            cx.on_action(|_: &Quit, cx| cx.quit());
+            cx.set_menus(vec![
+                Menu {
+                    name: "de".into(),
+                    items: vec![MenuItem::action("Quit de", Quit)],
+                    disabled: false,
+                },
+                Menu {
+                    name: "Go".into(),
+                    items: vec![MenuItem::action("Go to…", OpenPaletteAction)],
+                    disabled: false,
+                },
+            ]);
             cx.bind_keys([
+                KeyBinding::new("cmd-q", Quit, None),
                 KeyBinding::new("cmd-k", OpenPaletteAction, None),
                 KeyBinding::new("ctrl-k", OpenPaletteAction, None),
                 KeyBinding::new("escape", CancelAction, Some("Showcase")),
