@@ -190,9 +190,16 @@ fn parse_version(text: &str) -> Option<(u64, u64, u64)> {
 
 fn output_says_logged_out(text: &str) -> bool {
     let lower = text.to_lowercase();
-    ["not logged in", "not authenticated", "unauthenticated", "no account", "please log in", "auth login"]
-        .iter()
-        .any(|n| lower.contains(n))
+    [
+        "not logged in",
+        "not authenticated",
+        "unauthenticated",
+        "no account",
+        "please log in",
+        "auth login",
+    ]
+    .iter()
+    .any(|n| lower.contains(n))
 }
 
 // ---- reads -----------------------------------------------------------------------------
@@ -263,7 +270,14 @@ impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
                 false,
                 format!(
                     "not logged in to Jira (run `acli jira auth login`): {}",
-                    snippet(if o.stderr.trim().is_empty() { &o.stdout } else { &o.stderr }, 200)
+                    snippet(
+                        if o.stderr.trim().is_empty() {
+                            &o.stdout
+                        } else {
+                            &o.stderr
+                        },
+                        200
+                    )
                 ),
             ),
             Err(e) => (false, format!("could not check login: {e}")),
@@ -272,10 +286,7 @@ impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
         let detail = if !authenticated {
             auth_detail
         } else if parsed.is_none() {
-            format!(
-                "could not read the version from {:?}",
-                snippet(&raw, 100)
-            )
+            format!("could not read the version from {:?}", snippet(&raw, 100))
         } else if !meets_minimum {
             format!("acli is older than {MIN_ACLI_VERSION}; upgrade it")
         } else {
@@ -370,7 +381,9 @@ impl<R: CommandRunner + Send + Sync> TicketWriter for AcliJiraWriter<R> {
     /// would be posted as formatted content rather than verbatim; such a body is refused.
     fn add_comment(&self, key: &TicketKey, body: &str) -> ProviderResult<RemoteComment> {
         if body.trim().is_empty() {
-            return Err(ProviderError::Unsupported("refusing to post an empty comment".into()));
+            return Err(ProviderError::Unsupported(
+                "refusing to post an empty comment".into(),
+            ));
         }
         if let Ok(doc) = serde_json::from_str::<Value>(body.trim())
             && doc.get("type").and_then(Value::as_str) == Some("doc")
@@ -461,8 +474,7 @@ impl<R: CommandRunner + Send + Sync> TicketWriter for AcliJiraWriter<R> {
 fn reports_failure(doc: &Value) -> bool {
     match doc {
         Value::Object(o) => {
-            o.get("success") == Some(&Value::Bool(false))
-                || o.values().any(reports_failure)
+            o.get("success") == Some(&Value::Bool(false)) || o.values().any(reports_failure)
         }
         Value::Array(a) => a.iter().any(reports_failure),
         _ => false,
@@ -489,21 +501,42 @@ pub fn probe(runner: &dyn CommandRunner, sample_key: Option<&TicketKey>) -> Vec<
     let mut commands: Vec<Vec<String>> = vec![
         vec!["--version".into()],
         vec!["jira".into(), "auth".into(), "status".into()],
-        ["jira", "workitem", "search", "--jql", "order by updated DESC", "--limit", "1", "--json", "--fields", TICKET_FIELDS]
-            .map(String::from)
-            .to_vec(),
+        [
+            "jira",
+            "workitem",
+            "search",
+            "--jql",
+            "order by updated DESC",
+            "--limit",
+            "1",
+            "--json",
+            "--fields",
+            TICKET_FIELDS,
+        ]
+        .map(String::from)
+        .to_vec(),
     ];
     if let Some(key) = sample_key {
         let key = key.as_str();
         commands.push(
-            ["jira", "workitem", "view", key, "--json", "--fields", TICKET_FIELDS]
-                .map(String::from)
-                .to_vec(),
+            [
+                "jira",
+                "workitem",
+                "view",
+                key,
+                "--json",
+                "--fields",
+                TICKET_FIELDS,
+            ]
+            .map(String::from)
+            .to_vec(),
         );
         commands.push(
-            ["jira", "workitem", "comment", "list", "--key", key, "--limit", "5", "--json"]
-                .map(String::from)
-                .to_vec(),
+            [
+                "jira", "workitem", "comment", "list", "--key", key, "--limit", "5", "--json",
+            ]
+            .map(String::from)
+            .to_vec(),
         );
     }
     let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -512,7 +545,11 @@ pub fn probe(runner: &dyn CommandRunner, sample_key: Option<&TicketKey>) -> Vec<
         .map(|args| {
             let shown = std::iter::once(PROGRAM.to_string())
                 .chain(args.iter().map(|a| {
-                    if a.contains(' ') { format!("{a:?}") } else { a.clone() }
+                    if a.contains(' ') {
+                        format!("{a:?}")
+                    } else {
+                        a.clone()
+                    }
                 }))
                 .collect::<Vec<_>>()
                 .join(" ");

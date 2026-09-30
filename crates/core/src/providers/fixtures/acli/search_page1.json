@@ -1,0 +1,18 @@
+[
+  {
+    "key": "APP-1",
+    "id": "10001",
+    "self": "https://acme.atlassian.net/rest/api/3/issue/10001",
+    "fields": {
+      "summary": "Fix login",
+      "status": {"name": "In Review"},
+      "priority": {"name": "High"},
+      "assignee": {"accountId": "acc-1", "displayName": "Ada Lovelace"},
+      "updated": "2024-05-01T10:15:30.123+0000"
+    }
+  },
+  {
+    "key": "APP-2",
+    "fields": {"summary": "Unassigned", "status": {"name": "Returned"}, "priority": null, "assignee": null, "updated": "2024-05-02T00:00:00.000+0200", "customfield_1": {"x": 1}}
+  }
+]

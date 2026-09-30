@@ -171,7 +171,10 @@ fn browse_url(key: &TicketKey, site: Option<&str>, self_url: Option<&str>) -> Op
             .to_string(),
         _ => {
             let rest = self_url?.strip_prefix("https://")?;
-            rest.split('/').next().filter(|h| !h.is_empty())?.to_string()
+            rest.split('/')
+                .next()
+                .filter(|h| !h.is_empty())?
+                .to_string()
         }
     };
     Some(format!("https://{host}/browse/{key}"))
@@ -273,8 +276,7 @@ fn comment_from(
     what: &str,
     output: &str,
 ) -> ProviderResult<RemoteComment> {
-    let c: WireComment =
-        serde_json::from_value(item).map_err(|e| parse_error(what, e, output))?;
+    let c: WireComment = serde_json::from_value(item).map_err(|e| parse_error(what, e, output))?;
     let id = match &c.id {
         Value::String(s) if !s.is_empty() => s.clone(),
         Value::Number(n) => n.to_string(),
