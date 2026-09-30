@@ -73,6 +73,7 @@ pub fn on_uat(ui: &Ui, inputs: &Inputs, v: &OnUatVm) -> AnyElement {
     });
     let filters = strip(pal)
         .h(px(48.0))
+        .px_4()
         .child(div().flex_1())
         .child(
             div()

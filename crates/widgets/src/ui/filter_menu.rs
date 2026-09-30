@@ -14,7 +14,7 @@ use gpui_kit::*;
 use super::ctx::Ui;
 use crate::vm::Intent;
 
-const MENU_WIDTH: f32 = 200.0;
+const MENU_WIDTH: f32 = 260.0;
 const ROW_HEIGHT: f32 = 26.0;
 
 /// One checkable row. A disabled row is shown but cannot be picked (nothing for it to act on).
