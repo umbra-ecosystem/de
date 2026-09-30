@@ -614,6 +614,8 @@ pub struct SettingsVm {
     pub appearance: Vec<(String, bool, Intent)>,
     pub providers: Vec<ProviderVm>,
     pub wait_options: Vec<(String, bool, Btn)>,
+    /// How often the app syncs by itself: `(label, selected, button)`; the first is "Off".
+    pub sync_options: Vec<(String, bool, Btn)>,
     pub mapping: Vec<MappingRow>,
     /// The mapping fields whose text differs from what is stored; filled in by the session, which owns the text.
     pub edited: Vec<MappingKey>,

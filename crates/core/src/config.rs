@@ -17,10 +17,24 @@ pub struct Config {
     /// Pipeline settings (`[pipelines]`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pipelines: Option<PipelinesConfig>,
+    /// Automatic sync (`[sync]`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncConfig>,
     /// Sync log settings (`[logs]`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logs: Option<LogsConfig>,
 }
+
+/// `[sync]` in the global config.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SyncConfig {
+    /// Minutes between automatic syncs while the app is open; `0` turns them off. Default 10.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interval_minutes: Option<u32>,
+}
+
+/// Minutes between automatic syncs when `[sync] interval_minutes` is not set.
+pub const DEFAULT_SYNC_INTERVAL_MINUTES: u32 = 10;
 
 /// `[logs]` in the global config.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -190,6 +204,14 @@ impl Config {
         self.jira.clone().unwrap_or_default()
     }
 
+    /// Minutes between automatic syncs; `0` is off.
+    pub fn sync_interval_minutes(&self) -> u32 {
+        self.sync
+            .as_ref()
+            .and_then(|s| s.interval_minutes)
+            .unwrap_or(DEFAULT_SYNC_INTERVAL_MINUTES)
+    }
+
     /// How many sync logs to keep; at least one.
     pub fn log_keep(&self) -> usize {
         self.logs
@@ -336,5 +358,21 @@ mod tests {
         let with = Config::parse("[jira]\naccount_id = \"a\"\n").unwrap();
         let again = Config::parse(&toml::to_string_pretty(&with).unwrap()).unwrap();
         assert_eq!(again.jira, with.jira);
+    }
+
+    #[test]
+    fn the_sync_interval_defaults_to_ten_minutes_and_zero_turns_it_off() {
+        assert_eq!(Config::default().sync_interval_minutes(), 10);
+        assert_eq!(Config::parse("[sync]\ninterval_minutes = 30\n").unwrap().sync_interval_minutes(), 30);
+        assert_eq!(Config::parse("[sync]\ninterval_minutes = 0\n").unwrap().sync_interval_minutes(), 0);
+        assert_eq!(Config::parse("[sync]\n").unwrap().sync_interval_minutes(), 10, "a section with no value");
+        let c = Config {
+            sync: Some(SyncConfig {
+                interval_minutes: Some(5),
+            }),
+            ..Config::default()
+        };
+        let back = Config::parse(&toml::to_string_pretty(&c).unwrap()).unwrap();
+        assert_eq!(back.sync_interval_minutes(), 5);
     }
 }

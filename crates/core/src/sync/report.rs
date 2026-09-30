@@ -72,6 +72,8 @@ pub enum SourceOutcome {
 pub struct SyncCounts {
     pub tickets: usize,
     pub ticket_comments: usize,
+    /// Tickets read in full (their comments and detail), as opposed to only searched.
+    pub details: usize,
     pub prs: usize,
     pub pr_comments: usize,
     pub pipelines: usize,

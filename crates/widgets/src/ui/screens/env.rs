@@ -351,6 +351,32 @@ pub fn settings(ui: &Ui, inputs: &Inputs, v: &SettingsVm) -> Div {
         .child(band(
             pal,
             false,
+            "Sync",
+            div()
+                .flex()
+                .flex_col()
+                .border_t_1()
+                .border_color(pal.border.opacity(0.4))
+                .child(
+                    row(pal)
+                        .h(px(SETTING_ROW_H))
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(pal.muted)
+                                .child("Sync automatically every"),
+                        )
+                        .child(div().flex().gap_1().children(
+                            v.sync_options.iter().map(|(label, on, a)| {
+                                chip(ui, label.clone(), *on, a.intent.clone())
+                            }),
+                        )),
+                ),
+        ))
+        .child(band(
+            pal,
+            false,
             "Jira mapping",
             div()
                 .flex()

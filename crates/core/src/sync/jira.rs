@@ -156,6 +156,7 @@ fn jira_body(ctx: &SyncContext<'_>, jira: &dyn TicketProvider, c: &mut Collector
                 jira_comments::replace_for_ticket(ctx.cache, key, &viewed.comments, ctx.now)
                     .map_err(local)?;
                 c.counts.ticket_comments += viewed.comments.len();
+                c.counts.details += 1;
                 if let Some(detail) = &viewed.detail {
                     jira_details::upsert(ctx.cache, key, detail, ctx.now).map_err(local)?;
                 }

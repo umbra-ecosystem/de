@@ -15,7 +15,7 @@ use de_widgets::sim::model::MS_PER_MIN;
 use de_widgets::vm::*;
 use de_widgets::{Outcome, ReviewSel, Store};
 
-use crate::{audit, localtime, logs, mapping};
+use crate::{audit, localtime, logs, mapping, schedule};
 use crate::sync::{SyncDone, last_sync_minutes_ago, load_cached, sync_real};
 
 pub struct CoreStore {
@@ -23,6 +23,12 @@ pub struct CoreStore {
     running: Option<Receiver<SyncDone>>,
     /// Real milliseconds not yet turned into simulated ones (see [`CoreStore::tick`]).
     carry_ms: i64,
+    /// Minutes between automatic syncs (0 is off), when the last sync was started (unix seconds), how many in a
+    /// row failed, and whether the running one was automatic. See [`crate::schedule`].
+    interval_minutes: u32,
+    last_attempt: i64,
+    failures: u32,
+    running_auto: bool,
 }
 
 /// Real milliseconds (plus what was carried over) as simulated milliseconds, and what is left over. A real minute
@@ -57,10 +63,18 @@ impl CoreStore {
         // The side panel's "Last sync" is the last one on record, not only one from this session.
         sim.set_last_sync_report(audit::last_sync_report(&stored));
         sim.use_external_audit(stored);
+        let interval_minutes = Config::load()
+            .map(|c| c.sync_interval_minutes())
+            .unwrap_or(de_core::config::DEFAULT_SYNC_INTERVAL_MINUTES);
+        sim.set_sync_interval(interval_minutes, schedule::overdue_after_minutes(interval_minutes));
         let mut store = Self {
             sim,
             running: None,
             carry_ms: 0,
+            interval_minutes,
+            last_attempt: 0,
+            failures: 0,
+            running_auto: false,
         };
         store.begin_sync();
         store
@@ -85,9 +99,16 @@ impl CoreStore {
     }
 
     fn begin_sync(&mut self) -> Outcome {
+        self.start_sync(false)
+    }
+
+    /// Start a sync on a worker thread. A manual one (`auto` false) also restarts the automatic timer.
+    fn start_sync(&mut self, auto: bool) -> Outcome {
         if self.running.is_some() {
             return Outcome::fail("A sync is already running.");
         }
+        self.last_attempt = now();
+        self.running_auto = auto;
         let (tx, rx) = channel();
         std::thread::spawn(move || {
             let _ = tx.send(sync_real(now()));
@@ -135,6 +156,34 @@ impl CoreStore {
         })
     }
 
+    /// Change how often the app syncs by itself, in `config.toml`; 0 turns it off.
+    fn set_sync_interval(&mut self, minutes: u32) -> Outcome {
+        let saved = Config::mutate_persisted(|config| {
+            let sync = config.sync.get_or_insert_with(Default::default);
+            sync.interval_minutes = Some(minutes);
+        });
+        match saved {
+            Ok(_) => {
+                self.interval_minutes = minutes;
+                self.failures = 0;
+                self.sim
+                    .set_sync_interval(minutes, schedule::overdue_after_minutes(minutes));
+                let said = if minutes == 0 {
+                    "Automatic sync is off".to_string()
+                } else {
+                    format!("Syncing every {minutes} minutes")
+                };
+                self.record("config.sync", true, &said);
+                Outcome::ok().with_toast(said, ToastKind::Ok, None)
+            }
+            Err(e) => {
+                let why = format!("Could not save to config.toml: {e:#}");
+                self.record("config.sync", false, &why);
+                Outcome::fail(format!("{why}. Check that the file is writable, then try again."))
+            }
+        }
+    }
+
     /// Apply a finished sync, if there is one.
     fn poll(&mut self) -> Vec<(String, ToastKind)> {
         let Some(rx) = &self.running else {
@@ -147,9 +196,11 @@ impl CoreStore {
                 report: vec![(false, "Jira (acli)".into(), "the sync stopped unexpectedly".into())],
                 tickets: Err("the sync stopped unexpectedly".into()),
                 jira_unavailable: false,
+                changed: true,
             },
         };
         self.running = None;
+        let auto = std::mem::take(&mut self.running_auto);
         let ok = done.report.iter().all(|r| r.0);
         let mut toasts = Vec::new();
         match done.tickets {
@@ -157,7 +208,9 @@ impl CoreStore {
             Err(e) => toasts.push((format!("Could not read the tickets: {e}"), ToastKind::Bad)),
         }
         self.sim.set_jira_ready(!done.jira_unavailable);
-        if !ok {
+        self.failures = if ok { 0 } else { self.failures + 1 };
+        // An automatic sync is quiet: a problem is said once, when it starts, not every cycle.
+        if !ok && (!auto || self.failures == 1) {
             let why = done
                 .report
                 .iter()
@@ -173,7 +226,12 @@ impl CoreStore {
             .collect::<Vec<_>>()
             .join("; ");
         self.sim.sync_ended(done.report);
-        toasts.extend(self.record("sync", ok, &text));
+        // A manual sync is always on the audit log; an automatic one only when it found something or failed, so
+        // that a quiet day is not a wall of identical lines.
+        if !auto || done.changed {
+            let action = if auto { "sync.auto" } else { "sync" };
+            toasts.extend(self.record(action, ok, &text));
+        }
         toasts
     }
 }
@@ -238,6 +296,7 @@ impl Store for CoreStore {
         if let Ok(config) = Config::load() {
             v.mapping = mapping::rows(&config);
         }
+        v.sync_options = Sim::sync_options(self.interval_minutes);
         v
     }
     fn logs(&self) -> (Vec<LogRunVm>, String) {
@@ -276,6 +335,9 @@ impl Store for CoreStore {
         if let Some(outcome) = self.mapping_command(command.command()) {
             return outcome;
         }
+        if let Command::SetSyncInterval(minutes) = command.command() {
+            return self.set_sync_interval(*minutes);
+        }
         match command.command() {
             Command::Sync => self.begin_sync(),
             _ => self.sim.dispatch(command),
@@ -289,6 +351,15 @@ impl Store for CoreStore {
     }
     fn tick(&mut self, millis: i64) -> Vec<(String, ToastKind)> {
         let mut toasts = self.poll();
+        if schedule::is_due(
+            now(),
+            self.last_attempt,
+            self.interval_minutes,
+            self.running.is_some(),
+            self.failures,
+        ) {
+            self.start_sync(true);
+        }
         // The simulation runs a minute in `MS_PER_MIN` simulated milliseconds (four real seconds in the
         // showcase). Here a minute is a real minute, so real time is scaled down to it: otherwise "Synced 1m
         // ago" would come every four seconds.

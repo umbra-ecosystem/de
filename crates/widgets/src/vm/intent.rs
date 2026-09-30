@@ -181,6 +181,8 @@ pub enum Command {
         ready: bool,
     },
     SetWaitMinutes(u32),
+    /// Minutes between automatic syncs; 0 turns them off.
+    SetSyncInterval(u32),
     /// Save these Jira mapping settings together; empty text clears a setting back to its default.
     SaveMapping {
         changes: Vec<(MappingKey, String)>,
@@ -419,6 +421,7 @@ mod tests {
             | Command::MarkSeen(_)
             | Command::SetProvider { .. }
             | Command::SetWaitMinutes(_)
+            | Command::SetSyncInterval(_)
             | Command::SaveMapping { .. }
             | Command::ResetMapping
             | Command::StartWorkspace
@@ -477,6 +480,7 @@ mod tests {
             Command::SaveMapping {
                 changes: vec![(MappingKey::ReviewStatus, String::new())],
             },
+            Command::SetSyncInterval(10),
             Command::ResetMapping,
             Command::Claim(key.clone()),
             Command::Park(key.clone()),

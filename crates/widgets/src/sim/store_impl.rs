@@ -67,6 +67,24 @@ impl Sim {
             .flatten()
     }
 
+    /// The choices for how often to sync by itself: off, or every 5, 10, 30 or 60 minutes.
+    pub fn sync_options(current: u32) -> Vec<(String, bool, Btn)> {
+        [0u32, 5, 10, 30, 60]
+            .iter()
+            .map(|m| {
+                (
+                    match m {
+                        0 => "Off".to_string(),
+                        m if *m < 60 => format!("{m}m"),
+                        m => format!("{}h", m / 60),
+                    },
+                    current == *m,
+                    Btn::new(String::new(), cmd(Command::SetSyncInterval(*m))),
+                )
+            })
+            .collect()
+    }
+
     fn card(&self, s: &Sug) -> SuggestionCard {
         let primary = Btn::new(act_label(&s.act), s.act.clone())
             .primary_if(s.level == Level::External || !s.info);
@@ -1385,6 +1403,7 @@ impl Store for Sim {
                     )
                 })
                 .collect(),
+            sync_options: Self::sync_options(self.sync_minutes),
             edited: Vec::new(),
             mapping: MappingKey::LIST
                 .iter()
@@ -1689,6 +1708,19 @@ impl Sim {
             Command::SetWaitMinutes(m) => {
                 self.wait_min = *m;
                 Outcome::ok()
+            }
+            Command::SetSyncInterval(m) => {
+                self.sync_minutes = *m;
+                self.stale_sync_min = if *m == 0 { 6 } else { i64::from(*m * 2).max(6) };
+                Outcome::ok().with_toast(
+                    if *m == 0 {
+                        "Automatic sync is off".to_string()
+                    } else {
+                        format!("Syncing every {m} minutes")
+                    },
+                    ToastKind::Ok,
+                    None,
+                )
             }
             Command::SaveMapping { changes } => {
                 for (key, text) in changes {

@@ -251,7 +251,7 @@ impl Sim {
         let since_attempt = self.mins_ago(self.sync.last_attempt);
         if !self.sync.running
             && ((self.sync.last_error.is_some() && since_attempt >= 15)
-                || (self.sync.last_error.is_none() && age >= 6 && since_attempt >= 1))
+                || (self.sync.last_error.is_none() && age >= self.stale_sync_min && since_attempt >= 1))
         {
             let mut s = Self::base_sug(
                 Rule::SyncStale,

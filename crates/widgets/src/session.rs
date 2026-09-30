@@ -1741,6 +1741,29 @@ mod tests {
     }
 
     #[test]
+    fn the_sync_interval_is_a_choice_on_the_settings_page() {
+        let mut s = Session::demo();
+        let selected = |s: &Session| {
+            s.store()
+                .settings()
+                .sync_options
+                .into_iter()
+                .filter(|(_, on, _)| *on)
+                .map(|(label, _, _)| label)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(selected(&s), ["10m"]);
+        s.handle(Intent::Do(Command::SetSyncInterval(30)));
+        assert_eq!(selected(&s), ["30m"]);
+        assert!(s.view().toasts.iter().any(|t| t.text.contains("every 30 minutes")));
+        s.handle(Intent::Do(Command::SetSyncInterval(0)));
+        assert_eq!(selected(&s), ["Off"]);
+        assert!(s.view().toasts.iter().any(|t| t.text.contains("off")));
+        let labels: Vec<String> = s.store().settings().sync_options.into_iter().map(|o| o.0).collect();
+        assert_eq!(labels, ["Off", "5m", "10m", "30m", "1h"]);
+    }
+
+    #[test]
     fn diagnose_shows_raw_output_and_reflects_sign_out() {
         let mut s = Session::demo();
         s.handle(Intent::Do(Command::SetProvider {

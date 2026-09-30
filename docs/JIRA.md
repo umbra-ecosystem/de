@@ -95,6 +95,17 @@ Only tickets that changed are read again. Search cannot return a ticket's update
 
 The first sync, or one after a long time away, reads every ticket (about two seconds each). Comments cached by an earlier version show as plain lines until their ticket next changes or a `--full` sync.
 
+## Automatic sync
+
+While the app is open it syncs by itself every 10 minutes. Change that under **Settings → Sync** (Off, 5m, 10m, 30m, 1h) or in `config.toml`:
+
+```toml
+[sync]
+interval_minutes = 10   # 0 turns it off
+```
+
+An automatic sync never overlaps a running one, is quiet (no toasts unless it starts failing, and then only once) and only appears in the audit log as `sync.auto` when it found changes or failed. After failures it waits longer (double each time, up to an hour) and goes back to normal after a success. A manual sync restarts the timer. The "Sync now" suggestion on Home appears when the last sync is two intervals old (at least six minutes).
+
 ## Sync logs
 
 Every sync writes a raw log of what it asked Jira for and what came back: the `acli` commands, their exit codes and timings, and the output as `acli` printed it. One file per run, named by its start time in UTC (`sync-20261001-094012.log`; the app lists runs in your local time), in `<data dir>/logs` (on macOS `~/Library/Application Support/Umbra.de/logs`).

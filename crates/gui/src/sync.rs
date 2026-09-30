@@ -23,6 +23,9 @@ pub struct SyncDone {
     pub tickets: Result<Vec<Ticket>, String>,
     /// Jira could not be used because the login is missing or the tool is not installed.
     pub jira_unavailable: bool,
+    /// Something was read in full or removed, or something failed: worth a line in the audit log when the sync
+    /// was automatic.
+    pub changed: bool,
 }
 
 /// Sync Jira into `cache`, then read every ticket back.
@@ -52,10 +55,16 @@ pub fn sync_now(
                 if matches!(p.kind, ProviderErrorKind::NotAuthenticated | ProviderErrorKind::NotInstalled)
         )
     });
+    let changed = !report.is_ok()
+        || report
+            .sources
+            .iter()
+            .any(|s| s.counts.details > 0 || s.counts.removed > 0);
     SyncDone {
         report: describe(&report),
         tickets: tickets::load(state, cache, config).map_err(|e| format!("{e:#}")),
         jira_unavailable,
+        changed,
     }
 }
 
@@ -74,6 +83,7 @@ pub fn sync_real(now: i64) -> SyncDone {
             report: vec![(false, "Jira (acli)".into(), format!("local error: {e:#}"))],
             tickets: Err(format!("{e:#}")),
             jira_unavailable: false,
+            changed: true,
         },
     }
 }

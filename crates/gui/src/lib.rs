@@ -14,6 +14,7 @@ pub mod audit;
 pub mod localtime;
 pub mod logs;
 pub mod mapping;
+pub mod schedule;
 pub mod store;
 pub mod sync;
 pub mod tickets;

@@ -33,6 +33,10 @@ pub struct Sim {
     pub(crate) sims: Sims,
     pub(crate) ws: Workspace,
     pub(crate) wait_min: u32,
+    /// Minutes between automatic syncs (0 is off) and after how many minutes without one the window calls the
+    /// data stale.
+    pub(crate) sync_minutes: u32,
+    pub(crate) stale_sync_min: i64,
     /// The editable Jira mapping; a key that is absent is unset.
     pub(crate) mapping: BTreeMap<MappingKey, String>,
     pub(crate) tickets: Vec<Ticket>,
@@ -82,6 +86,8 @@ impl Sim {
                 up: true,
             },
             wait_min: 30,
+            sync_minutes: 10,
+            stale_sync_min: 6,
             mapping: [
                 (MappingKey::ReviewJql, "project = PROJ AND status = \"In Review\""),
                 (MappingKey::AccountId, "acct-0001"),
@@ -183,6 +189,12 @@ impl Sim {
     /// What minute of the day it is now (local time), for the times the audit log and waits show.
     pub fn set_start_minute_of_day(&mut self, minute: i64) {
         self.start_min = minute.rem_euclid(24 * 60);
+    }
+
+    /// The interval the status and the stale-sync suggestion follow.
+    pub fn set_sync_interval(&mut self, minutes: u32, stale_after_min: i64) {
+        self.sync_minutes = minutes;
+        self.stale_sync_min = stale_after_min;
     }
 
     pub fn set_jira_ready(&mut self, ready: bool) {
