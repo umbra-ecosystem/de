@@ -853,20 +853,19 @@ mod tests {
     }
 
     #[test]
-    fn next_starts_with_what_someone_is_waiting_on_and_offers_the_hotfix() {
+    fn next_leads_with_the_hotfix_then_actions_then_what_is_only_information() {
+        // The ordering rules and their tests live in `sim/ranking.rs`; this is the view from the session.
         let s = Session::demo();
         let titles = next_titles(&s);
-        assert!(
-            titles[..3]
-                .iter()
-                .any(|t| t == "Returned: you were mentioned"),
-            "{titles:?}"
-        );
-        assert!(
-            titles.iter().any(|t| t == "Claim PROJ-139"),
+        assert_eq!(
+            titles[0], "Claim PROJ-139",
             "the hotfix can be claimed even with a ticket in hand"
         );
-        assert!(titles.iter().any(|t| t == "Start the review"));
+        assert_eq!(titles[1], "Start the review");
+        assert!(
+            titles[2..].iter().all(|t| t.contains("mentioned")),
+            "only information is left after the actions: {titles:?}"
+        );
     }
 
     #[test]

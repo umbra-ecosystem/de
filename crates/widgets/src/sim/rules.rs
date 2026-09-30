@@ -20,7 +20,9 @@ pub struct Sug {
     pub act: Intent,
     pub alt: Option<(String, Intent)>,
     pub hash: String,
-    pub priority: i32,
+    /// The ticket's Jira priority and its place in the claim queue: inputs to the ranking (`ranking.rs`).
+    pub ticket_priority: Option<Priority>,
+    pub queue: Option<usize>,
     pub rank: usize,
     pub state: SugState,
 }
@@ -92,7 +94,7 @@ impl Rule {
         }
     }
 
-    fn band(self) -> i32 {
+    pub(super) fn band(self) -> i32 {
         match self {
             Rule::StaleLock => 880,
             Rule::ThreadsReturn => 855,
@@ -175,7 +177,7 @@ fn plural(n: usize) -> &'static str {
 }
 
 impl Sim {
-    fn base_sug(
+    pub(super) fn base_sug(
         rule: Rule,
         id: String,
         title: String,
@@ -196,7 +198,8 @@ impl Sim {
             act,
             alt: None,
             hash,
-            priority: 0,
+            ticket_priority: None,
+            queue: None,
             rank: 0,
             state: SugState::Open,
         }
@@ -206,8 +209,13 @@ impl Sim {
     pub(crate) fn suggest(&self) -> Vec<Sug> {
         let mut out: Vec<Sug> = Vec::new();
         let act = self.active_key();
-        let mut push = |mut s: Sug, rank_hint: Option<usize>| {
-            s.priority = s.rule.band() - rank_hint.map_or(0, |r| r as i32 * 10);
+        let mut push = |mut s: Sug, queue: Option<usize>| {
+            s.queue = queue;
+            s.ticket_priority = s
+                .ticket
+                .as_ref()
+                .and_then(|k| self.tk(k))
+                .map(|t| t.priority);
             out.push(s);
         };
 
@@ -871,13 +879,9 @@ impl Sim {
             push(s, Some(i));
         }
 
-        // hotfix boost and adapter availability
+        // A write whose tool is signed out becomes a notice about the tool instead.
         let mut res: Vec<Sug> = Vec::new();
         for s in out {
-            let mut p = s.priority;
-            if s.hotfix && s.priority >= 400 && s.rule != Rule::ParkActive {
-                p += 200;
-            }
             if let Some(n) = s.needs {
                 let ready = match n {
                     Needs::Jira => self.jira_ready,
@@ -902,18 +906,19 @@ impl Sim {
                         act: Intent::Go(Route::Settings),
                         alt: None,
                         hash: "ad".to_string(),
-                        priority: 299,
+                        ticket_priority: s.ticket_priority,
+                        queue: None,
                         rank: 0,
                         state: SugState::Open,
                     });
                     continue;
                 }
             }
-            res.push(Sug { priority: p, ..s });
+            res.push(s);
         }
         let mut seen = std::collections::BTreeSet::new();
         res.retain(|s| seen.insert(s.id.clone()));
-        res.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
+        res.sort_by(super::ranking::compare);
         for (i, s) in res.iter_mut().enumerate() {
             s.rank = i + 1;
             s.state = self.sug_state(s);
@@ -955,7 +960,7 @@ impl Sim {
             .into_iter()
             .filter(|s| !s.info && (s.rule.needs_attention() || s.hotfix))
             .collect();
-        v.sort_by_key(|s| std::cmp::Reverse(s.priority));
+        v.sort_by(super::ranking::compare);
         v
     }
 }

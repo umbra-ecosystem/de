@@ -8,6 +8,7 @@ mod detail;
 mod lifecycle;
 pub mod model;
 mod queries;
+mod ranking;
 mod rules;
 mod store_impl;
 
