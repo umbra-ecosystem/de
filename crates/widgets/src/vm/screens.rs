@@ -790,3 +790,112 @@ pub struct LogsVm {
     /// The selected log, one entry per line. Shared so a frame does not copy a large file.
     pub lines: std::rc::Rc<Vec<String>>,
 }
+
+/* ------------------------------ workspaces ------------------------------ */
+
+/// One saved workspace, as the picker and the workspace list show it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WorkspaceItemVm {
+    pub name: WorkspaceName,
+    /// Its projects (repos), in the order they start. A workspace can span several folders, so these and not a
+    /// directory say what it is.
+    pub projects: Vec<String>,
+    pub repos: u32,
+    /// Its services are running.
+    pub up: bool,
+    /// The one this window has open.
+    pub current: bool,
+    /// `3h ago`, or `never` for one that has not been opened.
+    pub last_used: String,
+}
+
+/// The saved workspaces, most recently used first, and which one (if any) is selected.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WorkspacesVm {
+    pub current: Option<WorkspaceName>,
+    pub items: Vec<WorkspaceItemVm>,
+}
+
+/// What is shown when no workspace is selected (and from the workspace list): the state of the tools, the saved
+/// workspaces and how to make one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WelcomeVm {
+    pub providers: Vec<ProviderVm>,
+    pub workspaces: Vec<WorkspaceItemVm>,
+    /// The command that creates a workspace.
+    pub init_command: String,
+    pub current: Option<WorkspaceName>,
+}
+
+/// The workspace menu of the title bar.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PickerVm {
+    /// What is typed in the search field.
+    pub query: String,
+    /// The open workspace, when it matches the search.
+    pub current: Option<WorkspaceItemVm>,
+    /// The others, most recently used first, narrowed by the search.
+    pub recent: Vec<WorkspaceItemVm>,
+    /// How many saved workspaces there are before the search narrows them.
+    pub total: usize,
+    pub init_command: String,
+}
+
+/* ------------------------------ opening and closing ------------------------------ */
+
+/// Where one step of a sequence is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProgressState {
+    Waiting,
+    Running,
+    Done,
+    /// It ran and went wrong; what to do is in the detail.
+    Failed,
+    /// It was not run because something before it made it pointless; the detail says what.
+    Skipped,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct StepVm {
+    pub label: String,
+    /// The result once there is one (`develop, clean`, `3 services`, why it failed); empty while waiting.
+    pub detail: String,
+    pub state: ProgressState,
+}
+
+/// One half of a sequence: a switch is `Closing a` then `Opening b`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PhaseVm {
+    pub title: String,
+    pub steps: Vec<StepVm>,
+}
+
+/// How a sequence stands. Only `Running` keeps the modal from being left.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SequenceState {
+    Running,
+    /// Everything went fine; the modal closes by itself after a short beat.
+    Ready,
+    /// Finished with something failed: the person decides.
+    NeedsDecision,
+}
+
+/// The opening/closing modal: what is being done to which workspace and how far it has got.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SequenceVm {
+    pub title: String,
+    pub phases: Vec<PhaseVm>,
+    pub state: SequenceState,
+    /// `4 of 9`.
+    pub progress: String,
+    /// What the footer offers once the sequence is not running; empty while it runs.
+    pub actions: Vec<Btn>,
+}
+
+/// The modal listing every saved workspace, with a search.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AllWorkspacesVm {
+    pub query: String,
+    pub items: Vec<WorkspaceItemVm>,
+    pub total: usize,
+}

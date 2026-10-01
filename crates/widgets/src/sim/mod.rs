@@ -10,9 +10,12 @@ pub mod model;
 mod queries;
 mod ranking;
 mod rules;
+mod sequence;
 mod store_impl;
+mod worlds;
 
 pub use rules::{Rule, Sug};
+pub use worlds::open_intent;
 
 use std::collections::BTreeMap;
 
@@ -46,6 +49,11 @@ pub struct Sim {
     /// The audit log is kept elsewhere (a real store persists it); the simulation then neither adds to it nor
     /// loses it.
     pub(crate) audit_external: bool,
+    /// The saved workspaces and which one is open (its world is the live one above); see `worlds`.
+    pub(crate) saved: Vec<worlds::Saved>,
+    pub(crate) open_ws: Option<usize>,
+    /// Opening or closing a workspace in progress, or waiting for a decision; see `sequence`.
+    pub(crate) wseq: Option<sequence::Seq>,
     pub(crate) responses: Responses,
     pub(crate) repos: Vec<RepoCfg>,
     pub(crate) toasts: Vec<(String, ToastKind)>,
@@ -101,6 +109,9 @@ impl Sim {
             tickets: data::seed_tickets(),
             audit: Vec::new(),
             audit_external: false,
+            saved: worlds::seed_saved(),
+            open_ws: Some(0),
+            wseq: None,
             responses: Responses::new(),
             repos: repos(),
             toasts: Vec::new(),

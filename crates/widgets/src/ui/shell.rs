@@ -81,10 +81,273 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
         .w_full()
         .pr_3()
         .child(div().child("de"))
+        .child(workspace_button(ui, vm))
         .child(simulate)
         .child(div().flex_1())
         .child(attention)
         .child(panel)
+}
+
+/// The title bar of the page before the dock: just the app name beside the window controls.
+pub fn title_bar_minimal() -> Div {
+    div().flex().items_center().w_full().child(div().child("de"))
+}
+
+/// The title bar's workspace button: the open workspace's name (or a prompt when there is none) and a chevron.
+fn workspace_button(ui: &Ui, vm: &AppVm) -> Button {
+    let pal = &ui.pal;
+    Button::new("workspace")
+        .ghost()
+        .small()
+        .label(vm.workspace.label.clone())
+        .icon(IconName::ChevronDown)
+        .text_color(if vm.workspace.none { pal.warn } else { pal.fg })
+        .selected(vm.picker.is_some())
+        .tooltip("Switch workspace")
+        .on_click(ui.on_click(Intent::ToggleWorkspacePicker))
+}
+
+/// One workspace in the menu: its name, what it holds, when it was last used and a check when it is the open one.
+fn workspace_row(ui: &Ui, w: &WorkspaceItemVm) -> Stateful<Div> {
+    let pal = &ui.pal;
+    div()
+        .id(hash_id("ws-pick", &w.name))
+        .flex()
+        .items_center()
+        .gap_2()
+        .h_8()
+        .px_3()
+        .rounded_md()
+        .cursor_pointer()
+        .hover(|d| d.bg(pal.hover))
+        .on_click(ui.on_click(Intent::Do(Command::SelectWorkspace(w.name.clone()))))
+        .child(div().flex_1().min_w_0().truncate().text_sm().child(w.name.to_string()))
+        .when(w.up, |d| d.child(dot(pal.ok)))
+        .child(faint(pal, w.last_used.clone()))
+        .when(w.current, |d| {
+            d.child(Icon::new(IconName::Check).small().text_color(pal.accent))
+        })
+}
+
+/// A workspace in the modal that lists them all: its name and its projects on one line, and when it was last used.
+fn all_workspaces_row(ui: &Ui, w: &WorkspaceItemVm) -> Stateful<Div> {
+    let pal = &ui.pal;
+    div()
+        .id(hash_id("all-ws", &w.name))
+        .flex()
+        .items_center()
+        .gap_3()
+        .h_9()
+        .px_2()
+        .rounded_md()
+        .cursor_pointer()
+        .hover(|d| d.bg(pal.hover))
+        .on_click(ui.on_click(Intent::Do(Command::SelectWorkspace(w.name.clone()))))
+        .child(div().flex_none().w(px(120.0)).truncate().text_sm().child(w.name.to_string()))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_xs()
+                .text_color(pal.muted)
+                .child(w.projects.join(" \u{b7} ")),
+        )
+        .when(w.up, |d| d.child(dot(pal.ok)))
+        .child(faint(pal, w.last_used.clone()))
+        .when(w.current, |d| d.child(Icon::new(IconName::Check).small().text_color(pal.accent)))
+}
+
+/// One step of a sequence: a mark for where it is, what it does, and its result on the right.
+fn step_row(ui: &Ui, st: &StepVm) -> Div {
+    let pal = &ui.pal;
+    let mark = match st.state {
+        ProgressState::Waiting => div().size_1p5().rounded_full().bg(pal.faint.opacity(0.6)).into_any_element(),
+        ProgressState::Running => gpui_kit::component::spinner::Spinner::new()
+            .xsmall()
+            .color(pal.accent)
+            .into_any_element(),
+        ProgressState::Done => Icon::new(IconName::Check).small().text_color(pal.ok).into_any_element(),
+        ProgressState::Failed => Icon::new(IconName::TriangleAlert).small().text_color(pal.bad).into_any_element(),
+        ProgressState::Skipped => div().text_color(pal.faint).child("\u{2013}").into_any_element(),
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap_3()
+        .min_h_6()
+        .child(div().flex_none().w(px(16.0)).flex().justify_center().child(mark))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_sm()
+                .text_color(match st.state {
+                    ProgressState::Waiting | ProgressState::Skipped => pal.faint,
+                    _ => pal.fg,
+                })
+                .child(st.label.clone()),
+        )
+        .when(!st.detail.is_empty(), |d| {
+            d.child(
+                div()
+                    .flex_none()
+                    .max_w(px(260.0))
+                    .text_xs()
+                    .text_right()
+                    .text_color(if st.state == ProgressState::Failed { pal.bad } else { pal.muted })
+                    .child(st.detail.clone()),
+            )
+        })
+}
+
+/// The modal that opens or closes a workspace: what is being done, step by step. Nothing can close it while it
+/// runs; when it has stopped it offers what is left to decide.
+pub fn sequence_modal(ui: &Ui, q: &SequenceVm) -> Div {
+    let pal = &ui.pal;
+    let running = q.state == SequenceState::Running;
+    let several = q.phases.len() > 1;
+    let footer = match q.state {
+        SequenceState::Running => div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .w_full()
+            .child(faint(pal, "This cannot be closed while it runs."))
+            .child(faint(pal, q.progress.clone())),
+        SequenceState::Ready => div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .w_full()
+            .child(div().text_sm().text_color(pal.ok).child("Ready"))
+            .child(faint(pal, q.progress.clone())),
+        SequenceState::NeedsDecision => div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .w_full()
+            .gap_3()
+            .child(div().flex_1().min_w_0().child(faint(pal, "Something went wrong. You decide what happens next.")))
+            .child(div().flex().flex_none().gap_2().children(q.actions.iter().map(|a| button(ui, a)))),
+    };
+    sheet_frame_with(
+        ui,
+        520.0,
+        div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(div().child(q.title.clone()))
+            .when(running, |d| d.child(faint(pal, "\u{2026}"))),
+        div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .children(q.phases.iter().map(|ph| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .when(several, |d| {
+                        d.child(div().text_xs().text_color(pal.muted).child(ph.title.clone()))
+                    })
+                    .children(ph.steps.iter().map(|s| step_row(ui, s)))
+            })),
+        footer,
+        None,
+    )
+}
+
+/// The workspace menu, hanging from the title bar: search, the open workspace, the others by recency, and how to
+/// make a new one.
+pub fn workspace_picker(ui: &Ui, inputs: &Inputs, p: &PickerVm) -> Div {
+    let pal = &ui.pal;
+    let label = |text: &str| div().px_3().pt_2().pb_1().text_xs().text_color(pal.muted).child(text.to_string());
+    let none_match = p.current.is_none() && p.recent.is_empty();
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .child(scrim(ui, Intent::ToggleWorkspacePicker, false))
+        .child(
+            div()
+                .absolute()
+                .top(px(40.0))
+                .left(px(12.0))
+                .w(px(380.0))
+                .max_h(px(560.0))
+                .occlude()
+                .flex()
+                .flex_col()
+                .rounded_lg()
+                .border_1()
+                .border_color(pal.border)
+                .bg(pal.bg)
+                .shadow_lg()
+                .child(div().p_2().border_b_1().border_color(pal.border.opacity(0.6)).child(inputs.line(&Field::WorkspaceSearch)))
+                .child(
+                    div()
+                        .id("ws-list")
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .p_1()
+                        .when_some(p.current.clone(), |d, w| {
+                            d.child(label("This window")).child(workspace_row(ui, &w))
+                        })
+                        .when(!p.recent.is_empty(), |d| {
+                            d.child(label("Recent workspaces"))
+                                .children(p.recent.iter().map(|w| workspace_row(ui, w)))
+                        })
+                        .when(none_match, |d| {
+                            d.child(div().px_3().py_3().child(muted(
+                                pal,
+                                if p.total == 0 {
+                                    "No workspaces yet.".to_string()
+                                } else {
+                                    format!("Nothing called \u{201c}{}\u{201d}.", p.query.trim())
+                                },
+                            )))
+                        }),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .px_3()
+                        .py_2()
+                        .border_t_1()
+                        .border_color(pal.border.opacity(0.6))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .text_xs()
+                                .text_color(pal.muted)
+                                .child("Create one with")
+                                .child(
+                                    div()
+                                        .font_family(ui.mono.clone())
+                                        .text_color(pal.fg)
+                                        .child(p.init_command.clone()),
+                                ),
+                        )
+                        .when(p.current.is_some(), |d| {
+                            d.child(button_ghost(
+                                ui,
+                                &Btn::new("Close workspace", Intent::Do(Command::CloseWorkspace)),
+                            ))
+                        }),
+                ),
+        )
 }
 
 /* ------------------------------ navigation ------------------------------ */
@@ -499,6 +762,18 @@ pub fn status_bar(ui: &Ui, s: &StatusVm) -> Div {
 
 /* ------------------------------ overlays ------------------------------ */
 
+/// A dimmed backdrop that swallows clicks and does nothing with them.
+fn scrim_inert(ui: &Ui) -> Stateful<Div> {
+    div()
+        .id("scrim-inert")
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .occlude()
+        .bg(ui.pal.bg.opacity(0.7))
+}
+
 fn scrim(ui: &Ui, intent: Intent, dim: bool) -> Stateful<Div> {
     div()
         .id("scrim")
@@ -639,13 +914,29 @@ pub fn toasts(ui: &Ui, toasts: &[Toast]) -> Div {
 /* ------------------------------ sheets ------------------------------ */
 
 fn sheet_frame(ui: &Ui, width: f32, title: Div, body: Div, footer: Div) -> Div {
+    sheet_frame_with(ui, width, title, body, footer, Some(Intent::CancelSheet))
+}
+
+/// A modal frame. `dismiss` is what a click outside it does; `None` makes the modal impossible to leave by clicking
+/// away (a sequence that is running).
+fn sheet_frame_with(
+    ui: &Ui,
+    width: f32,
+    title: Div,
+    body: Div,
+    footer: Div,
+    dismiss: Option<Intent>,
+) -> Div {
     let pal = &ui.pal;
     div()
         .absolute()
         .top_0()
         .left_0()
         .size_full()
-        .child(scrim(ui, Intent::CancelSheet, true))
+        .child(match dismiss {
+            Some(intent) => scrim(ui, intent, true).into_any_element(),
+            None => scrim_inert(ui).into_any_element(),
+        })
         .child(
             div()
                 .absolute()
@@ -993,6 +1284,36 @@ pub fn sheet(ui: &Ui, cx: &App, inputs: &Inputs, sheet: &SheetVm) -> Div {
                 ))
                 .child(code_block(pal, cx, text.clone())),
             div().flex().child(button(ui, &Btn::new("Close", Intent::CancelSheet).primary())),
+        ),
+        SheetVm::AllWorkspaces(a) => sheet_frame(
+            ui,
+            520.0,
+            div().child("All workspaces"),
+            div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(inputs.line(&Field::WorkspaceSearch))
+                .child(
+                    div()
+                        .id("all-workspaces")
+                        .flex()
+                        .flex_col()
+                        .max_h(px(360.0))
+                        .overflow_y_scroll()
+                        .children(a.items.iter().map(|w| all_workspaces_row(ui, w)))
+                        .when(a.items.is_empty(), |d| {
+                            d.child(div().py_3().child(muted(
+                                pal,
+                                if a.total == 0 {
+                                    "No workspaces yet.".to_string()
+                                } else {
+                                    format!("Nothing matches \u{201c}{}\u{201d}.", a.query.trim())
+                                },
+                            )))
+                        }),
+                ),
+            div().child(button_ghost(ui, &Btn::new("Close", Intent::CancelSheet))),
         ),
         SheetVm::CloseTab(key) => sheet_frame(
             ui,

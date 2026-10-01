@@ -57,6 +57,7 @@ pub enum ScreenVm {
     Workspace(WorkspaceVm),
     Audit(Vec<AuditRow>),
     Logs(LogsVm),
+    Welcome(WelcomeVm),
     Settings(SettingsVm),
     Missing(String),
 }
@@ -92,6 +93,8 @@ pub enum SheetVm {
     },
     Diagnose(String),
     CloseTab(TicketKey),
+    /// Every saved workspace, searchable: the landing page shows only a few.
+    AllWorkspaces(AllWorkspacesVm),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -100,6 +103,10 @@ pub struct AppVm {
     pub nav: Vec<NavSection>,
     pub tabs: Vec<ShellTab>,
     pub status: StatusVm,
+    /// The title bar's workspace button.
+    pub workspace: WorkspaceChip,
+    /// The workspace menu, when open.
+    pub picker: Option<PickerVm>,
     pub attention_count: usize,
     pub attention: Option<AttentionVm>,
     pub simulate: Option<Vec<SimGroup>>,
@@ -109,7 +116,18 @@ pub struct AppVm {
     pub theme: ThemeChoice,
     pub screen: ScreenVm,
     pub sheet: Option<SheetVm>,
+    /// Opening or closing a workspace is in progress or waiting for a decision: a modal nothing else can be done
+    /// beside.
+    pub sequence: Option<SequenceVm>,
     pub toasts: Vec<Toast>,
+}
+
+/// The title bar's workspace button: the open workspace's name, or a prompt to pick one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WorkspaceChip {
+    pub label: String,
+    /// No workspace is open.
+    pub none: bool,
 }
 
 /// The text a field currently holds, for the views to put into their inputs.

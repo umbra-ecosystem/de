@@ -1042,7 +1042,7 @@ impl Store for Sim {
                 .unwrap_or_default(),
             Route::Next => self.right_next(),
             // These screens are themselves the record; a side panel of the same rows would only echo them.
-            Route::Audit | Route::Logs => Vec::new(),
+            Route::Audit | Route::Logs | Route::Welcome => Vec::new(),
             _ => {
                 let mut out: Vec<RightSection> = self.sync_section().into_iter().collect();
                 out.push(RightSection {
@@ -1056,6 +1056,34 @@ impl Store for Sim {
 
     fn palette(&self, query: &str) -> Vec<PaletteItem> {
         let q = query.trim().to_lowercase();
+        if self.open_ws.is_none() {
+            // Nothing of a workspace to go to: open one, or look at what does not need one.
+            let mut items = vec![PaletteItem {
+                label: "Workspaces".into(),
+                hint: "screen".into(),
+                intent: Intent::Go(Route::Welcome),
+            }];
+            items.extend(self.workspaces_vm().items.into_iter().map(|w| PaletteItem {
+                label: format!("Open {}", w.name),
+                hint: "workspace".into(),
+                intent: super::worlds::open_intent(&w.name),
+            }));
+            items.push(PaletteItem {
+                label: "Sync logs".into(),
+                hint: "screen".into(),
+                intent: Intent::Go(Route::Logs),
+            });
+            items.push(PaletteItem {
+                label: "Settings".into(),
+                hint: "screen".into(),
+                intent: Intent::Go(Route::Settings),
+            });
+            return items
+                .into_iter()
+                .filter(|i| q.is_empty() || i.label.to_lowercase().contains(&q))
+                .take(12)
+                .collect();
+        }
         let mut items = vec![
             PaletteItem {
                 label: "Home".into(),
@@ -1068,6 +1096,18 @@ impl Store for Sim {
                 intent: cmd(Command::Sync),
             },
         ];
+        items.push(PaletteItem {
+            label: "Switch workspace…".into(),
+            hint: "action".into(),
+            intent: Intent::ToggleWorkspacePicker,
+        });
+        for w in self.workspaces_vm().items.into_iter().filter(|w| !w.current) {
+            items.push(PaletteItem {
+                label: format!("Open {}", w.name),
+                hint: "workspace".into(),
+                intent: super::worlds::open_intent(&w.name),
+            });
+        }
         for g in Group::LIST {
             items.push(PaletteItem {
                 label: g.label().to_string(),
@@ -1275,6 +1315,22 @@ impl Store for Sim {
         }
     }
 
+    fn workspaces(&self) -> WorkspacesVm {
+        self.workspaces_vm()
+    }
+
+    fn sequence(&self) -> Option<SequenceVm> {
+        self.sequence_vm()
+    }
+
+    fn all_workspaces(&self, query: &str) -> AllWorkspacesVm {
+        self.all_workspaces_vm(query)
+    }
+
+    fn welcome(&self) -> WelcomeVm {
+        self.welcome_vm(self.settings().providers)
+    }
+
     fn workspace(&self) -> WorkspaceVm {
         let active = self.active_key().and_then(|k| self.tk(&k));
         let rows = self
@@ -1322,7 +1378,9 @@ impl Store for Sim {
             })
             .collect();
         WorkspaceVm {
-            name: "shop".to_string(),
+            name: self
+                .current_workspace()
+                .map_or_else(String::new, |n| n.to_string()),
             up: self.ws.up,
             order: "db → api → web".to_string(),
             rows,
@@ -1462,6 +1520,11 @@ impl Store for Sim {
                         "Offline",
                         self.sims.offline,
                         SimEvent::Offline(!self.sims.offline),
+                    ),
+                    b(
+                        "Docker is not running",
+                        self.sims.docker_down,
+                        SimEvent::DockerDown(!self.sims.docker_down),
                     ),
                     b(
                         "uat conflict in web",
@@ -1614,6 +1677,10 @@ impl Store for Sim {
 
     fn tick(&mut self, millis: i64) -> Vec<(String, ToastKind)> {
         self.advance(millis);
+        // A store on real time drives the sequence itself (its `millis` are scaled); the showcase's are real.
+        if self.wall_start.is_none() {
+            self.progress_sequence(millis);
+        }
         std::mem::take(&mut self.toasts)
     }
 }
@@ -1764,6 +1831,11 @@ impl Sim {
                 self.mapping.clear();
                 Outcome::ok().with_toast("Jira mapping reset to defaults", ToastKind::Ok, None)
             }
+            Command::SelectWorkspace(name) => self.start_select(name),
+            Command::CloseWorkspace => self.start_close(),
+            Command::ContinueSequence => self.continue_sequence(),
+            Command::RetrySequence => self.retry_sequence(),
+            Command::AbortSequence => self.abort_sequence(),
             Command::StartWorkspace => {
                 self.ws.up = true;
                 self.ok("workspace.start", None, None, "");

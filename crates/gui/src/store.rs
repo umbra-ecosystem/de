@@ -328,6 +328,20 @@ impl Store for CoreStore {
             Err(e) => format!("The log folder could not be found: {e:#}"),
         }
     }
+    // The workspace list is still the widgets' simulation: selecting and isolating real workspaces is not
+    // connected to the engine yet. The tools shown are the real ones.
+    fn workspaces(&self) -> WorkspacesVm {
+        self.sim.workspaces_vm()
+    }
+    fn welcome(&self) -> WelcomeVm {
+        self.sim.welcome_vm(self.settings().providers)
+    }
+    fn sequence(&self) -> Option<SequenceVm> {
+        self.sim.sequence_vm()
+    }
+    fn all_workspaces(&self, query: &str) -> AllWorkspacesVm {
+        self.sim.all_workspaces_vm(query)
+    }
     fn simulate(&self) -> Vec<SimGroup> {
         self.sim.simulate()
     }
@@ -382,6 +396,8 @@ impl Store for CoreStore {
         let (sim_ms, carry) = to_sim_ms(self.carry_ms, millis);
         self.carry_ms = carry;
         toasts.extend(self.sim.tick(sim_ms));
+        // Steps take real time, not the scaled simulation clock.
+        self.sim.progress_sequence(millis);
         toasts
     }
 }

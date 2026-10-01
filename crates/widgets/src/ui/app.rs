@@ -86,6 +86,9 @@ fn needs(vm: &AppVm) -> Vec<Need> {
             add(Field::Mapping(r.key), false, r.key.placeholder());
         }
     }
+    if vm.picker.is_some() || matches!(vm.sheet, Some(SheetVm::AllWorkspaces(_))) {
+        add(Field::WorkspaceSearch, false, "Search workspaces…");
+    }
     match &vm.sheet {
         Some(SheetVm::Confirm { preview, .. }) if preview.type_key.is_some() => {
             add(Field::TypedKey, false, "type the key");
@@ -105,6 +108,8 @@ fn focus_token(vm: &AppVm) -> Option<String> {
         }
         Some(SheetVm::Compose { title, .. }) => Some(format!("compose:{title}")),
         Some(SheetVm::Palette { .. }) => Some("palette".to_string()),
+        Some(SheetVm::AllWorkspaces(_)) => Some("all-workspaces".to_string()),
+        _ if vm.picker.is_some() => Some("workspace-picker".to_string()),
         _ => match &vm.screen {
             ScreenVm::Ticket { body, .. } => match body.as_ref() {
                 TicketBody::Review(ReviewVm {
@@ -128,6 +133,32 @@ fn apply_env(session: &mut Session) {
             _ => {}
         }
     }
+    // `DE_SHOWCASE_WORKSPACE`: `none`, or the name of a saved workspace (`shop`, `threadplay`, `hbt`, `quelle`).
+    if let Ok(w) = std::env::var("DE_SHOWCASE_WORKSPACE") {
+        match w.as_str() {
+            "none" => session.handle(Intent::Do(Command::CloseWorkspace)),
+            name => session.handle(Intent::Do(Command::SelectWorkspace(name.into()))),
+        }
+        // Get there at once rather than watching the steps (`DE_SHOWCASE_OPEN` is for watching them).
+        for _ in 0..400 {
+            session.tick(500);
+        }
+    }
+    // `DE_SHOWCASE_DOCKER_DOWN=1` makes starting services fail; `DE_SHOWCASE_OPEN=<name>` starts opening a
+    // workspace (the modal is up for a few seconds); `DE_SHOWCASE_ALL=1` opens the list of every workspace.
+    if std::env::var("DE_SHOWCASE_DOCKER_DOWN").is_ok() {
+        session.handle(Intent::Do(Command::Sim(SimEvent::DockerDown(true))));
+    }
+    if let Ok(name) = std::env::var("DE_SHOWCASE_OPEN") {
+        session.handle(Intent::Do(Command::SelectWorkspace(name.as_str().into())));
+    }
+    if std::env::var("DE_SHOWCASE_ALL").is_ok() {
+        session.handle(Intent::OpenAllWorkspaces);
+    }
+    // `DE_SHOWCASE_PICKER=1` opens the workspace menu.
+    if std::env::var("DE_SHOWCASE_PICKER").is_ok() {
+        session.handle(Intent::ToggleWorkspacePicker);
+    }
     let Ok(route) = std::env::var("DE_SHOWCASE_ROUTE") else {
         return;
     };
@@ -149,6 +180,7 @@ fn apply_env(session: &mut Session) {
         Some("audit") => Route::Audit,
         Some("logs") => Route::Logs,
         Some("settings") => Route::Settings,
+        Some("welcome") => Route::Welcome,
         Some("ticket") => {
             let key = parts.next().unwrap_or("PROJ-142");
             let tab = match parts.next() {
@@ -334,6 +366,8 @@ impl AppView {
         if token != self.focus_token {
             if token.is_some() {
                 let field = match &vm.sheet {
+                    _ if vm.picker.is_some() && vm.sheet.is_none() => Some(Field::WorkspaceSearch),
+                    Some(SheetVm::AllWorkspaces(_)) => Some(Field::WorkspaceSearch),
                     Some(SheetVm::Compose { .. }) => Some(Field::Compose),
                     Some(SheetVm::Palette { .. }) => Some(Field::Palette),
                     Some(SheetVm::Confirm { .. }) => Some(Field::TypedKey),
@@ -374,6 +408,8 @@ impl AppView {
             ScreenVm::Workspace(v) => env::workspace(ui, v).into_any_element(),
             ScreenVm::Audit(rows) => env::audit(ui, rows).into_any_element(),
             ScreenVm::Logs(v) => env::logs(ui, cx, v).into_any_element(),
+            // Drawn by `render` in place of the dock; never part of it.
+            ScreenVm::Welcome(_) => div().into_any_element(),
             ScreenVm::Settings(v) => env::settings(ui, &self.inputs, v).into_any_element(),
             ScreenVm::Missing(msg) => div().p_8().child(msg.clone()).into_any_element(),
         }
@@ -462,6 +498,10 @@ impl Render for AppView {
         }
         let ui = self.ui(cx, cx.entity().downgrade());
         let pal = ui.pal;
+        let landing = match &vm.screen {
+            ScreenVm::Welcome(w) => Some(w),
+            _ => None,
+        };
         div()
             .key_context("Showcase")
             .track_focus(&self.focus)
@@ -480,9 +520,20 @@ impl Render for AppView {
             .bg(pal.bg)
             .text_color(pal.fg)
             .text_sm()
-            .child(TitleBar::new().child(shell::title_bar_content(&ui, &vm, vm.simulate.is_some())))
-            .child(div().flex_1().min_h_0().child(self.area.clone()))
-            .child(shell::status_bar(&ui, &vm.status))
+            .child(TitleBar::new().child(if landing.is_some() {
+                shell::title_bar_minimal()
+            } else {
+                shell::title_bar_content(&ui, &vm, vm.simulate.is_some())
+            }))
+            // With no workspace open there is no dock: a centred page comes first.
+            .child(match landing {
+                Some(w) => div().flex_1().min_h_0().child(env::landing(&ui, w)),
+                None => div().flex_1().min_h_0().child(self.area.clone()),
+            })
+            .when(landing.is_none(), |d| d.child(shell::status_bar(&ui, &vm.status)))
+            .when_some(vm.picker.as_ref(), |d, p| {
+                d.child(shell::workspace_picker(&ui, &self.inputs, p))
+            })
             .when_some(vm.attention.as_ref(), |d, a| {
                 d.child(shell::attention_panel(&ui, a))
             })
@@ -491,6 +542,9 @@ impl Render for AppView {
             })
             .when_some(vm.sheet.as_ref(), |d, s| {
                 d.child(shell::sheet(&ui, cx, &self.inputs, s))
+            })
+            .when_some(vm.sequence.as_ref(), |d, q| {
+                d.child(shell::sequence_modal(&ui, q))
             })
             .child(shell::toasts(&ui, &vm.toasts))
     }

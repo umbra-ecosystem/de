@@ -1580,6 +1580,7 @@ impl Sim {
                 }
             }
             SimEvent::SkipMinutes(m) => self.advance(i64::from(*m) * MS_PER_MIN),
+            SimEvent::DockerDown(on) => self.sims.docker_down = *on,
         }
         Outcome::ok()
     }

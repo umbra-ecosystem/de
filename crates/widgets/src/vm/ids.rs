@@ -83,6 +83,10 @@ name_type!(
     Branch
 );
 name_type!(
+    /// A saved workspace, by its name (what `de init` created).
+    WorkspaceName
+);
+name_type!(
     /// A comment draft.
     DraftId
 );

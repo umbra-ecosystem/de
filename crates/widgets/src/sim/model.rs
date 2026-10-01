@@ -898,9 +898,11 @@ pub struct Sims {
     pub leak: Option<RepoName>,
     pub uat_moved: bool,
     pub fail_deploy: Option<RepoName>,
+    /// Docker is not running: starting or stopping services fails.
+    pub docker_down: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Workspace {
     pub branches: BTreeMap<RepoName, Branch>,
     pub dirty: BTreeSet<RepoName>,

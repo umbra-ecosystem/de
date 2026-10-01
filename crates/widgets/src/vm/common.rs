@@ -195,6 +195,17 @@ pub enum Route {
     /// Raw logs of sync runs.
     Logs,
     Settings,
+    /// The saved workspaces and the tools' state: what is shown when no workspace is selected, and the list to
+    /// pick one from.
+    Welcome,
+}
+
+impl Route {
+    /// Whether the screen shows a workspace's own data (its tickets, repos, audit log). Those need a workspace to
+    /// be selected; the others (settings, sync logs, the workspace list) do not.
+    pub fn needs_workspace(&self) -> bool {
+        !matches!(self, Route::Settings | Route::Logs | Route::Welcome)
+    }
 }
 
 impl Route {

@@ -275,6 +275,179 @@ pub fn logs(ui: &Ui, cx: &App, v: &LogsVm) -> Div {
     div().flex().size_full().child(list).child(viewer)
 }
 
+/// The state of the tools the app talks to (Jira, GitHub), with the buttons to re-check them. On the settings page
+/// and on the screen shown with no workspace open.
+fn providers_band(ui: &Ui, providers: &[ProviderVm], first: bool) -> Div {
+    let pal = &ui.pal;
+    band(
+        pal,
+        first,
+        "Tools",
+        div()
+            .flex()
+            .flex_col()
+            .border_t_1()
+            .border_color(pal.border.opacity(0.4))
+            .children(providers.iter().map(|p| {
+                row(pal)
+                    .child(div().text_sm().child(p.name.clone()))
+                    .child(
+                        div()
+                            .font_family(ui.mono.clone())
+                            .text_xs()
+                            .text_color(pal.faint)
+                            .child(p.version.clone()),
+                    )
+                    .child(div().flex_1())
+                    .child(if p.ready {
+                        faint(pal, "ready").into_any_element()
+                    } else {
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(pill(pal, &Badge::new("signed out", Tone::Warn)))
+                            .child(faint(pal, format!("run {}", p.login_hint)))
+                            .into_any_element()
+                    })
+                    .child(button(ui, &p.toggle))
+            }))
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .px_4()
+                    .py_3()
+                    .child(button(
+                        ui,
+                        &Btn::new("Re-check", Intent::Do(Command::Recheck)),
+                    ))
+                    .child(button(ui, &Btn::new("Diagnose…", Intent::Diagnose))),
+            ),
+    )
+}
+
+/// How many workspaces the landing page lists before offering the rest in a modal.
+pub const LANDING_ROWS: usize = 5;
+
+/// The page before the dock, shown while no workspace is open: centred and bare. A friendly welcome; the most
+/// recently used workspaces, one line each (name, then its projects); how to make one; the state of the tools in
+/// one quiet line each. No navigation, tabs or panels: there is nothing of a workspace to navigate yet.
+pub fn landing(ui: &Ui, v: &WelcomeVm) -> Div {
+    let pal = &ui.pal;
+    let shown = v.workspaces.iter().take(LANDING_ROWS);
+    let more = v.workspaces.len().saturating_sub(LANDING_ROWS);
+    let workspaces = if v.workspaces.is_empty() {
+        div()
+            .py_2()
+            .child(muted(pal, "You have no workspaces yet. Let's make your first one."))
+            .into_any_element()
+    } else {
+        div()
+            .flex()
+            .flex_col()
+            .children(shown.map(|w| {
+                div()
+                    .id(hash_id("landing-ws", &w.name))
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .h(px(40.0))
+                    .px_3()
+                    .rounded_md()
+                    .cursor_pointer()
+                    .hover(|d| d.bg(pal.hover))
+                    .on_click(ui.on_click(Intent::Do(Command::SelectWorkspace(w.name.clone()))))
+                    .child(div().flex_none().w(px(110.0)).truncate().child(w.name.to_string()))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_xs()
+                            .text_color(pal.muted)
+                            .child(if w.projects.is_empty() {
+                                "no projects".to_string()
+                            } else {
+                                w.projects.join(" \u{b7} ")
+                            }),
+                    )
+                    .when(w.up, |d| d.child(dot(pal.ok)))
+                    .child(div().flex_none().text_xs().text_color(pal.faint).child(w.last_used.clone()))
+            }))
+            .when(more > 0, |d| {
+                d.child(
+                    div().pt_1().flex().child(button_ghost(
+                        ui,
+                        &Btn::new(
+                            format!("Show all {} workspaces", v.workspaces.len()),
+                            Intent::OpenAllWorkspaces,
+                        ),
+                    )),
+                )
+            })
+            .into_any_element()
+    };
+    div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .size_full()
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_6()
+                .w(px(460.0))
+                .max_w_full()
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .child(div().text_xl().child("Welcome to de"))
+                        .child(muted(
+                            pal,
+                            "A calm place for your reviews, testing and releases. Pick a workspace and I'll start its services and look over its repos, then show you what needs you.",
+                        )),
+                )
+                .child(workspaces)
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1p5()
+                        .text_xs()
+                        .text_color(pal.muted)
+                        .child(if v.workspaces.is_empty() { "Run" } else { "Need another? Run" })
+                        .child(div().font_family(ui.mono.clone()).text_color(pal.fg).child(v.init_command.clone()))
+                        .child("in the folder with your repos."),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .pt_4()
+                        .border_t_1()
+                        .border_color(pal.border.opacity(0.6))
+                        .children(v.providers.iter().map(|p| {
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .text_xs()
+                                .child(dot(if p.ready { pal.ok } else { pal.warn }))
+                                .child(div().text_color(pal.muted).child(p.name.clone()))
+                                .when(!p.ready, |d| {
+                                    d.child(faint(pal, format!("signed out, run {}", p.login_hint)))
+                                })
+                        })),
+                ),
+        )
+}
+
 pub fn settings(ui: &Ui, inputs: &Inputs, v: &SettingsVm) -> Div {
     let pal = &ui.pal;
     let kv_row = |k: &str, val: String| {
@@ -302,52 +475,7 @@ pub fn settings(ui: &Ui, inputs: &Inputs, v: &SettingsVm) -> Div {
                     .map(|(label, on, intent)| chip(ui, label.clone(), *on, intent.clone())),
             )),
         ))
-        .child(band(
-            pal,
-            false,
-            "Providers",
-            div()
-                .flex()
-                .flex_col()
-                .border_t_1()
-                .border_color(pal.border.opacity(0.4))
-                .children(v.providers.iter().map(|p| {
-                    row(pal)
-                        .child(div().text_sm().child(p.name.clone()))
-                        .child(
-                            div()
-                                .font_family(ui.mono.clone())
-                                .text_xs()
-                                .text_color(pal.faint)
-                                .child(p.version.clone()),
-                        )
-                        .child(div().flex_1())
-                        .child(if p.ready {
-                            faint(pal, "ready").into_any_element()
-                        } else {
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .child(pill(pal, &Badge::new("signed out", Tone::Warn)))
-                                .child(faint(pal, format!("run {}", p.login_hint)))
-                                .into_any_element()
-                        })
-                        .child(button(ui, &p.toggle))
-                }))
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .px_4()
-                        .py_3()
-                        .child(button(
-                            ui,
-                            &Btn::new("Re-check", Intent::Do(Command::Recheck)),
-                        ))
-                        .child(button(ui, &Btn::new("Diagnose…", Intent::Diagnose))),
-                ),
-        ))
+        .child(providers_band(ui, &v.providers, false))
         .child(band(
             pal,
             false,

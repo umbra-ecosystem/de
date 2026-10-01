@@ -111,6 +111,14 @@ pub trait Store {
     fn timeline(&self, key: &TicketKey) -> Vec<AuditRow>;
     fn on_uat(&self) -> OnUatVm;
     fn workspace(&self) -> WorkspaceVm;
+    /// The saved workspaces, most recently used first, and the open one.
+    fn workspaces(&self) -> WorkspacesVm;
+    /// What is shown with no workspace open: tool state, the saved workspaces, how to make one.
+    fn welcome(&self) -> WelcomeVm;
+    /// The opening or closing sequence under way (or waiting for a decision), if any.
+    fn sequence(&self) -> Option<SequenceVm>;
+    /// Every saved workspace matching `query`, for the modal.
+    fn all_workspaces(&self, query: &str) -> AllWorkspacesVm;
     fn audit(&self) -> Vec<AuditRow>;
     fn settings(&self) -> SettingsVm;
     /// The sync logs on disk, newest first, and the line that says how many are kept.

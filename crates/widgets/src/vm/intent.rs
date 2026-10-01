@@ -63,6 +63,8 @@ pub enum SimEvent {
     NewCommits(TicketKey),
     UatAfterPush(TicketKey),
     SkipMinutes(u32),
+    /// Docker is not running: the services steps of a sequence fail.
+    DockerDown(bool),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -189,6 +191,16 @@ pub enum Command {
     },
     /// Clear every Jira mapping setting back to its default. Asks first.
     ResetMapping,
+    /// Open this saved workspace: the tickets, repos and audit log shown are its own.
+    SelectWorkspace(WorkspaceName),
+    /// Close the open workspace, leaving none selected.
+    CloseWorkspace,
+    /// After a sequence with failures: carry on anyway (open the workspace, or close it) with the failures noted.
+    ContinueSequence,
+    /// After a sequence with failures: run it again from the top.
+    RetrySequence,
+    /// After a sequence with failures: give up; the workspace stays as it was.
+    AbortSequence,
     StartWorkspace,
     StopWorkspace,
     ResetDemo,
@@ -231,6 +243,8 @@ pub enum Field {
     NextFilter,
     /// The search box of the ticket table.
     TicketFilter,
+    /// The search box of the workspace menu.
+    WorkspaceSearch,
     /// One of the editable Jira mapping fields on the settings page.
     Mapping(MappingKey),
 }
@@ -242,6 +256,10 @@ pub enum Intent {
     CloseTab(TicketKey),
     ForceCloseTab(TicketKey),
     Diagnose,
+    /// Open or close the workspace menu of the title bar.
+    ToggleWorkspacePicker,
+    /// Open the modal that lists every saved workspace.
+    OpenAllWorkspaces,
     /// Save every edited Jira mapping field in one go.
     SaveMapping,
     /// Put the Jira mapping fields back to what is stored.
@@ -424,6 +442,11 @@ mod tests {
             | Command::SetSyncInterval(_)
             | Command::SaveMapping { .. }
             | Command::ResetMapping
+            | Command::SelectWorkspace(_)
+            | Command::CloseWorkspace
+            | Command::ContinueSequence
+            | Command::RetrySequence
+            | Command::AbortSequence
             | Command::StartWorkspace
             | Command::StopWorkspace
             | Command::ResetDemo
@@ -481,6 +504,8 @@ mod tests {
                 changes: vec![(MappingKey::ReviewStatus, String::new())],
             },
             Command::SetSyncInterval(10),
+            Command::SelectWorkspace("shop".into()),
+            Command::CloseWorkspace,
             Command::ResetMapping,
             Command::Claim(key.clone()),
             Command::Park(key.clone()),

@@ -39,6 +39,8 @@ enum Sheet {
     },
     Diagnose,
     CloseTab(TicketKey),
+    /// The modal that lists every saved workspace.
+    AllWorkspaces,
 }
 
 const TOAST_SECS: f32 = 6.0;
@@ -57,6 +59,8 @@ pub struct Session {
     ticket_filters: TicketFilters,
     ticket_sort: Option<(TicketSort, bool)>,
     attention_open: bool,
+    /// The workspace menu of the title bar is open.
+    picker_open: bool,
     simulate_open: bool,
     right_open: bool,
     theme: ThemeChoice,
@@ -77,10 +81,16 @@ pub struct Session {
 
 impl Session {
     pub fn new(store: Box<dyn Store>) -> Self {
+        // With no workspace open there is nothing of its own to show: start on the list of workspaces.
+        let start = if store.workspaces().current.is_some() {
+            Route::Next
+        } else {
+            Route::Welcome
+        };
         Self {
             store,
-            route: Route::Next,
-            screen: Route::Next,
+            route: start.clone(),
+            screen: start,
             tabs: Vec::new(),
             sheet: None,
             toasts: Vec::new(),
@@ -89,6 +99,7 @@ impl Session {
             ticket_filters: TicketFilters::default(),
             ticket_sort: None,
             attention_open: false,
+            picker_open: false,
             simulate_open: false,
             right_open: true,
             theme: ThemeChoice::System,
@@ -130,7 +141,13 @@ impl Session {
 
     /// Advance by `millis` of real time. One simulated minute passes per four real seconds.
     pub fn tick(&mut self, millis: i64) {
-        for (text, kind) in self.store.tick(millis) {
+        let before = self.store.workspaces().current;
+        let toasts = self.store.tick(millis);
+        // A sequence that has just finished opened or closed a workspace: nothing of the old one may linger.
+        if self.store.workspaces().current != before {
+            self.workspace_changed();
+        }
+        for (text, kind) in toasts {
             self.push_toast(text, kind, None);
         }
         let dt = millis as f32 / 1000.0;
@@ -162,7 +179,36 @@ impl Session {
     /* ---------------------------- intents ---------------------------- */
 
     pub fn handle(&mut self, intent: Intent) {
+        let before = self.store.workspaces().current;
+        self.handle_inner(intent);
+        // Carrying on past a failed sequence changes the workspace here, not on a tick.
+        if self.store.workspaces().current != before {
+            self.workspace_changed();
+        }
+    }
+
+    fn handle_inner(&mut self, intent: Intent) {
+        // Opening or closing a workspace is a modal nothing else can be done beside: only its own choices count,
+        // and only once it has stopped running.
+        if self.store.sequence().is_some()
+            && !matches!(
+                intent,
+                Intent::Do(
+                    Command::ContinueSequence | Command::RetrySequence | Command::AbortSequence
+                )
+                // The showcase's panel for the world outside is not the person using the app.
+                | Intent::ToggleSimulate
+                | Intent::Do(Command::Sim(_))
+            )
+        {
+            return;
+        }
         match intent {
+            Intent::OpenAllWorkspaces => {
+                self.picker_open = false;
+                self.texts.remove(&Field::WorkspaceSearch);
+                self.sheet = Some(Sheet::AllWorkspaces);
+            }
             Intent::Go(route) => self.go(route),
             Intent::OpenTicket(key) => self.go(Route::ticket(key, TicketTab::Overview)),
             Intent::CloseTab(key) => {
@@ -179,6 +225,14 @@ impl Session {
             }
             Intent::Diagnose => self.sheet = Some(Sheet::Diagnose),
             Intent::SelectLog(id) => self.select_log(id),
+            Intent::ToggleWorkspacePicker => {
+                self.picker_open = !self.picker_open;
+                self.texts.remove(&Field::WorkspaceSearch);
+                if self.picker_open {
+                    self.attention_open = false;
+                    self.sheet = None;
+                }
+            }
             Intent::SaveMapping => {
                 let changes = self.mapping_edits();
                 if !changes.is_empty() {
@@ -383,7 +437,25 @@ impl Session {
         self.log_view = Some((id, Rc::new(lines)));
     }
 
+    /// Whether a workspace is open.
+    fn has_workspace(&self) -> bool {
+        self.store.workspaces().current.is_some()
+    }
+
     fn go(&mut self, route: Route) {
+        // What belongs to a workspace cannot be shown without one: the list of workspaces is the way in.
+        let route = if route.needs_workspace() && !self.has_workspace() {
+            Route::Welcome
+        } else {
+            route
+        };
+        // The page before the dock is only for when no workspace is open; with one open, "Workspaces" is the menu.
+        if route == Route::Welcome && self.has_workspace() {
+            self.picker_open = true;
+            self.texts.remove(&Field::WorkspaceSearch);
+            return;
+        }
+        self.picker_open = false;
         if route == Route::Settings && !self.mapping_seeded {
             self.seed_mapping();
         }
@@ -497,6 +569,32 @@ impl Session {
         }
     }
 
+    /// A different workspace is open (or none): nothing of the old one may linger in the window.
+    fn workspace_changed(&mut self) {
+        self.picker_open = false;
+        self.attention_open = false;
+        self.sheet = None;
+        self.tabs.clear();
+        self.show_all = false;
+        self.ticket_filters = TicketFilters::default();
+        self.ticket_sort = None;
+        self.since.clear();
+        self.pr_sel.clear();
+        self.file_sel.clear();
+        self.viewed.clear();
+        self.composer = None;
+        self.seen_snap.clear();
+        // Only settings text is not about a workspace.
+        self.texts.retain(|f, _| matches!(f, Field::Mapping(_)));
+        let start = if self.has_workspace() {
+            Route::Next
+        } else {
+            Route::Welcome
+        };
+        self.route = start.clone();
+        self.screen = start;
+    }
+
     fn apply(&mut self, cmd: &Command, out: Outcome) {
         if matches!(cmd, Command::ResetMapping) && out.is_done() {
             self.seed_mapping();
@@ -606,6 +704,22 @@ impl Session {
             count,
         };
         let list = |g: Group| item(g.label(), Route::Tickets(g), counts.group(g));
+        if !self.has_workspace() {
+            // Nothing of a workspace to navigate: the way in, and what does not need one.
+            return vec![
+                NavSection {
+                    title: String::new(),
+                    items: vec![item("Workspaces", Route::Welcome, 0)],
+                },
+                NavSection {
+                    title: "System".to_string(),
+                    items: vec![
+                        item("Sync logs", Route::Logs, 0),
+                        item("Settings", Route::Settings, 0),
+                    ],
+                },
+            ];
+        }
         vec![
             NavSection {
                 title: String::new(),
@@ -650,6 +764,7 @@ impl Session {
             Route::Audit => "Audit log".to_string(),
             Route::Logs => "Sync logs".to_string(),
             Route::Settings => "Settings".to_string(),
+            Route::Welcome => "Workspaces".to_string(),
             Route::Ticket { key, .. } => key.to_string(),
         };
         let mut out = vec![ShellTab {
@@ -716,6 +831,10 @@ impl Session {
             },
             Sheet::Diagnose => SheetVm::Diagnose(self.store.diagnose()),
             Sheet::CloseTab(key) => SheetVm::CloseTab(key.clone()),
+            Sheet::AllWorkspaces => SheetVm::AllWorkspaces(
+                self.store
+                    .all_workspaces(&self.text(&Field::WorkspaceSearch)),
+            ),
             Sheet::Palette => {
                 let query = self.text(&Field::Palette);
                 SheetVm::Palette {
@@ -784,7 +903,11 @@ impl Session {
     }
 
     fn screen_vm(&self) -> ScreenVm {
+        if self.route.needs_workspace() && !self.has_workspace() {
+            return ScreenVm::Welcome(self.store.welcome());
+        }
         match &self.route {
+            Route::Welcome => ScreenVm::Welcome(self.store.welcome()),
             Route::Next => {
                 let mut n = self.store.next(self.show_all);
                 let q = self.text(&Field::NextFilter).trim().to_lowercase();
@@ -892,6 +1015,8 @@ impl Session {
             nav: self.nav(&counts),
             tabs: self.tab_strip(),
             status: self.store.status(),
+            workspace: self.workspace_chip(),
+            picker: self.picker_open.then(|| self.picker()),
             attention_count: counts.attention,
             attention: self.attention_open.then(|| self.store.attention()),
             simulate: self.simulate_open.then(|| self.store.simulate()),
@@ -906,7 +1031,42 @@ impl Session {
             theme: self.theme,
             screen: self.screen_vm(),
             sheet: self.sheet_vm(),
+            sequence: self.store.sequence(),
             toasts: self.toasts.clone(),
+        }
+    }
+
+    fn workspace_chip(&self) -> WorkspaceChip {
+        match self.store.workspaces().current {
+            Some(name) => WorkspaceChip {
+                label: name.to_string(),
+                none: false,
+            },
+            None => WorkspaceChip {
+                label: "No workspace".to_string(),
+                none: true,
+            },
+        }
+    }
+
+    /// The workspace menu: the open one, then the others most recently used first, narrowed by the search.
+    fn picker(&self) -> PickerVm {
+        let all = self.store.workspaces();
+        let query = self.text(&Field::WorkspaceSearch);
+        let q = query.trim().to_lowercase();
+        let matches = |w: &WorkspaceItemVm| q.is_empty() || w.name.to_lowercase().contains(&q);
+        let total = all.items.len();
+        let (current, recent): (Vec<_>, Vec<_>) = all
+            .items
+            .into_iter()
+            .filter(|w| matches(w))
+            .partition(|w| w.current);
+        PickerVm {
+            query,
+            current: current.into_iter().next(),
+            recent,
+            total,
+            init_command: self.store.welcome().init_command,
         }
     }
 
@@ -949,6 +1109,7 @@ mod tests {
             Some(Sheet::Busy { .. }) => "busy",
             Some(Sheet::Diagnose) => "diagnose",
             Some(Sheet::CloseTab(_)) => "close-tab",
+            Some(Sheet::AllWorkspaces) => "all-workspaces",
         }
     }
 
@@ -1761,6 +1922,462 @@ mod tests {
         assert!(s.view().toasts.iter().any(|t| t.text.contains("off")));
         let labels: Vec<String> = s.store().settings().sync_options.into_iter().map(|o| o.0).collect();
         assert_eq!(labels, ["Off", "5m", "10m", "30m", "1h"]);
+    }
+
+    /// Let the opening or closing sequence run until it has finished or needs a decision.
+    fn settle(s: &mut Session) {
+        for _ in 0..400 {
+            match s.store().sequence() {
+                None => return,
+                Some(q) if q.state == SequenceState::NeedsDecision => return,
+                Some(_) => s.tick(500),
+            }
+        }
+        panic!("the sequence did not finish");
+    }
+
+    /// Select a workspace and wait for it to be open.
+    fn open_ws(s: &mut Session, name: &str) {
+        s.handle(Intent::Do(Command::SelectWorkspace(name.into())));
+        settle(s);
+    }
+
+    fn names(w: &WorkspacesVm) -> Vec<String> {
+        w.items.iter().map(|i| i.name.to_string()).collect()
+    }
+
+    fn ticket_keys(s: &Session) -> Vec<String> {
+        s.store()
+            .tickets(Group::All)
+            .sections
+            .into_iter()
+            .flat_map(|sec| sec.rows)
+            .map(|r| r.key.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn saved_workspaces_are_listed_most_recently_used_first_with_the_open_one_on_top() {
+        let mut s = Session::demo();
+        let w = s.store().workspaces();
+        assert_eq!(w.current.as_ref().map(|n| n.as_str()), Some("shop"));
+        assert_eq!(names(&w), ["shop", "threadplay", "hbt", "quelle", "orbit", "pair"]);
+        assert_eq!(w.items[0].last_used, "open");
+        assert_eq!(w.items[1].last_used, "3h ago");
+        assert_eq!(w.items.last().unwrap().last_used, "never");
+
+        open_ws(&mut s, "hbt");
+        let w = s.store().workspaces();
+        assert_eq!(names(&w), ["hbt", "shop", "threadplay", "quelle", "orbit", "pair"], "hbt was just used, shop just left");
+        assert_eq!(w.items[1].last_used, "0m ago".replace("0m ago", "just now"));
+    }
+
+    #[test]
+    fn a_workspace_shows_only_its_own_data_and_gets_it_back_as_it_was() {
+        let mut s = Session::demo();
+        let shop = ticket_keys(&s);
+        assert!(shop.iter().any(|k| k == "PROJ-142"));
+
+        open_ws(&mut s, "threadplay");
+        let tp = ticket_keys(&s);
+        assert_eq!(tp, ["TP-12", "TP-18", "TP-15"], "its own, by priority: none of shop's tickets");
+        assert!(!s.store().ticket_exists(&k("PROJ-142")));
+        assert!(s.store().audit().iter().all(|a| a.ticket.as_ref().is_none_or(|t| t.starts_with("TP-"))));
+
+        // Something done in threadplay stays in threadplay.
+        s.handle(Intent::Do(Command::Claim(k("TP-15"))));
+        assert!(s.store().audit().iter().any(|a| a.action == "ticket.claim"));
+
+        open_ws(&mut s, "shop");
+        assert_eq!(ticket_keys(&s), shop);
+        assert!(
+            !s.store().audit().iter().any(|a| a.ticket.as_ref().is_some_and(|t| t.as_str() == "TP-15")),
+            "threadplay's audit entries are not in shop's"
+        );
+        open_ws(&mut s, "threadplay");
+        let claimed = s.store().tickets(Group::Mine).sections.into_iter().flat_map(|x| x.rows).any(|r| r.key == "TP-15");
+        assert!(claimed, "threadplay kept the claim");
+    }
+
+    #[test]
+    fn the_workspaces_start_and_stop_independently() {
+        let mut s = Session::demo();
+        assert!(s.store().workspace().up);
+        open_ws(&mut s, "hbt");
+        assert!(!s.store().workspace().up, "hbt was never started");
+        assert_eq!(s.store().workspace().name, "hbt");
+        s.handle(Intent::Do(Command::StartWorkspace));
+        assert!(s.store().workspace().up);
+        open_ws(&mut s, "shop");
+        assert!(s.store().workspace().up);
+        s.handle(Intent::Do(Command::StopWorkspace));
+        open_ws(&mut s, "hbt");
+        assert!(s.store().workspace().up, "stopping shop did not stop hbt");
+    }
+
+    #[test]
+    fn opening_another_workspace_leaves_nothing_of_the_old_one_in_the_window() {
+        let mut s = Session::demo();
+        s.handle(Intent::OpenTicket(k("PROJ-142")));
+        s.handle(Intent::SetText(Field::Comment(k("PROJ-142")), "half written".into()));
+        s.handle(Intent::Go(Route::Tickets(Group::Mine)));
+        s.handle(Intent::OpenTicket(k("PROJ-139")));
+        assert!(s.view().tabs.len() > 1);
+
+        open_ws(&mut s, "threadplay");
+        let v = s.view();
+        assert_eq!(v.route, Route::Next);
+        assert_eq!(v.tabs.len(), 1, "no ticket tabs of the old workspace");
+        assert!(v.sheet.is_none() && v.picker.is_none());
+        assert_eq!(s.text(&Field::Comment(k("PROJ-142"))), "", "no draft of the old one");
+        assert_eq!(v.workspace.label, "threadplay");
+    }
+
+    #[test]
+    fn with_no_workspace_only_the_workspace_list_the_logs_and_settings_are_reachable() {
+        let mut s = Session::new(Box::new(Sim::without_workspace()));
+        assert_eq!(s.route(), &Route::Welcome);
+        let v = s.view();
+        assert!(v.workspace.none);
+        assert_eq!(v.workspace.label, "No workspace");
+        let labels: Vec<String> = v.nav.iter().flat_map(|sec| sec.items.iter().map(|i| i.label.clone())).collect();
+        assert_eq!(labels, ["Workspaces", "Sync logs", "Settings"]);
+
+        // What belongs to a workspace leads back to the list.
+        for route in [Route::Next, Route::Tickets(Group::All), Route::OnUat, Route::Workspace, Route::Audit] {
+            s.handle(Intent::Go(route));
+            assert_eq!(s.route(), &Route::Welcome);
+            assert!(matches!(s.view().screen, ScreenVm::Welcome(_)));
+        }
+        s.handle(Intent::Go(Route::Settings));
+        assert_eq!(s.route(), &Route::Settings);
+        s.handle(Intent::Go(Route::Logs));
+        assert_eq!(s.route(), &Route::Logs);
+
+        // The palette has no tickets to jump to, but can switch workspace.
+        s.handle(Intent::OpenPalette);
+        let SheetVm::Palette { items, .. } = s.view().sheet.unwrap() else {
+            panic!()
+        };
+        assert!(items.iter().all(|i| i.hint != "ticket"));
+        assert!(items.iter().all(|i| i.label != "Home" && i.label != "On uat" && i.label != "Audit log"));
+        assert!(items.iter().any(|i| i.label == "Open shop"));
+        assert!(items.iter().any(|i| i.label == "Workspaces"));
+    }
+
+    fn states(q: &SequenceVm) -> Vec<ProgressState> {
+        q.phases.iter().flat_map(|p| p.steps.iter().map(|s| s.state)).collect()
+    }
+
+    #[test]
+    fn selecting_a_workspace_runs_visible_steps_and_only_then_opens_it() {
+        let mut s = Session::new(Box::new(Sim::without_workspace()));
+        s.handle(Intent::Do(Command::SelectWorkspace("hbt".into())));
+
+        // Nothing has changed yet; the modal is up.
+        assert!(s.view().workspace.none);
+        let q = s.view().sequence.expect("the opening sequence");
+        assert_eq!(q.title, "Opening hbt");
+        assert_eq!(q.state, SequenceState::Running);
+        assert!(q.actions.is_empty(), "no choices while it runs");
+        let labels: Vec<&str> = q.phases[0].steps.iter().map(|s| s.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            [
+                "Read the workspace",
+                "Git status \u{b7} hbt-api",
+                "Git status \u{b7} hbt-web",
+                "Git status \u{b7} hbt-docs",
+                "Start services \u{b7} hbt-api",
+                "Start services \u{b7} hbt-web",
+                "Load the workspace",
+            ],
+            "git for every repo first, then services only for repos that have them"
+        );
+        assert_eq!(q.progress, "0 of 7");
+
+        // A little time: the first step is done, the second is running, the rest wait.
+        s.tick(500);
+        let q = s.view().sequence.unwrap();
+        assert_eq!(q.phases[0].steps[0].state, ProgressState::Done);
+        assert_eq!(q.phases[0].steps[0].detail, "3 projects");
+        assert_eq!(q.phases[0].steps[1].state, ProgressState::Running);
+        assert_eq!(q.phases[0].steps[2].state, ProgressState::Waiting);
+        assert!(s.view().workspace.none, "still not open");
+
+        settle(&mut s);
+        assert!(s.view().sequence.is_none());
+        assert_eq!(s.view().workspace.label, "hbt");
+        assert_eq!(s.route(), &Route::Next, "the dock, with the workspace loaded");
+        assert!(s.view().toasts.iter().any(|t| t.text == "Opened hbt"));
+    }
+
+    #[test]
+    fn while_a_sequence_runs_nothing_else_in_the_window_works_and_it_cannot_be_dismissed() {
+        let mut s = Session::new(Box::new(Sim::without_workspace()));
+        s.handle(Intent::Do(Command::SelectWorkspace("hbt".into())));
+        s.tick(500);
+
+        for intent in [
+            Intent::CancelSheet,
+            Intent::Go(Route::Settings),
+            Intent::OpenPalette,
+            Intent::ToggleWorkspacePicker,
+            Intent::OpenAllWorkspaces,
+            Intent::Do(Command::SelectWorkspace("shop".into())),
+            Intent::Do(Command::CloseWorkspace),
+            Intent::Do(Command::AbortSequence),
+            Intent::Do(Command::ContinueSequence),
+            Intent::Do(Command::RetrySequence),
+        ] {
+            s.handle(intent.clone());
+            let q = s.view().sequence.unwrap_or_else(|| panic!("{intent:?} closed the modal"));
+            assert_eq!(q.state, SequenceState::Running, "{intent:?}");
+            assert_eq!(q.title, "Opening hbt", "{intent:?}");
+            assert_eq!(s.route(), &Route::Welcome, "{intent:?}");
+            assert!(s.view().sheet.is_none() && s.view().picker.is_none(), "{intent:?}");
+        }
+        // And what it was doing carried on regardless.
+        assert!(states(&s.view().sequence.unwrap()).iter().any(|st| *st == ProgressState::Done));
+    }
+
+    #[test]
+    fn a_failed_service_start_leaves_the_decision_to_the_person() {
+        let mut s = Session::new(Box::new(Sim::without_workspace()));
+        s.handle(Intent::Do(Command::Sim(SimEvent::DockerDown(true))));
+        s.handle(Intent::Do(Command::SelectWorkspace("hbt".into())));
+        settle(&mut s);
+
+        let q = s.view().sequence.expect("still up, waiting for a decision");
+        assert_eq!(q.state, SequenceState::NeedsDecision);
+        let failed: Vec<&str> = q
+            .phases[0]
+            .steps
+            .iter()
+            .filter(|st| st.state == ProgressState::Failed)
+            .map(|st| st.detail.as_str())
+            .collect();
+        assert_eq!(failed.len(), 2, "both docker steps failed, the rest still ran");
+        assert!(failed.iter().all(|d| d.contains("Start Docker Desktop")), "{failed:?}");
+        assert_eq!(q.phases[0].steps.last().unwrap().state, ProgressState::Done, "loading went on");
+        let labels: Vec<&str> = q.actions.iter().map(|a| a.label.as_str()).collect();
+        assert_eq!(labels, ["Back", "Try again", "Open anyway"]);
+        assert!(s.view().workspace.none, "not open until decided");
+
+        // Try again with Docker back: everything is fine and it opens by itself.
+        s.handle(Intent::Do(Command::Sim(SimEvent::DockerDown(false))));
+        assert!(s.view().sequence.is_some(), "the world did not move the modal");
+        s.handle(Intent::Do(Command::RetrySequence));
+        let q = s.view().sequence.unwrap();
+        assert_eq!(q.state, SequenceState::Running);
+        assert!(states(&q).iter().all(|st| matches!(st, ProgressState::Waiting | ProgressState::Running)), "from the top");
+        settle(&mut s);
+        assert_eq!(s.view().workspace.label, "hbt");
+    }
+
+    #[test]
+    fn back_gives_up_and_open_anyway_goes_on_with_the_failures() {
+        let mut s = Session::new(Box::new(Sim::without_workspace()));
+        s.handle(Intent::Do(Command::Sim(SimEvent::DockerDown(true))));
+
+        s.handle(Intent::Do(Command::SelectWorkspace("hbt".into())));
+        settle(&mut s);
+        s.handle(Intent::Do(Command::AbortSequence));
+        assert!(s.view().sequence.is_none());
+        assert!(s.view().workspace.none, "back: nothing was opened");
+        assert_eq!(s.route(), &Route::Welcome);
+
+        s.handle(Intent::Do(Command::SelectWorkspace("hbt".into())));
+        settle(&mut s);
+        s.handle(Intent::Do(Command::ContinueSequence));
+        assert!(s.view().sequence.is_none());
+        assert_eq!(s.view().workspace.label, "hbt", "open anyway");
+        assert_eq!(s.route(), &Route::Next);
+    }
+
+    #[test]
+    fn switching_closes_the_open_workspace_first_in_the_same_modal() {
+        let mut s = Session::demo();
+        s.handle(Intent::Do(Command::SelectWorkspace("hbt".into())));
+        let q = s.view().sequence.expect("a switch");
+        assert_eq!(q.title, "Switching to hbt");
+        assert_eq!(q.phases.iter().map(|p| p.title.as_str()).collect::<Vec<_>>(), ["Closing shop", "Opening hbt"]);
+        assert_eq!(s.view().workspace.label, "shop", "shop stays open until its own closing is done");
+        let closing: Vec<&str> = q.phases[0].steps.iter().map(|st| st.label.as_str()).collect();
+        assert_eq!(closing[0], "Check nothing is in progress");
+        assert_eq!(*closing.last().unwrap(), "Save the workspace");
+        assert!(closing.iter().any(|l| l.starts_with("Stop services")), "{closing:?}");
+        // The services are stopped in the reverse of the order they start.
+        let stops: Vec<&&str> = closing.iter().filter(|l| l.starts_with("Stop services")).collect();
+        let starts_of_shop: Vec<String> = {
+            let mut order: Vec<String> = Sim::default().repos.iter().filter(|r| r.services > 0).map(|r| r.name.to_string()).collect();
+            order.reverse();
+            order
+        };
+        assert_eq!(stops.len(), starts_of_shop.len());
+        for (stop, repo) in stops.iter().zip(&starts_of_shop) {
+            assert!(stop.ends_with(repo.as_str()), "{stop} vs {repo}");
+        }
+
+        settle(&mut s);
+        assert_eq!(s.view().workspace.label, "hbt");
+    }
+
+    #[test]
+    fn closing_is_a_sequence_too_and_ends_on_the_page_before_the_dock() {
+        let mut s = Session::demo();
+        s.handle(Intent::Do(Command::CloseWorkspace));
+        let q = s.view().sequence.expect("the closing sequence");
+        assert_eq!(q.title, "Closing shop");
+        assert_eq!(q.phases.len(), 1);
+        assert!(s.view().workspace.label == "shop");
+        settle(&mut s);
+        assert!(s.view().workspace.none);
+        assert_eq!(s.route(), &Route::Welcome);
+        assert!(s.view().toasts.iter().any(|t| t.text == "Closed shop"));
+    }
+
+    #[test]
+    fn a_workspace_with_an_active_ticket_cannot_be_closed_until_it_is_parked() {
+        use crate::sim::model::Activation;
+        let mut sim = Sim::default();
+        let i = sim.idx(&"PROJ-142".into()).unwrap();
+        sim.tickets[i].stage = crate::sim::model::Stage::Active {
+            held: Default::default(),
+            act: Activation { started_ms: 0, records: vec![], overlay: None },
+            prep: None,
+        };
+        let mut s = Session::new(Box::new(sim));
+        s.handle(Intent::Do(Command::CloseWorkspace));
+        settle(&mut s);
+        let q = s.view().sequence.expect("stopped at the first step");
+        assert_eq!(q.state, SequenceState::NeedsDecision);
+        let steps = &q.phases[0].steps;
+        assert_eq!(steps[0].state, ProgressState::Failed);
+        assert!(steps[0].detail.contains("PROJ-142 is active. Park it first."), "{}", steps[0].detail);
+        assert!(steps[1..].iter().all(|st| st.state == ProgressState::Skipped), "nothing after it is run");
+        let labels: Vec<&str> = q.actions.iter().map(|a| a.label.as_str()).collect();
+        assert_eq!(labels, ["Back", "Try again"], "no closing anyway");
+        s.handle(Intent::Do(Command::ContinueSequence));
+        assert!(s.view().sequence.is_some(), "continue is refused");
+        s.handle(Intent::Do(Command::AbortSequence));
+        assert_eq!(s.view().workspace.label, "shop", "still open");
+    }
+
+    #[test]
+    fn the_landing_lists_five_and_the_rest_are_a_search_away() {
+        let mut s = Session::new(Box::new(Sim::without_workspace()));
+        let ScreenVm::Welcome(w) = s.view().screen else {
+            panic!()
+        };
+        assert_eq!(w.workspaces.len(), 6, "one more than the landing lists");
+        // One line each: the name and its projects, not a folder.
+        let shop = w.workspaces.iter().find(|i| i.name == "shop").unwrap();
+        assert_eq!(shop.projects, ["api-client", "web", "worker", "docs"]);
+
+        s.handle(Intent::OpenAllWorkspaces);
+        let SheetVm::AllWorkspaces(a) = s.view().sheet.expect("the modal") else {
+            panic!()
+        };
+        assert_eq!((a.items.len(), a.total), (6, 6));
+        s.handle(Intent::SetText(Field::WorkspaceSearch, "HBT-web".into()));
+        let SheetVm::AllWorkspaces(a) = s.view().sheet.unwrap() else {
+            panic!()
+        };
+        assert_eq!(a.items.iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["hbt"], "found by a project");
+        s.handle(Intent::SetText(Field::WorkspaceSearch, "zzz".into()));
+        let SheetVm::AllWorkspaces(a) = s.view().sheet.unwrap() else {
+            panic!()
+        };
+        assert!(a.items.is_empty() && a.total == 6);
+
+        // Picking one from the modal starts opening it.
+        s.handle(Intent::SetText(Field::WorkspaceSearch, "pair".into()));
+        s.handle(Intent::Do(Command::SelectWorkspace("pair".into())));
+        assert_eq!(s.view().sequence.unwrap().title, "Opening pair");
+    }
+
+    #[test]
+    fn the_palette_can_switch_workspace() {
+        let mut s = Session::demo();
+        s.handle(Intent::OpenPalette);
+        let SheetVm::Palette { items, .. } = s.view().sheet.unwrap() else {
+            panic!()
+        };
+        assert!(items.iter().any(|i| i.label == "Switch workspace…" && i.intent == Intent::ToggleWorkspacePicker));
+        let open_hbt = items.iter().find(|i| i.label == "Open hbt").expect("a way to open hbt");
+        s.handle(open_hbt.intent.clone());
+        settle(&mut s);
+        assert_eq!(s.view().workspace.label, "hbt");
+    }
+
+    #[test]
+    fn the_page_before_the_dock_is_only_for_no_workspace_with_one_open_workspaces_is_the_menu() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Tickets(Group::All)));
+        s.handle(Intent::Go(Route::Welcome));
+        assert_eq!(s.route(), &Route::Tickets(Group::All), "the screen stays where it was");
+        assert!(s.view().picker.is_some(), "and the workspace menu opens");
+    }
+
+    #[test]
+    fn the_welcome_screen_shows_the_tools_the_workspaces_and_how_to_make_one() {
+        let s = Session::new(Box::new(Sim::without_workspace()));
+        let ScreenVm::Welcome(w) = s.view().screen else {
+            panic!()
+        };
+        assert_eq!(w.providers.len(), 2, "Jira and GitHub");
+        assert_eq!(w.init_command, "de init");
+        assert_eq!(w.current, None);
+        assert_eq!(w.workspaces.len(), 6);
+        assert!(w.workspaces.iter().all(|i| !i.current));
+        // `shop` was open until it was closed, so it was used last; `pair` was never opened.
+        assert_eq!(w.workspaces.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["shop", "threadplay", "hbt", "quelle", "orbit", "pair"]);
+        assert_eq!(w.workspaces[0].last_used, "just now");
+        assert_eq!(w.workspaces[5].last_used, "never");
+    }
+
+    #[test]
+    fn opening_a_workspace_from_the_list_goes_home_and_closing_goes_back_to_the_list() {
+        let mut s = Session::new(Box::new(Sim::without_workspace()));
+        open_ws(&mut s, "hbt");
+        assert_eq!(s.route(), &Route::Next);
+        assert_eq!(ticket_keys(&s), ["HBT-204", "HBT-207"]);
+        s.handle(Intent::Do(Command::CloseWorkspace));
+        settle(&mut s);
+        assert_eq!(s.route(), &Route::Welcome);
+        assert!(s.view().workspace.none);
+        assert!(ticket_keys(&s).is_empty());
+        // Unknown names are refused with a way forward.
+        open_ws(&mut s, "nope");
+        assert!(s.view().toasts.iter().any(|t| t.text.contains("de init")), "{:?}", s.view().toasts);
+    }
+
+    #[test]
+    fn the_workspace_menu_lists_the_open_one_then_the_others_and_narrows_by_search() {
+        let mut s = Session::demo();
+        assert!(s.view().picker.is_none());
+        s.handle(Intent::ToggleWorkspacePicker);
+        let p = s.view().picker.expect("open");
+        assert_eq!(p.current.as_ref().map(|c| c.name.as_str()), Some("shop"));
+        assert_eq!(p.recent.iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["threadplay", "hbt", "quelle", "orbit", "pair"]);
+        assert_eq!(p.total, 6);
+
+        s.handle(Intent::SetText(Field::WorkspaceSearch, " TH ".into()));
+        let p = s.view().picker.unwrap();
+        assert_eq!(p.recent.iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["threadplay"]);
+        assert_eq!(p.current, None, "shop does not match");
+        assert_eq!(p.total, 6, "the count is before narrowing");
+
+        // Picking closes the menu; going anywhere closes it too.
+        open_ws(&mut s, "threadplay");
+        assert!(s.view().picker.is_none());
+        s.handle(Intent::ToggleWorkspacePicker);
+        s.handle(Intent::Go(Route::Settings));
+        assert!(s.view().picker.is_none());
+        s.handle(Intent::ToggleWorkspacePicker);
+        s.handle(Intent::ToggleWorkspacePicker);
+        assert!(s.view().picker.is_none(), "toggling twice closes it");
     }
 
     #[test]
