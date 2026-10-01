@@ -15,8 +15,8 @@ use de_widgets::sim::model::MS_PER_MIN;
 use de_widgets::vm::*;
 use de_widgets::{Outcome, ReviewSel, Store};
 
-use crate::{audit, localtime, logs, mapping, schedule};
 use crate::sync::{SyncDone, last_sync_minutes_ago, load_cached, sync_real};
+use crate::{audit, localtime, logs, mapping, schedule};
 
 pub struct CoreStore {
     sim: Sim,
@@ -69,7 +69,10 @@ impl CoreStore {
         let interval_minutes = Config::load()
             .map(|c| c.sync_interval_minutes())
             .unwrap_or(de_core::config::DEFAULT_SYNC_INTERVAL_MINUTES);
-        sim.set_sync_interval(interval_minutes, schedule::overdue_after_minutes(interval_minutes));
+        sim.set_sync_interval(
+            interval_minutes,
+            schedule::overdue_after_minutes(interval_minutes),
+        );
         let mut store = Self {
             sim,
             running: None,
@@ -95,7 +98,9 @@ impl CoreStore {
                 None
             }
             Err(e) => Some((
-                format!("Could not write to the audit log: {e:#}. Check that the data folder is writable."),
+                format!(
+                    "Could not write to the audit log: {e:#}. Check that the data folder is writable."
+                ),
                 ToastKind::Warn,
             )),
         }
@@ -154,7 +159,9 @@ impl CoreStore {
             Err(e) => {
                 let why = format!("Could not save to config.toml: {e:#}");
                 self.record("config.jira", false, &why);
-                Outcome::fail(format!("{why}. Check that the file is writable, then try again."))
+                Outcome::fail(format!(
+                    "{why}. Check that the file is writable, then try again."
+                ))
             }
         })
     }
@@ -182,7 +189,9 @@ impl CoreStore {
             Err(e) => {
                 let why = format!("Could not save to config.toml: {e:#}");
                 self.record("config.sync", false, &why);
-                Outcome::fail(format!("{why}. Check that the file is writable, then try again."))
+                Outcome::fail(format!(
+                    "{why}. Check that the file is writable, then try again."
+                ))
             }
         }
     }
@@ -196,7 +205,11 @@ impl CoreStore {
             Ok(done) => done,
             Err(TryRecvError::Empty) => return Vec::new(),
             Err(TryRecvError::Disconnected) => SyncDone {
-                report: vec![(false, "Jira (acli)".into(), "the sync stopped unexpectedly".into())],
+                report: vec![(
+                    false,
+                    "Jira (acli)".into(),
+                    "the sync stopped unexpectedly".into(),
+                )],
                 tickets: Err("the sync stopped unexpectedly".into()),
                 jira_unavailable: false,
                 changed: true,
@@ -386,6 +399,10 @@ mod tests {
             sim += ms;
             carry = left;
         }
-        assert_eq!(sim / MS_PER_MIN, 2, "two minutes, not 30 (four seconds each)");
+        assert_eq!(
+            sim / MS_PER_MIN,
+            2,
+            "two minutes, not 30 (four seconds each)"
+        );
     }
 }
