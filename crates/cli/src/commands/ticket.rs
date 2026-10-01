@@ -119,6 +119,7 @@ pub fn claim(key: TicketKey, title: Option<String>, hotfix: bool) -> eyre::Resul
                 url: None,
                 raw_json: "{}".into(),
                 fetched_at: now,
+                status_since: now,
             },
         )?;
     }

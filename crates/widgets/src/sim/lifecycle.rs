@@ -39,7 +39,6 @@ impl Sim {
         if let Err(e) = self.tickets[i].stage.claim() {
             return refuse(e);
         }
-        self.start_pr_wait(i);
         self.ok("ticket.claim", Some(key), None, "");
         Outcome::ok().with_toast(
             format!("Claimed {key}"),
@@ -97,7 +96,6 @@ impl Sim {
         for p in &mut self.tickets[i].prs {
             p.since = None;
         }
-        self.start_th_wait(i, false);
         self.ok("review.mark_reviewed", Some(key), None, "");
         Outcome::ok().with_toast(format!("Marked {key} reviewed"), ToastKind::Ok, Some(prev))
     }
@@ -177,12 +175,31 @@ impl Sim {
 
     /* ---------------------------- waits ---------------------------- */
 
-    fn start_pr_wait(&mut self, i: usize) {
-        if self.pr_gap(&self.tickets[i]).is_some() && self.tickets[i].pr_wait.is_none() {
-            self.tickets[i].pr_wait = Some(Wait {
-                since: self.ms,
-                mins: self.wait_min,
-            });
+    /// Note when a missing pull request or an unresolved review comment was **first seen**: that is the only thing
+    /// stored. How long is left is worked out from it when it is read, so nothing runs on a timer and nothing can
+    /// drift. It is not from when you claim or review: a ticket that has been in Review for days without a pull
+    /// request has had its wait already. What is no longer missing or open is forgotten, so a later gap is new.
+    ///
+    /// Called when the data changes (a refresh, a command), never on a tick.
+    pub(crate) fn observe(&mut self) {
+        for i in 0..self.tickets.len() {
+            let gap = self.pr_gap(&self.tickets[i]).is_some();
+            let blocking = !Self::blocking_threads(&self.tickets[i]).is_empty();
+            let (now, mins) = (self.ms, self.wait_min);
+            // A missing pull request has been missing since the ticket was first seen in this status, which the
+            // store remembers across restarts; without that, since it is first noticed now.
+            let seen = self.ms_of(self.tickets[i].status_since).unwrap_or(now).min(now);
+            let t = &mut self.tickets[i];
+            t.pr_wait = match (gap, t.pr_wait) {
+                (true, None) => Some(Wait { since: seen, mins }),
+                (true, kept) => kept,
+                (false, _) => None,
+            };
+            t.th_wait = match (blocking, t.th_wait) {
+                (true, None) => Some(Wait { since: now, mins }),
+                (true, kept) => kept,
+                (false, _) => None,
+            };
         }
     }
 
@@ -818,6 +835,8 @@ impl Sim {
         self.step_deploy();
         if self.sync.finish_at.is_some_and(|at| self.ms >= at) {
             self.sync_finish();
+            // The refresh may have brought a pull request or a review thread.
+            self.observe();
         }
     }
 

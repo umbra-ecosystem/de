@@ -68,7 +68,7 @@ impl Sim {
         .into_iter()
         .map(|(a, b)| (RepoName::from(a), Branch::from(b)))
         .collect();
-        Self {
+        let mut sim = Self {
             ms: 0,
             start_min: START_MIN,
             wall_start: None,
@@ -104,16 +104,20 @@ impl Sim {
             responses: Responses::new(),
             repos: repos(),
             toasts: Vec::new(),
-        }
+        };
+        sim.observe();
+        sim
     }
 
     /// A simulation that starts from these tickets instead of the invented ones (the real store uses it for what
     /// the engine does not serve yet: PRs, review and shipping stay simulated).
     pub fn with_tickets(tickets: Vec<Ticket>) -> Self {
-        Self {
+        let mut sim = Self {
             tickets,
             ..Self::new()
-        }
+        };
+        sim.observe();
+        sim
     }
 
     /// Swap in freshly read tickets. A ticket already known keeps its simulated local state; the Jira-side
@@ -132,6 +136,7 @@ impl Sim {
                 t
             })
             .collect();
+        self.observe();
     }
 
     /// A real sync is under way: the status bar shows it and the fake completion never fires.
@@ -194,6 +199,12 @@ impl Sim {
         self.wall_start = Some(unix);
     }
 
+    /// A unix time on the simulation's clock (milliseconds, negative before it started); `None` without a wall clock
+    /// or without a time.
+    pub(crate) fn ms_of(&self, unix: Option<i64>) -> Option<i64> {
+        Some((unix? - self.wall_start?) * MS_PER_MIN / 60)
+    }
+
     /// How long ago a unix time was, in the words of the lists (`5m ago`, `3h ago`, `2d ago`, `3w ago`, `4mo ago`,
     /// `1y ago`); `None` when there is no wall clock.
     pub(crate) fn ago_text(&self, at: i64) -> Option<String> {
@@ -210,6 +221,13 @@ impl Sim {
     pub fn set_sync_interval(&mut self, minutes: u32, stale_after_min: i64) {
         self.sync_minutes = minutes;
         self.stale_sync_min = stale_after_min;
+    }
+
+    /// Whether GitHub can be asked. When it cannot, whether a ticket has a pull request is unknown, so nothing is
+    /// said about a missing one.
+    pub fn set_github_ready(&mut self, ready: bool) {
+        self.gh_ready = ready;
+        self.observe();
     }
 
     pub fn set_jira_ready(&mut self, ready: bool) {
@@ -413,6 +431,135 @@ mod tests {
         sim.tickets[i].updated_at = None;
         assert_eq!(claim(&sim).updated, None);
         assert_eq!(row(&sim).updated, None);
+    }
+
+    fn unclaimed_without_a_pr(sim: &Sim) -> TicketKey {
+        sim.tickets
+            .iter()
+            .find(|t| t.local().is_none() && sim.pr_gap(t).is_some())
+            .expect("the demo has an unclaimed ticket without a PR")
+            .key
+            .clone()
+    }
+
+    #[test]
+    fn a_missing_pr_is_timed_from_when_it_was_first_seen_not_from_the_claim() {
+        let mut sim = Sim::new();
+        let key = unclaimed_without_a_pr(&sim);
+        let seen = sim.tk(&key).unwrap().pr_wait.expect("noted when first seen, unclaimed");
+        assert_eq!(seen.since, 0);
+        assert!(sim.wait_left(Some(seen)).unwrap() > 0, "still inside the grace period");
+
+        // Time passes: the stored fact does not change, only the time left derived from it does.
+        sim.advance(10 * MS_PER_MIN);
+        assert_eq!(sim.tk(&key).unwrap().pr_wait, Some(seen));
+        let left = sim.wait_left(Some(seen)).unwrap();
+        assert_eq!(left, i64::from(seen.mins - 10) * MS_PER_MIN);
+
+        // Claiming does not start a new wait.
+        let _ = crate::Store::dispatch(
+            &mut sim,
+            match crate::vm::Command::Claim(key.clone()).classify() {
+                crate::vm::Classified::Local(l) => l,
+                _ => unreachable!(),
+            },
+        );
+        assert_eq!(sim.tk(&key).unwrap().pr_wait, Some(seen));
+
+        // Once the grace period has passed, the ticket is no longer "awaiting" and no state had to change.
+        sim.advance(i64::from(seen.mins) * MS_PER_MIN);
+        assert_eq!(sim.tk(&key).unwrap().pr_wait, Some(seen));
+        assert!(sim.pr_wait_expired(sim.tk(&key).unwrap()));
+        assert!(
+            sim.suggest()
+                .iter()
+                .filter(|s| s.ticket.as_ref() == Some(&key))
+                .all(|s| !s.awaiting_pr)
+        );
+    }
+
+    #[test]
+    fn with_a_stored_first_seen_time_the_wait_counts_from_it_not_from_this_run() {
+        let mut sim = Sim::new();
+        sim.set_wall_clock_start(1_000_000);
+        let key = unclaimed_without_a_pr(&sim);
+        let i = sim.idx(&key).unwrap();
+
+        // First seen in Review 20 minutes before this run began: 10 minutes of a 30 minute wait are left.
+        sim.tickets[i].pr_wait = None;
+        sim.tickets[i].status_since = Some(1_000_000 - 20 * 60);
+        sim.observe();
+        let w = sim.tk(&key).unwrap().pr_wait.unwrap();
+        assert_eq!(sim.wait_left(Some(w)), Some(10 * MS_PER_MIN));
+
+        // Seen two days ago: the wait is long over the moment it is looked at, and the ticket is not "awaiting".
+        sim.tickets[i].pr_wait = None;
+        sim.tickets[i].status_since = Some(1_000_000 - 2 * 86_400);
+        sim.observe();
+        let w = sim.tk(&key).unwrap().pr_wait.unwrap();
+        assert!(sim.wait_left(Some(w)).unwrap() < 0);
+        assert!(sim.pr_wait_expired(sim.tk(&key).unwrap()));
+        assert!(sim.suggest().iter().filter(|s| s.ticket.as_ref() == Some(&key)).all(|s| !s.awaiting_pr));
+
+        // A time in the future (a skewed clock) is not later than now.
+        sim.tickets[i].pr_wait = None;
+        sim.tickets[i].status_since = Some(1_000_000 + 3600);
+        sim.observe();
+        assert_eq!(sim.tk(&key).unwrap().pr_wait.map(|w| w.since), Some(0));
+    }
+
+    #[test]
+    fn a_wait_is_forgotten_when_what_it_waited_for_goes_and_a_new_gap_is_timed_afresh() {
+        let mut sim = Sim::new();
+        let key = unclaimed_without_a_pr(&sim);
+        sim.advance(5 * MS_PER_MIN);
+        // GitHub cannot be asked: nothing is said about a missing pull request.
+        sim.set_github_ready(false);
+        assert_eq!(sim.tk(&key).unwrap().pr_wait, None);
+        assert!(sim.suggest().iter().all(|s| !s.awaiting_pr));
+        // Back again: the gap is new, so its clock is from now, not from five minutes ago.
+        sim.set_github_ready(true);
+        assert_eq!(sim.tk(&key).unwrap().pr_wait.map(|w| w.since), Some(5 * MS_PER_MIN));
+    }
+
+    #[test]
+    fn unresolved_review_comments_are_timed_from_when_they_were_first_seen_too() {
+        use crate::sim::model::Thread;
+        let mut sim = Sim::new();
+        // A ticket in review with a pull request and no open comment yet.
+        let key = sim
+            .tickets
+            .iter()
+            .find(|t| !t.prs.is_empty() && Sim::blocking_threads(t).is_empty() && Sim::thread_stage(t))
+            .expect("a ticket in review with a pull request")
+            .key
+            .clone();
+        assert_eq!(sim.tk(&key).unwrap().th_wait, None);
+
+        // Three minutes in, a refresh shows an unresolved comment: that is when it was first seen.
+        sim.advance(3 * MS_PER_MIN);
+        let i = sim.idx(&key).unwrap();
+        sim.tickets[i].prs[0].threads.push(Thread {
+            id: crate::sim::model::ThreadId(9_001),
+            file: "src/lib.rs".into(),
+            line: None,
+            author: "Dev".into(),
+            text: "please rename".into(),
+            resolved: false,
+        });
+        sim.observe();
+        let seen = sim.tk(&key).unwrap().th_wait.expect("noted when first seen");
+        assert_eq!(seen.since, 3 * MS_PER_MIN);
+
+        // Time passing changes nothing stored; the time left is worked out from it.
+        sim.advance(7 * MS_PER_MIN);
+        assert_eq!(sim.tk(&key).unwrap().th_wait, Some(seen));
+        assert_eq!(sim.wait_left(Some(seen)), Some(i64::from(seen.mins - 7) * MS_PER_MIN));
+
+        // Resolved: forgotten.
+        sim.tickets[i].prs[0].threads.last_mut().unwrap().resolved = true;
+        sim.observe();
+        assert_eq!(sim.tk(&key).unwrap().th_wait, None);
     }
 
     #[test]

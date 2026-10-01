@@ -29,7 +29,7 @@ fn cache_upgrades_from_every_earlier_version_keeping_data() {
         .unwrap()
         .schema_version()
         .unwrap() as usize;
-    assert!(latest >= 5);
+    assert!(latest >= 6);
     for from in 1..latest {
         let dir = tempfile::tempdir().unwrap();
         {
@@ -52,6 +52,9 @@ fn cache_upgrades_from_every_earlier_version_keeping_data() {
         if from >= 2 {
             let t = jira_cache::get(&store, &key("PROJ-1")).unwrap().unwrap();
             assert_eq!(t.title, "kept");
+            if latest >= 6 && from >= 2 {
+                assert_eq!(t.status_since, t.fetched_at, "an old row is taken as seen when it was fetched");
+            }
         }
         // The new tables are usable after the upgrade.
         prs::upsert(&store, &pr("acme/web", 1, "b", "develop"), 1).unwrap();

@@ -118,6 +118,14 @@ CREATE TABLE jira_details (
 /// mentions and suggestions read. Comments cached before this have it empty until the next sync.
 const CACHE_COMMENT_RICH: &str = "ALTER TABLE jira_comments ADD COLUMN rich TEXT NOT NULL DEFAULT '';";
 
+/// When a ticket was first seen in its current status, so "how long has it been in Review" is measured from when
+/// it was first seen and not from when someone claims it. A ticket cached before this is taken to have been seen
+/// when it was last fetched.
+const CACHE_STATUS_SINCE: &str = "
+ALTER TABLE jira_tickets ADD COLUMN status_since INTEGER NOT NULL DEFAULT 0;
+UPDATE jira_tickets SET status_since = fetched_at;
+";
+
 /// What activating a ticket changed, so deactivating (or recovering from a crash) can put
 /// everything back using nothing but this database.
 const STATE_ACTIVATION: &str = "
@@ -358,6 +366,7 @@ static CACHE: LazyLock<Migrations<'static>> = LazyLock::new(|| {
         M::up(CACHE_PROVIDERS),
         M::up(CACHE_JIRA_DETAILS),
         M::up(CACHE_COMMENT_RICH),
+        M::up(CACHE_STATUS_SINCE),
     ])
 });
 

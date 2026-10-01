@@ -44,6 +44,7 @@ pub fn load(state: &Store, cache: &Store, config: &Config) -> eyre::Result<Vec<T
         t.estimate = "";
         t.created = "";
         t.updated = leak(&format_time(jira.fetched_at));
+        t.status_since = Some(jira.status_since);
         if let Some(detail) = details.get(&jira.key) {
             apply_detail(&mut t, detail, config.jira_account_id(), &|name| status_of(name, config).0);
         }
@@ -376,6 +377,8 @@ mod tests {
         assert_eq!((bare.kind, bare.sprint, bare.fix_version, bare.estimate, bare.created), ("", "", "", "", ""));
         assert!(bare.desc.is_empty() && bare.links.is_empty());
         assert_eq!(bare.updated_at, None);
+        // What the store remembers of when it first saw the ticket in its status is carried to the view.
+        assert_eq!(all[0].status_since, Some(10));
     }
 
     #[test]

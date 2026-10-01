@@ -50,7 +50,7 @@ fn migrations_apply_on_a_fresh_database() {
     let s = state();
     let c = cache();
     assert_eq!(s.schema_version().unwrap(), 7);
-    assert_eq!(c.schema_version().unwrap(), 5);
+    assert_eq!(c.schema_version().unwrap(), 6);
 
     let tables = |store: &Store| -> Vec<String> {
         let mut stmt = store
@@ -966,6 +966,7 @@ fn jira(k: &str, title: &str, status: &str, at: i64) -> jira_cache::JiraTicket {
         url: Some(format!("https://example.atlassian.net/browse/{k}")),
         raw_json: format!("{{\"key\":\"{k}\"}}"),
         fetched_at: at,
+        status_since: at,
     }
 }
 
@@ -994,6 +995,28 @@ fn cache_upsert_is_idempotent_and_replaces() {
     );
     assert_eq!(jira_cache::list(&cache).unwrap().len(), 1);
     assert!(jira_cache::get(&cache, &key("Z-9")).unwrap().is_none());
+}
+
+#[test]
+fn a_ticket_keeps_the_time_it_was_first_seen_in_its_status_until_the_status_changes() {
+    let cache = cache();
+    jira_cache::upsert(&cache, &jira("A-1", "First", "In Review", 100)).unwrap();
+
+    // Fetched again later in the same status: fetched_at moves on, status_since stays.
+    let again = jira_cache::JiraTicket {
+        fetched_at: 500,
+        status_since: 500,
+        ..jira("A-1", "First", "In Review", 500)
+    };
+    jira_cache::upsert(&cache, &again).unwrap();
+    let t = jira_cache::get(&cache, &key("A-1")).unwrap().unwrap();
+    assert_eq!((t.fetched_at, t.status_since), (500, 100));
+
+    // A new status starts over; going back to the old one is a change too.
+    jira_cache::upsert(&cache, &jira("A-1", "First", "Returned", 900)).unwrap();
+    assert_eq!(jira_cache::get(&cache, &key("A-1")).unwrap().unwrap().status_since, 900);
+    jira_cache::upsert(&cache, &jira("A-1", "First", "In Review", 1200)).unwrap();
+    assert_eq!(jira_cache::get(&cache, &key("A-1")).unwrap().unwrap().status_since, 1200);
 }
 
 #[test]

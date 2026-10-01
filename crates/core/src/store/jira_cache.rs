@@ -18,9 +18,13 @@ pub struct JiraTicket {
     /// The payload as fetched, so new fields can be read without another migration.
     pub raw_json: String,
     pub fetched_at: i64,
+    /// When this ticket was first seen in its current status (unix seconds): kept while the status stays the
+    /// same, set again when it changes. What "how long has it been in Review" is measured from.
+    pub status_since: i64,
 }
 
-const COLUMNS: &str = "key, title, jira_status, priority, assignee, url, raw_json, fetched_at";
+const COLUMNS: &str =
+    "key, title, jira_status, priority, assignee, url, raw_json, fetched_at, status_since";
 
 fn from_row(r: &Row<'_>) -> rusqlite::Result<JiraTicket> {
     Ok(JiraTicket {
@@ -32,6 +36,7 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<JiraTicket> {
         url: r.get(5)?,
         raw_json: r.get(6)?,
         fetched_at: r.get(7)?,
+        status_since: r.get(8)?,
     })
 }
 
@@ -40,9 +45,12 @@ pub fn upsert(cache: &Store, t: &JiraTicket) -> eyre::Result<()> {
     cache
         .conn()
         .execute(
-            "INSERT INTO jira_tickets (key, title, jira_status, priority, assignee, url, raw_json, fetched_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO jira_tickets (key, title, jira_status, priority, assignee, url, raw_json, fetched_at, status_since)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT (key) DO UPDATE SET
+                -- Seen in the same status as before: the time it was first seen stays.
+                status_since = CASE WHEN jira_tickets.jira_status = excluded.jira_status
+                                    THEN jira_tickets.status_since ELSE excluded.status_since END,
                 title = excluded.title,
                 jira_status = excluded.jira_status,
                 priority = excluded.priority,
@@ -58,7 +66,8 @@ pub fn upsert(cache: &Store, t: &JiraTicket) -> eyre::Result<()> {
                 t.assignee,
                 t.url,
                 t.raw_json,
-                t.fetched_at
+                t.fetched_at,
+                t.status_since
             ],
         )
         .wrap_err_with(|| format!("Failed to cache {}", t.key))?;
@@ -78,6 +87,7 @@ pub fn upsert_remote(cache: &Store, t: &RemoteTicket, now: i64) -> eyre::Result<
             url: t.url.clone(),
             raw_json: serde_json::to_string(t).wrap_err("Failed to serialise the ticket")?,
             fetched_at: now,
+            status_since: now,
         },
     )
 }

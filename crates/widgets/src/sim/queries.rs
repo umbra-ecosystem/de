@@ -192,7 +192,8 @@ impl Sim {
     }
 
     pub(crate) fn pr_gap(&self, t: &Ticket) -> Option<Gap> {
-        if !Self::pr_stage(t) {
+        // Without GitHub there is nothing to say a pull request is missing from.
+        if !self.gh_ready || !Self::pr_stage(t) {
             return None;
         }
         let miss: Vec<_> = self
@@ -296,7 +297,7 @@ impl Sim {
 
     /* ---------------------------- review threads ---------------------------- */
 
-    fn thread_stage(t: &Ticket) -> bool {
+    pub(crate) fn thread_stage(t: &Ticket) -> bool {
         matches!(
             t.local(),
             Some(Local::Claimed | Local::Reviewing | Local::Parked)

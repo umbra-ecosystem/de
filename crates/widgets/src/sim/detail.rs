@@ -231,10 +231,7 @@ impl Sim {
         let left = self.wait_left(t.pr_wait);
         let exp = t.pr_wait.is_some() && left.is_some_and(|l| l <= 0);
         let status = match (t.pr_wait, left) {
-            (None, _) => format!(
-                "Claiming starts a {} minute wait for it to appear.",
-                self.wait_min
-            ),
+            (None, _) => format!("Waiting up to {} minutes for it to appear.", self.wait_min),
             (Some(w), Some(l)) if l <= 0 => {
                 format!("Waited {} min and it still has no PR.", w.mins)
             }
@@ -291,7 +288,7 @@ impl Sim {
         let exp = self.th_wait_expired(t);
         let left = self.wait_left(t.th_wait);
         let status = match (t.th_wait, left) {
-            (None, _) => "The wait for them starts when you mark the ticket reviewed.".to_string(),
+            (None, _) => format!("Waiting up to {} minutes for them to be resolved.", self.wait_min),
             (Some(w), Some(l)) if l <= 0 => {
                 format!("Waited {} min and they are still open.", w.mins)
             }

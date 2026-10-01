@@ -1621,6 +1621,13 @@ impl Store for Sim {
 impl Sim {
     /// Every command, local or confirmed remote, ends up here. The type-level split happens at the `Store` boundary.
     fn run(&mut self, command: &Command) -> Outcome {
+        let outcome = self.run_command(command);
+        // A command can open a pull request or a review thread, or resolve one: see what is now missing.
+        self.observe();
+        outcome
+    }
+
+    fn run_command(&mut self, command: &Command) -> Outcome {
         match command {
             Command::Sync => self.sync_start(),
             Command::Claim(k) => self.claim(k),
