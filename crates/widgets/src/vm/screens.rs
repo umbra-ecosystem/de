@@ -613,6 +613,9 @@ impl ServicesVm {
     /// The count as the cell shows it.
     pub fn label(&self) -> String {
         match self {
+            // Nothing to run says nothing: a bare `0` is the normal state for a project with no
+            // services, not something to report.
+            ServicesVm::All(0) => String::new(),
             ServicesVm::All(declared) => declared.to_string(),
             ServicesVm::Partial { running, declared } => format!("{running} of {declared}"),
             ServicesVm::Unknown => "—".to_string(),
@@ -1028,6 +1031,9 @@ mod tests {
         assert_eq!(ServicesVm::of(Some(0), 0), ServicesVm::All(0));
         assert_eq!(ServicesVm::of(Some(3), 3).label(), "3");
         assert_eq!(ServicesVm::of(Some(3), 3).tone(), None);
+        // A project with nothing to run says nothing at all: a bare `0` is the normal state.
+        assert_eq!(ServicesVm::of(Some(0), 0).label(), "");
+        assert_eq!(ServicesVm::of(Some(0), 0).tone(), None);
     }
 
     /// What is off is named: `2 of 6 services` at the workspace, `1 of 3` in the row.

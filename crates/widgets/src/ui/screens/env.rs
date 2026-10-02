@@ -72,21 +72,29 @@ pub fn on_uat(ui: &Ui, inputs: &Inputs, v: &OnUatVm) -> AnyElement {
 
 pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
     let pal = &ui.pal;
+    // What has a natural width keeps a column of its own. The branch is the only thing that can
+    // be a hundred characters long, so it takes what is left and is cut with an ellipsis rather
+    // than wrapping its row into four lines.
     let col = |w: f32| div().flex_none().w(px(w)).px_2();
+    let slack = || div().flex_1().min_w_0().px_2();
     div()
         .flex()
         .flex_col()
         .child(
             strip(pal)
-                .child(div().child(v.name.clone()))
+                .child(div().flex_none().child(v.name.clone()))
+                // The order runs to eighteen projects: it takes what is left of the strip and is
+                // cut with an ellipsis, so the buttons at its end are always on screen.
                 .child(
                     div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
                         .font_family(ui.mono.clone())
                         .text_xs()
                         .text_color(pal.faint)
                         .child(v.order.clone()),
                 )
-                .child(div().flex_1())
                 // One badge, and only for something that is off: all running says nothing.
                 .children(
                     v.health
@@ -118,10 +126,10 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                 .border_color(pal.border.opacity(0.6))
                 .text_xs()
                 .text_color(pal.faint)
-                .child(col(120.0).child("Project"))
+                .child(col(220.0).child("Project"))
                 .child(col(80.0).child("Services"))
-                .child(col(220.0).child("Branch"))
-                .child(div().flex_1().px_2().child("State")),
+                .child(slack().child("Branch"))
+                .child(col(300.0).child("State")),
         )
         .children(v.rows.iter().map(|r| {
             div()
@@ -132,7 +140,8 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                 .border_b_1()
                 .border_color(pal.border.opacity(0.4))
                 .child(
-                    col(120.0)
+                    col(220.0)
+                        .truncate()
                         .font_family(ui.mono.clone())
                         .text_sm()
                         .child(r.repo.to_string()),
@@ -144,25 +153,23 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                         .when_some(r.services.tone(), |d, t| d.text_color(pal.tone(t)))
                         .child(r.services.label()),
                 )
+                // One line, however long the branch: a ticket branch can be a hundred characters.
                 .child(
-                    col(220.0)
+                    slack()
+                        .truncate()
                         .font_family(ui.mono.clone())
                         .text_sm()
                         .child(r.branch.to_string()),
                 )
+                // Only what is off. A project with nothing wrong says nothing at all — silence is
+                // the normal state, not a row of "clean".
                 .child(
-                    div()
-                        .flex_1()
-                        .px_2()
+                    col(300.0)
                         .flex()
                         .flex_wrap()
                         .items_center()
                         .gap_1()
-                        .child(if r.badges.is_empty() {
-                            faint(pal, "clean").into_any_element()
-                        } else {
-                            pills(pal, &r.badges).into_any_element()
-                        })
+                        .children(r.badges.iter().map(|b| pill(pal, b).into_any_element()))
                         .when_some(r.break_lock.clone(), |d, a| d.child(button(ui, &a))),
                 )
         }))

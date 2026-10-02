@@ -169,12 +169,16 @@ fn row(id: &Slug, measured: Option<&Measured>) -> WsRow {
         }
         Some(health) => ServicesVm::of(Some(health.running() as u32), health.declared() as u32),
     };
-    let status = measured
-        .and_then(|m| m.git.iter().find(|(p, _)| p == id))
-        .and_then(|(_, read)| read.as_ref().ok());
+    let read = measured.and_then(|m| m.git.iter().find(|(p, _)| p == id));
+    let status = read.and_then(|(_, read)| read.as_ref().ok());
+    let missing = checked.is_some_and(|p| p.health.missing_folder());
     let mut badges = Vec::new();
-    if checked.is_some_and(|p| p.health.missing_folder()) {
+    if missing {
         badges.push(Badge::new("folder missing", Tone::Bad));
+    } else if read.is_some_and(|(_, read)| read.is_err()) {
+        // The repository is there but could not be read, and there is no other reason for it. A
+        // project with `[git] enabled = false` has no entry at all and says nothing.
+        badges.push(Badge::new("git unreadable", Tone::Warn));
     }
     if status.is_some_and(|s| !s.is_clean()) {
         badges.push(Badge::new("uncommitted changes", Tone::Warn));
@@ -298,6 +302,29 @@ mod tests {
             vm.rows[0].badges,
             vec![Badge::new("uncommitted changes", Tone::Warn)]
         );
+    }
+
+    /// A repository that is there but could not be read is an exception, and gets a badge of its
+    /// own. A project with git turned off has no entry at all, and says nothing.
+    #[test]
+    fn a_repository_that_could_not_be_read_is_badged() {
+        let measured = Measured {
+            git: vec![(slug("infra"), Err("is not a git repository".to_string()))],
+            ..Measured::default()
+        };
+        let vm = workspace_vm(Some(&slug("shop")), &[slug("infra")], Some(&measured));
+        assert_eq!(
+            vm.rows[0].badges,
+            vec![Badge::new("git unreadable", Tone::Warn)]
+        );
+        assert_eq!(vm.rows[0].branch.as_str(), "");
+
+        let vm = workspace_vm(
+            Some(&slug("shop")),
+            &[slug("infra")],
+            Some(&Measured::default()),
+        );
+        assert_eq!(vm.rows[0].badges, Vec::new());
     }
 
     /// The toggle follows what the services are doing, and stopping is never the primary button.
