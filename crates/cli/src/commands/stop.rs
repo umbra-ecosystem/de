@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    commands::git::{describe_risk, project_dirs},
+    commands::git::{describe_risk, git_dirs, project_dirs},
     config::Config,
     project::Project,
     types::Slug,
@@ -87,9 +87,10 @@ fn stop_guarded(ui: &UserInterface, workspace: Workspace, yes: bool) -> eyre::Re
 
 /// Check the projects for uncommitted or unpushed work. Projects that are not
 /// git repositories or cannot be read are reported separately and never count
-/// as at risk. Returns data only: nothing here prompts or prints.
+/// as at risk; projects with `[git] enabled = false` have no git state and are
+/// not checked at all. Returns data only: nothing here prompts or prints.
 pub fn check_git_risks(projects: &[(Slug, PathBuf)]) -> RiskReport<Slug> {
-    assess_risks(status_all(projects))
+    assess_risks(status_all(&git_dirs(projects)))
 }
 
 /// Show what would be lost and ask before going ahead. `true` means proceed.

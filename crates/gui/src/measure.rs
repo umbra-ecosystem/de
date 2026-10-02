@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use de_core::git::{GitRepo, RepoStatus};
+use de_core::project::git_enabled_in;
 use de_core::store::{Kind, Store as Db, tickets};
 use de_core::types::Slug;
 use de_core::workspace::health::{self, Overall, ProjectHealth, WorkspaceHealth};
@@ -68,11 +69,17 @@ pub fn measure(scope: Option<&Slug>, saved: &[Slug]) -> Measured {
 }
 
 /// Each project's git state, in the order the projects start.
+///
+/// A project with `[git] enabled = false` has no git state at all: it gets no entry here, so its
+/// row shows no branch and no badge rather than a repository that could not be read.
 fn git_state(workspace: &Workspace) -> Vec<(Slug, Result<RepoStatus, String>)> {
     startup_order(workspace)
         .into_iter()
         .filter_map(|id| {
             let dir = workspace.config().projects.get(&id)?.dir.clone();
+            if !git_enabled_in(&dir) {
+                return None;
+            }
             let read = GitRepo::open(&dir)
                 .and_then(|repo| repo.status())
                 .map_err(|e| format!("{e:#}"));
@@ -315,5 +322,36 @@ mod tests {
         assert!(!vm.up);
         assert_eq!(vm.toggle.label, "Start");
         assert!(vm.toggle.primary);
+    }
+
+    /// A project with `[git] enabled = false` is never read at all; a project without the setting
+    /// still is, even when reading it does not work.
+    #[test]
+    fn a_project_with_git_turned_off_is_not_read() {
+        let temp = tempfile::tempdir().unwrap();
+        for name in ["api", "infra"] {
+            std::fs::create_dir_all(temp.path().join(name)).unwrap();
+        }
+        std::fs::write(
+            temp.path().join("infra").join("de.toml"),
+            "[project]\nname = \"infra\"\nworkspace = \"shop\"\n\n[git]\nenabled = false\n",
+        )
+        .unwrap();
+        let file = temp.path().join("shop.toml");
+        let mut body = String::from("name = \"shop\"\n\n[projects]\n");
+        for name in ["api", "infra"] {
+            body.push_str(&format!(
+                "{name} = {{ dir = \"{}\" }}\n",
+                temp.path().join(name).display()
+            ));
+        }
+        std::fs::write(&file, body).unwrap();
+        let ws = Workspace::load_from_path(file).unwrap().unwrap();
+
+        // Only `api` was read: `infra` has no git state, so there is nothing to say about it.
+        let git = git_state(&ws);
+        assert_eq!(git.len(), 1, "{git:?}");
+        assert_eq!(git[0].0.as_str(), "api");
+        assert!(git[0].1.is_err(), "a plain folder is still attempted");
     }
 }

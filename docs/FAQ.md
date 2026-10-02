@@ -308,7 +308,7 @@ Resets project(s) to a clean state on the base branch:
 **Yes!** In the project's `de.toml`:
 
 ```toml
-[project.git]
+[git]
 enabled = false
 ```
 

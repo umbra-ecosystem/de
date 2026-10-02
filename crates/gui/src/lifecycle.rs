@@ -11,6 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use de_core::domain::TicketKey;
 use de_core::git::GitRepo;
+use de_core::project::git_enabled_in;
 use de_core::store::{Kind as DbKind, Store as Db, tickets};
 use de_core::types::Slug;
 use de_core::workspace::health::{ComposePlan, compose_plan, parse_services_list, run_compose};
@@ -562,6 +563,11 @@ fn open_phase(to: &Slug, ws: &Workspace) -> Phase {
         let Some(dir) = ws.config().projects.get(id).map(|p| p.dir.clone()) else {
             continue;
         };
+        // A project with `[git] enabled = false` has no git state to read, so it has no step
+        // either — the same as a project with no compose file having no service step.
+        if !git_enabled_in(&dir) {
+            continue;
+        }
         steps.push(step(
             format!("Git status \u{b7} {id}"),
             Job::Git {
@@ -673,6 +679,38 @@ mod tests {
         );
         assert_eq!(seq.phases[0].title, "Opening shop");
         assert_eq!(seq.vm().title, "Opening shop");
+    }
+
+    /// A project with `[git] enabled = false` has no git state to read, so it has no step: it is
+    /// never opened, and never reported as a repository that could not be read.
+    #[test]
+    fn a_project_with_git_turned_off_gets_no_git_step() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = workspace(temp.path(), "shop", &["api", "infra"]);
+        fs::write(
+            temp.path().join("infra").join("de.toml"),
+            "[project]\nname = \"infra\"\nworkspace = \"shop\"\n\n[git]\nenabled = false\n",
+        )
+        .unwrap();
+        let seq = Seq::build(
+            Kind::Open {
+                to: Slug::from_str("shop").unwrap(),
+            },
+            None,
+            Some(&ws),
+        )
+        .unwrap();
+
+        let labels: Vec<&str> = seq.phases[0].steps.iter().map(|s| s.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            vec![
+                "Read the workspace",
+                // `infra` says it has no git, so there is no step for it at all.
+                "Git status \u{b7} api",
+                "Load the workspace",
+            ]
+        );
     }
 
     /// Steps for a folder that is gone cannot make sense: they are skipped, not failed twice.

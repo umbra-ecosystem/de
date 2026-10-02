@@ -433,7 +433,7 @@ Define common tasks at workspace level, project-specific tasks in `de.toml`.
 
 For projects that don't need git operations:
 ```toml
-[project.git]
+[git]
 enabled = false
 ```
 

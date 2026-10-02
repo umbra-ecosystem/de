@@ -40,6 +40,18 @@ pub(crate) fn find_compose_file_in_dir(dir: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Whether the project in `dir` has git state to read. `[git] enabled = false` in its `de.toml`
+/// says it has none, so nothing tries to read it — and nothing reports the failure.
+///
+/// Callers that only hold a folder use this. A folder with no readable `de.toml` keeps its git
+/// on, so a missing or broken manifest never hides a repository's status.
+pub fn git_enabled_in(dir: &Path) -> bool {
+    match Project::from_dir(dir) {
+        Ok(project) => project.git_enabled(),
+        Err(_) => true,
+    }
+}
+
 pub struct Project {
     dir: PathBuf,
     manifest: ProjectManifest,
@@ -243,6 +255,17 @@ impl Project {
         &mut self.manifest
     }
 
+    /// Whether this project has git state to read: `[git] enabled = false` says it has none.
+    ///
+    /// Nothing opens such a repository, so nothing can fail on it either — a project that is not
+    /// under version control (a stack of configuration, say) reads as silence, not as an error.
+    pub fn git_enabled(&self) -> bool {
+        self.manifest
+            .git
+            .as_ref()
+            .is_none_or(|settings| settings.enabled)
+    }
+
     /// Finds the task called `name`: `de.toml` first, then tasks detected from project files.
     pub fn resolve_task(&self, name: &str) -> eyre::Result<Option<ResolvedTask>> {
         if let Some(task) = self
@@ -395,5 +418,39 @@ impl Project {
     /// Runs `docker compose down`. See [`Project::compose`].
     pub fn docker_compose_down(&self) -> eyre::Result<bool> {
         self.compose(&["down"])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A folder with `[git] enabled = false` has no git state to read; a folder that just has no
+    /// manifest keeps its git, so a missing or broken `de.toml` never hides a repository.
+    #[test]
+    fn git_is_off_only_where_the_project_says_so() {
+        let temp = tempfile::tempdir().unwrap();
+        let manifest = |name: &str, body: &str| {
+            let dir = temp.path().join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("de.toml"), body).unwrap();
+            dir
+        };
+
+        let infra = manifest(
+            "infra",
+            "[project]\nname = \"infra\"\nworkspace = \"hbt\"\n\n[git]\nenabled = false\n",
+        );
+        assert!(!git_enabled_in(&infra));
+
+        let api = manifest("api", "[project]\nname = \"api\"\nworkspace = \"hbt\"\n");
+        assert!(git_enabled_in(&api));
+
+        let plain = temp.path().join("notes");
+        std::fs::create_dir_all(&plain).unwrap();
+        assert!(git_enabled_in(&plain));
+
+        let broken = manifest("broken", "not = valid = toml");
+        assert!(git_enabled_in(&broken));
     }
 }

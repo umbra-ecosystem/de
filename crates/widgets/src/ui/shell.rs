@@ -209,28 +209,38 @@ fn step_row(ui: &Ui, st: &StepVm) -> Div {
 
     div()
         .flex()
-        .items_center()
+        // The mark and the label sit on the result's first line: a result that wraps must not
+        // push them down into the middle of it.
+        .items_start()
         .gap_3()
         .min_h_6()
         .child(
             div()
-                .flex_none()
-                .w(px(16.0))
-                .flex()
-                .justify_center()
-                .child(mark),
-        )
-        .child(
-            div()
                 .flex_1()
                 .min_w_0()
-                .truncate()
-                .text_sm()
-                .text_color(match st.state {
-                    ProgressState::Waiting | ProgressState::Skipped => pal.faint,
-                    _ => pal.fg,
-                })
-                .child(st.label.clone()),
+                .flex()
+                .items_center()
+                .gap_3()
+                .child(
+                    div()
+                        .flex_none()
+                        .w(px(16.0))
+                        .flex()
+                        .justify_center()
+                        .child(mark),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_sm()
+                        .text_color(match st.state {
+                            ProgressState::Waiting | ProgressState::Skipped => pal.faint,
+                            _ => pal.fg,
+                        })
+                        .child(st.label.clone()),
+                ),
         )
         .when(!st.detail.is_empty(), |d| {
             d.child(

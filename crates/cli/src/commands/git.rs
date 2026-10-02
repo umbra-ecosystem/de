@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use de_core::git::{RepoStatus, status_all};
+use de_core::project::git_enabled_in;
 
 use crate::{
     types::Slug,
@@ -59,9 +60,21 @@ pub fn project_dirs(workspace: &Workspace) -> Vec<(Slug, PathBuf)> {
         .collect()
 }
 
+/// The project directories whose git state is read.
+///
+/// A project with `[git] enabled = false` has no git state to read, so it is left out rather than
+/// being reported as a repository that could not be opened.
+pub fn git_dirs(projects: &[(Slug, PathBuf)]) -> Vec<(Slug, PathBuf)> {
+    projects
+        .iter()
+        .filter(|(_, dir)| git_enabled_in(dir))
+        .cloned()
+        .collect()
+}
+
 /// Read the git state of every project. A failing project only affects its own row.
 pub fn gather_status(workspace: &Workspace) -> Vec<StatusRow> {
-    status_all(&project_dirs(workspace))
+    status_all(&git_dirs(&project_dirs(workspace)))
         .into_iter()
         .map(|(name, result)| StatusRow {
             project: name.to_string(),
@@ -283,6 +296,37 @@ mod tests {
         for line in &lines[1..6] {
             assert_eq!(line.chars().nth(offset - 1), Some(' '), "{line}");
         }
+    }
+
+    /// A project with `[git] enabled = false` has no git state to read, so its directory is left
+    /// out; a project without the setting is still read even when it is not a repository.
+    #[test]
+    fn only_the_projects_that_have_git_are_read() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = |name: &str| {
+            let path = temp.path().join(name);
+            std::fs::create_dir_all(&path).unwrap();
+            path
+        };
+        let api = dir("api");
+        let infra = dir("infra");
+        let notes = dir("notes");
+        std::fs::write(
+            infra.join("de.toml"),
+            "[project]\nname = \"infra\"\nworkspace = \"hbt\"\n\n[git]\nenabled = false\n",
+        )
+        .unwrap();
+
+        let all = [("api", api), ("infra", infra), ("notes", notes)]
+            .into_iter()
+            .map(|(name, dir)| (name.parse::<Slug>().unwrap(), dir))
+            .collect::<Vec<_>>();
+
+        let kept = git_dirs(&all)
+            .into_iter()
+            .map(|(name, _)| name.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(kept, ["api", "notes"]);
     }
 
     #[test]
