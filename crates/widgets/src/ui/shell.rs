@@ -37,6 +37,7 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
             "Nothing needs you".to_string()
         })
         .on_click(ui.on_click(Intent::ToggleAttention));
+
     let attention = if alert {
         div()
             .child(CountBadge::new().count(n).color(pal.bad).child(attention))
@@ -60,12 +61,14 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
     } else {
         (IconName::PanelRightOpen, "Show details")
     };
+
     let panel = Button::new("panel")
         .ghost()
         .small()
         .icon(panel_icon)
         .tooltip(panel_tip)
         .on_click(ui.on_click(Intent::TogglePanel));
+
     let simulate = Button::new("sim")
         .ghost()
         .small()
@@ -80,7 +83,6 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
         .gap_2()
         .w_full()
         .pr_3()
-        .child(div().child("de"))
         .child(workspace_button(ui, vm))
         .child(simulate)
         .child(div().flex_1())
@@ -90,7 +92,11 @@ pub fn title_bar_content(ui: &Ui, vm: &AppVm, simulate_on: bool) -> Div {
 
 /// The title bar of the page before the dock: just the app name beside the window controls.
 pub fn title_bar_minimal() -> Div {
-    div().flex().items_center().w_full().child(div().child("de"))
+    div()
+        .flex()
+        .items_center()
+        .w_full()
+        .child(div().child("de"))
 }
 
 /// The title bar's workspace button: the open workspace's name (or a prompt when there is none) and a chevron.
@@ -100,7 +106,6 @@ fn workspace_button(ui: &Ui, vm: &AppVm) -> Button {
         .ghost()
         .small()
         .label(vm.workspace.label.clone())
-        .icon(IconName::ChevronDown)
         .text_color(if vm.workspace.none { pal.warn } else { pal.fg })
         .selected(vm.picker.is_some())
         .tooltip("Switch workspace")
@@ -121,7 +126,14 @@ fn workspace_row(ui: &Ui, w: &WorkspaceItemVm) -> Stateful<Div> {
         .cursor_pointer()
         .hover(|d| d.bg(pal.hover))
         .on_click(ui.on_click(Intent::Do(Command::SelectWorkspace(w.name.clone()))))
-        .child(div().flex_1().min_w_0().truncate().text_sm().child(w.name.to_string()))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_sm()
+                .child(w.name.to_string()),
+        )
         .when(w.up, |d| d.child(dot(pal.ok)))
         .child(faint(pal, w.last_used.clone()))
         .when(w.current, |d| {
@@ -132,6 +144,7 @@ fn workspace_row(ui: &Ui, w: &WorkspaceItemVm) -> Stateful<Div> {
 /// A workspace in the modal that lists them all: its name and its projects on one line, and when it was last used.
 fn all_workspaces_row(ui: &Ui, w: &WorkspaceItemVm) -> Stateful<Div> {
     let pal = &ui.pal;
+
     div()
         .id(hash_id("all-ws", &w.name))
         .flex()
@@ -143,7 +156,14 @@ fn all_workspaces_row(ui: &Ui, w: &WorkspaceItemVm) -> Stateful<Div> {
         .cursor_pointer()
         .hover(|d| d.bg(pal.hover))
         .on_click(ui.on_click(Intent::Do(Command::SelectWorkspace(w.name.clone()))))
-        .child(div().flex_none().w(px(120.0)).truncate().text_sm().child(w.name.to_string()))
+        .child(
+            div()
+                .flex_none()
+                .w(px(120.0))
+                .truncate()
+                .text_sm()
+                .child(w.name.to_string()),
+        )
         .child(
             div()
                 .flex_1()
@@ -155,28 +175,51 @@ fn all_workspaces_row(ui: &Ui, w: &WorkspaceItemVm) -> Stateful<Div> {
         )
         .when(w.up, |d| d.child(dot(pal.ok)))
         .child(faint(pal, w.last_used.clone()))
-        .when(w.current, |d| d.child(Icon::new(IconName::Check).small().text_color(pal.accent)))
+        .when(w.current, |d| {
+            d.child(Icon::new(IconName::Check).small().text_color(pal.accent))
+        })
 }
 
 /// One step of a sequence: a mark for where it is, what it does, and its result on the right.
 fn step_row(ui: &Ui, st: &StepVm) -> Div {
     let pal = &ui.pal;
     let mark = match st.state {
-        ProgressState::Waiting => div().size_1p5().rounded_full().bg(pal.faint.opacity(0.6)).into_any_element(),
+        ProgressState::Waiting => div()
+            .size_1p5()
+            .rounded_full()
+            .bg(pal.faint.opacity(0.6))
+            .into_any_element(),
         ProgressState::Running => gpui_kit::component::spinner::Spinner::new()
             .xsmall()
             .color(pal.accent)
             .into_any_element(),
-        ProgressState::Done => Icon::new(IconName::Check).small().text_color(pal.ok).into_any_element(),
-        ProgressState::Failed => Icon::new(IconName::TriangleAlert).small().text_color(pal.bad).into_any_element(),
-        ProgressState::Skipped => div().text_color(pal.faint).child("\u{2013}").into_any_element(),
+        ProgressState::Done => Icon::new(IconName::Check)
+            .small()
+            .text_color(pal.ok)
+            .into_any_element(),
+        ProgressState::Failed => Icon::new(IconName::TriangleAlert)
+            .small()
+            .text_color(pal.bad)
+            .into_any_element(),
+        ProgressState::Skipped => div()
+            .text_color(pal.faint)
+            .child("\u{2013}")
+            .into_any_element(),
     };
+
     div()
         .flex()
         .items_center()
         .gap_3()
         .min_h_6()
-        .child(div().flex_none().w(px(16.0)).flex().justify_center().child(mark))
+        .child(
+            div()
+                .flex_none()
+                .w(px(16.0))
+                .flex()
+                .justify_center()
+                .child(mark),
+        )
         .child(
             div()
                 .flex_1()
@@ -196,7 +239,11 @@ fn step_row(ui: &Ui, st: &StepVm) -> Div {
                     .max_w(px(260.0))
                     .text_xs()
                     .text_right()
-                    .text_color(if st.state == ProgressState::Failed { pal.bad } else { pal.muted })
+                    .text_color(if st.state == ProgressState::Failed {
+                        pal.bad
+                    } else {
+                        pal.muted
+                    })
                     .child(st.detail.clone()),
             )
         })
@@ -229,9 +276,19 @@ pub fn sequence_modal(ui: &Ui, q: &SequenceVm) -> Div {
             .justify_between()
             .w_full()
             .gap_3()
-            .child(div().flex_1().min_w_0().child(faint(pal, "Something went wrong. You decide what happens next.")))
-            .child(div().flex().flex_none().gap_2().children(q.actions.iter().map(|a| button(ui, a)))),
+            .child(div().flex_1().min_w_0().child(faint(
+                pal,
+                "Something went wrong. You decide what happens next.",
+            )))
+            .child(
+                div()
+                    .flex()
+                    .flex_none()
+                    .gap_2()
+                    .children(q.actions.iter().map(|a| button(ui, a))),
+            ),
     };
+
     sheet_frame_with(
         ui,
         520.0,
@@ -251,7 +308,12 @@ pub fn sequence_modal(ui: &Ui, q: &SequenceVm) -> Div {
                     .flex_col()
                     .gap_1()
                     .when(several, |d| {
-                        d.child(div().text_xs().text_color(pal.muted).child(ph.title.clone()))
+                        d.child(
+                            div()
+                                .text_xs()
+                                .text_color(pal.muted)
+                                .child(ph.title.clone()),
+                        )
                     })
                     .children(ph.steps.iter().map(|s| step_row(ui, s)))
             })),
@@ -264,8 +326,18 @@ pub fn sequence_modal(ui: &Ui, q: &SequenceVm) -> Div {
 /// make a new one.
 pub fn workspace_picker(ui: &Ui, inputs: &Inputs, p: &PickerVm) -> Div {
     let pal = &ui.pal;
-    let label = |text: &str| div().px_3().pt_2().pb_1().text_xs().text_color(pal.muted).child(text.to_string());
+    let label = |text: &str| {
+        div()
+            .px_3()
+            .pt_2()
+            .pb_1()
+            .text_xs()
+            .text_color(pal.muted)
+            .child(text.to_string())
+    };
+
     let none_match = p.current.is_none() && p.recent.is_empty();
+
     div()
         .absolute()
         .top_0()
@@ -287,7 +359,13 @@ pub fn workspace_picker(ui: &Ui, inputs: &Inputs, p: &PickerVm) -> Div {
                 .border_color(pal.border)
                 .bg(pal.bg)
                 .shadow_lg()
-                .child(div().p_2().border_b_1().border_color(pal.border.opacity(0.6)).child(inputs.line(&Field::WorkspaceSearch)))
+                .child(
+                    div()
+                        .p_2()
+                        .border_b_1()
+                        .border_color(pal.border.opacity(0.6))
+                        .child(inputs.line(&Field::WorkspaceSearch)),
+                )
                 .child(
                     div()
                         .id("ws-list")
@@ -371,6 +449,7 @@ pub fn panel_header(ui: &Ui, title: String) -> Div {
 pub fn nav(ui: &Ui, vm: &AppVm) -> Div {
     let pal = &ui.pal;
     let title = "Navigate";
+
     div()
         .flex()
         .flex_col()
@@ -582,11 +661,14 @@ fn right_row(ui: &Ui, r: &RightRow) -> AnyElement {
                     gpui_kit::component::tooltip::Tooltip::new(full.clone()).build(window, cx)
                 })
                 .child(
-                    div().flex_none().w(px(14.0)).children(mark.as_ref().map(|m| {
-                        Icon::new(IconName::TriangleAlert)
-                            .small()
-                            .text_color(pal.tone(m.tone))
-                    })),
+                    div()
+                        .flex_none()
+                        .w(px(14.0))
+                        .children(mark.as_ref().map(|m| {
+                            Icon::new(IconName::TriangleAlert)
+                                .small()
+                                .text_color(pal.tone(m.tone))
+                        })),
                 )
                 .child(key_text(ui, key))
                 .child(
