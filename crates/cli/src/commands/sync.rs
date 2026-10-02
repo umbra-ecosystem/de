@@ -52,11 +52,13 @@ pub fn run_sync(
 pub fn sync(only: Option<SyncSource>, force: bool, full: bool) -> eyre::Result<()> {
     let ui = UserInterface::new();
     let config = Config::load()?;
-    let state = Store::open_default(Kind::State)?;
-    let cache = Store::open_default(Kind::Cache)?;
-
     // Repos come from the active workspace; without one only Jira can sync.
-    let repos = match Workspace::active()? {
+    let active = Workspace::active()?;
+    let scope = active.as_ref().map(|w| w.config().name.clone());
+    let state = Store::open_scoped_for(scope.as_ref(), Kind::State)?;
+    let cache = Store::open_scoped_for(scope.as_ref(), Kind::Cache)?;
+
+    let repos = match active {
         Some(workspace) => {
             let repos = WorkspaceRepo::from_workspace(&workspace)
                 .wrap_err("Failed to load the projects of the active workspace")?;

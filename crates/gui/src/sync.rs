@@ -6,6 +6,7 @@
 
 use de_core::config::Config;
 use de_core::providers::{ProviderError, ProviderErrorKind, Providers, TicketProvider};
+use de_core::types::Slug;
 use de_core::store::{Kind, Store};
 use de_core::sync::{
     DEFAULT_MIN_INTERVAL, SourceOutcome, SourceReport, SyncContext, SyncReport, SyncSource,
@@ -69,9 +70,16 @@ pub fn sync_now(
 }
 
 /// The whole thing the app's background thread does: open the databases, build `acli`, sync.
-pub fn sync_real(now: i64) -> SyncDone {
-    let opened = Config::load()
-        .and_then(|c| Ok((c, Store::open_default(Kind::State)?, Store::open_default(Kind::Cache)?)));
+///
+/// `scope` is the workspace the app has open; its sync lands in that workspace's cache only.
+pub fn sync_real(scope: Option<&Slug>, now: i64) -> SyncDone {
+    let opened = Config::load().and_then(|c| {
+        Ok((
+            c,
+            Store::open_scoped_for(scope, Kind::State)?,
+            Store::open_scoped_for(scope, Kind::Cache)?,
+        ))
+    });
     match opened {
         Ok((config, state, cache)) => {
             // Kept until the sync is done; dropping it ends the run.
@@ -89,17 +97,19 @@ pub fn sync_real(now: i64) -> SyncDone {
 }
 
 /// Whole minutes since Jira last synced completely, from the cache; `None` when it never has.
-pub fn last_sync_minutes_ago(now: i64) -> Option<i64> {
-    let cache = Store::open_default(Kind::Cache).ok()?;
+pub fn last_sync_minutes_ago(scope: Option<&Slug>, now: i64) -> Option<i64> {
+    let cache = Store::open_scoped_for(scope, Kind::Cache).ok()?;
     let state = de_core::store::sync_state::get(&cache, de_core::store::sync_state::JIRA).ok()??;
     Some(((now - state.last_ok_at?).max(0)) / 60)
 }
 
 /// Read the cached tickets without syncing (what the app shows at start, offline or not).
-pub fn load_cached() -> eyre::Result<Vec<Ticket>> {
+///
+/// Only the open workspace's tickets: nothing of another workspace surfaces here.
+pub fn load_cached(scope: Option<&Slug>) -> eyre::Result<Vec<Ticket>> {
     let config = Config::load()?;
-    let state = Store::open_default(Kind::State)?;
-    let cache = Store::open_default(Kind::Cache)?;
+    let state = Store::open_scoped_for(scope, Kind::State)?;
+    let cache = Store::open_scoped_for(scope, Kind::Cache)?;
     tickets::load(&state, &cache, &config)
 }
 

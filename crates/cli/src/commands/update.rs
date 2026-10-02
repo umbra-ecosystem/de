@@ -17,15 +17,12 @@ pub fn update(all: bool, workspace: Option<Option<Slug>>) -> eyre::Result<()> {
         update_all_workspaces(&ui)
     } else if let Some(workspace_name) = workspace {
         let workspace = if let Some(name) = workspace_name {
-            Workspace::load_from_name(&name)
-                .map_err(|e| eyre!(e))
-                .wrap_err("Failed to load workspace")?
-                .ok_or_else(|| eyre!("Workspace '{}' not found", name))?
+            crate::workspace::registry::load_workspace(&name).map_err(|e| eyre!(e))?
         } else {
             Workspace::active()
                 .map_err(|e| eyre!(e))
                 .wrap_err("Failed to get active workspace")?
-                .ok_or_else(|| eyre!("No active workspace found"))?
+                .ok_or_else(crate::utils::cli::no_workspace_open)?
         };
 
         update_workspace(&ui, workspace)
@@ -70,10 +67,8 @@ fn update_all_workspaces(ui: &UserInterface) -> eyre::Result<()> {
             .and_then(|s| s.parse::<Slug>().ok());
 
         if let Some(workspace_name) = workspace_name {
-            let workspace = Workspace::load_from_name(&workspace_name)
-                .map_err(|e| eyre!(e))
-                .wrap_err_with(|| format!("Failed to load workspace '{workspace_name}'"))?
-                .ok_or_else(|| eyre!("Workspace '{}' not found.", workspace_name))?;
+            let workspace = crate::workspace::registry::load_workspace(&workspace_name)
+                .map_err(|e| eyre!(e))?;
 
             ui.subheading(workspace_name.as_str())?;
 

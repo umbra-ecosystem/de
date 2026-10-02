@@ -1333,15 +1333,22 @@ impl Store for Sim {
 
     fn workspace(&self) -> WorkspaceVm {
         let active = self.active_key().and_then(|k| self.tk(&k));
+        let docker_down = self.sims.docker_down;
+        let declared: u32 = self.repos.iter().map(|r| r.services).sum();
+        // What each row's services are doing; a check that could not run claims nothing.
+        let row_running = |services: u32| match (docker_down, self.ws.up) {
+            (true, _) => None,
+            (false, true) => Some(services),
+            (false, false) => Some(0),
+        };
         let rows = self
             .repos
             .iter()
             .map(|r| {
-                // Only what is out of the ordinary gets a badge: the defaults (up, clean) are silence.
+                // Only what is out of the ordinary gets a badge: the defaults (up, clean) are
+                // silence. A stopped workspace says so in the Services cell of each row and in
+                // the strip, so the row does not repeat it.
                 let mut badges = Vec::new();
-                if !self.ws.up {
-                    badges.push(Badge::new("down", Tone::Neutral));
-                }
                 if self.ws.dirty.contains(&r.name) {
                     badges.push(Badge::new("uncommitted changes", Tone::Warn));
                 }
@@ -1370,19 +1377,29 @@ impl Store for Sim {
                 }
                 WsRow {
                     repo: r.name.clone(),
-                    services: r.services,
+                    services: ServicesVm::of(row_running(r.services), r.services),
                     branch: self.ws.branches.get(&r.name).cloned().unwrap_or_default(),
                     badges,
                     break_lock,
                 }
             })
             .collect();
+        // The whole workspace in one line: silence when everything runs (or nothing is
+        // declared), the failed check before anything else.
+        let health = if docker_down {
+            Some(HealthVm::unavailable(
+                "Docker is not running. Start Docker Desktop, then press Refresh.",
+            ))
+        } else {
+            HealthVm::stopped(if self.ws.up { declared } else { 0 }, declared)
+        };
         WorkspaceVm {
             name: self
                 .current_workspace()
                 .map_or_else(String::new, |n| n.to_string()),
             up: self.ws.up,
             order: "db → api → web".to_string(),
+            health,
             rows,
             note: active.map(|t| {
                 format!(
@@ -1390,6 +1407,7 @@ impl Store for Sim {
                     t.key
                 )
             }),
+            refresh: Btn::new("Refresh", cmd(Command::RefreshHealth)),
             toggle: if self.ws.up {
                 Btn::new("Stop…", cmd(Command::StopWorkspace))
             } else {
@@ -1845,6 +1863,13 @@ impl Sim {
                 self.ws.up = false;
                 self.ok("workspace.stop", None, None, "");
                 Outcome::ok().with_toast("Workspace stopped", ToastKind::Info, None)
+            }
+            Command::RefreshHealth => {
+                if self.sims.docker_down {
+                    Outcome::fail("Docker is not running. Start Docker Desktop, then try again.")
+                } else {
+                    Outcome::ok().with_toast("Services checked", ToastKind::Info, None)
+                }
             }
             Command::ResetDemo => {
                 *self = Sim::new();

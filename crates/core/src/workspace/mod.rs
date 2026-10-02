@@ -1,5 +1,7 @@
 pub mod config;
 mod dependency;
+pub mod health;
+pub mod registry;
 mod utils;
 
 use eyre::{Context, eyre};
@@ -12,8 +14,10 @@ use crate::{
 
 pub use config::WorkspaceProject;
 pub use dependency::DependencyGraph;
+pub use registry::{Selected, WorkspaceError, WorkspaceList};
 pub use utils::{
     Order, add_project_to_workspace, ordered_projects, spin_down_workspace, spin_up_workspace,
+    startup_order,
 };
 
 #[derive(Debug)]
@@ -33,6 +37,7 @@ impl Workspace {
             projects: Default::default(),
             tasks: Default::default(),
             default_branch: Default::default(),
+            last_used: Default::default(),
         };
 
         Ok(Self {

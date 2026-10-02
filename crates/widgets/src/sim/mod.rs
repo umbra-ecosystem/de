@@ -15,7 +15,7 @@ mod store_impl;
 mod worlds;
 
 pub use rules::{Rule, Sug};
-pub use worlds::open_intent;
+pub use worlds::{INIT_COMMAND, open_intent};
 
 use std::collections::BTreeMap;
 
@@ -148,6 +148,28 @@ impl Sim {
             })
             .collect();
         self.observe();
+    }
+
+    /// The saved workspaces as the engine has them: the invented ones are not what the app opens.
+    /// `open` is the one this window has open, if any.
+    ///
+    /// Nothing of the live workspace (its tickets especially) is touched: the caller loads what
+    /// the workspace being opened shows.
+    pub fn replace_workspaces(
+        &mut self,
+        names: Vec<crate::vm::WorkspaceName>,
+        open: Option<&crate::vm::WorkspaceName>,
+    ) {
+        self.saved = names
+            .into_iter()
+            .map(|name| worlds::Saved {
+                name,
+                last_used: None,
+                world: None,
+            })
+            .collect();
+        self.open_ws = open.and_then(|o| self.saved.iter().position(|s| s.name == *o));
+        self.wseq = None;
     }
 
     /// A real sync is under way: the status bar shows it and the fake completion never fires.
@@ -607,5 +629,34 @@ mod tests {
         assert_eq!(crate::Store::status(&sim).sync_text, "Syncing…");
         sim.sync_ended(vec![(true, "Jira (acli)".into(), "ok".into())]);
         assert_eq!(crate::Store::status(&sim).sync_text, "Synced now");
+    }
+
+    /// The engine's workspace list replaces the invented one; the open workspace's own data
+    /// (its tickets) is not touched by the swap.
+    #[test]
+    fn the_saved_workspaces_can_be_replaced_with_the_real_ones() {
+        let mut sim = Sim::new();
+        let tickets = sim.tickets.len();
+        sim.replace_workspaces(vec!["alpha".into(), "beta".into()], Some(&"beta".into()));
+        assert_eq!(
+            sim.current_workspace().map(|n| n.as_str()),
+            Some("beta")
+        );
+        let vm = sim.workspaces_vm();
+        assert_eq!(vm.current.as_ref().map(|n| n.as_str()), Some("beta"));
+        // The open one counts as used just now, so it leads the list.
+        assert_eq!(
+            vm.items.iter().map(|w| w.name.as_str()).collect::<Vec<_>>(),
+            ["beta", "alpha"]
+        );
+        assert_eq!(sim.tickets.len(), tickets, "the tickets are the caller's to load");
+
+        sim.replace_workspaces(vec!["alpha".into(), "beta".into()], None);
+        assert!(sim.current_workspace().is_none());
+        assert_eq!(
+            sim.workspaces_vm().items.len(),
+            2,
+            "closing keeps the list, it only forgets which is open"
+        );
     }
 }

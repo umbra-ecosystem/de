@@ -17,15 +17,12 @@ pub fn exec(
     // If project_name is provided, use workspace mode
     if let Some(project_name) = project_name {
         let workspace = if let Some(workspace_name) = workspace_name {
-            Workspace::load_from_name(&workspace_name)
-                .map_err(|e| eyre!(e))
-                .wrap_err("Failed to load workspace")?
-                .ok_or_else(|| eyre!("Workspace '{}' not found", workspace_name))?
+            crate::workspace::registry::load_workspace(&workspace_name).map_err(|e| eyre!(e))?
         } else {
             Workspace::active()
                 .map_err(|e| eyre!(e))
                 .wrap_err("Failed to get active workspace")?
-                .ok_or_else(|| eyre!("No current workspace found"))?
+                .ok_or_else(crate::utils::cli::no_workspace_open)?
         };
 
         let ws_project = workspace

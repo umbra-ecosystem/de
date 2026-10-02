@@ -570,4 +570,21 @@ pub enum WorkspaceCommands {
         #[arg(short, long)]
         workspace: Option<Slug>,
     },
+
+    /// List the saved workspaces, most recently used first.
+    List,
+
+    /// Make a workspace the active one and show its services.
+    #[command(alias = "switch")]
+    Select {
+        /// The workspace to switch to.
+        name: Slug,
+    },
+
+    /// Show the Docker Compose services of a workspace.
+    Status {
+        /// The workspace to report on. Defaults to the active workspace.
+        #[arg(short, long)]
+        workspace: Option<Slug>,
+    },
 }

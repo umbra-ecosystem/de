@@ -1,14 +1,15 @@
 use dialoguer::{Select, theme::ColorfulTheme};
 use eyre::{WrapErr, eyre};
 use std::collections::BTreeSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    commands::stop::stop_workspace,
+    commands::{stop::stop_workspace, workspace::report},
     config::Config,
     project::Project,
     types::Slug,
     utils::{get_workspace_for_cli, ui::UserInterface},
-    workspace::{Order, Workspace, ordered_projects, spin_up_workspace},
+    workspace::{Workspace, health, registry, spin_up_workspace},
 };
 
 pub fn start(workspace_name: Option<Option<Slug>>, yes: bool) -> eyre::Result<()> {
@@ -22,9 +23,14 @@ pub fn start(workspace_name: Option<Option<Slug>>, yes: bool) -> eyre::Result<()
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to get workspace for CLI")?;
 
+        // Opening a workspace records when it was last used: the lists are ordered by it.
+        // Done before anything starts, so a workspace file that cannot be written fails the
+        // command while nothing has run yet.
+        registry::stamp_last_used(&workspace.config().name, now())?;
+
         spin_up_workspace(&workspace)
             .map_err(|e| eyre!(e))
-            .wrap_err("Failed to spin up workspace")?;
+            .wrap_err("The workspace could not be started")?;
 
         Config::mutate_persisted(|config| {
             config.set_active_workspace(Some(workspace.config().name.clone()));
@@ -63,10 +69,8 @@ pub fn start(workspace_name: Option<Option<Slug>>, yes: bool) -> eyre::Result<()
         } else {
             // Existing logic for configured projects with workspace/dependencies
             let workspace_name = project.manifest().project().workspace.clone();
-            let workspace = Workspace::load_from_name(&workspace_name)
-                .map_err(|e| eyre!(e))
-                .wrap_err("Failed to load workspace")?
-                .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
+            let workspace = crate::workspace::registry::load_workspace(&workspace_name)
+                .map_err(|e| eyre!(e))?;
 
             spin_up_project_and_dependencies(&ui, &workspace, &project.manifest().project().name)
                 .map_err(|e| eyre!(e))
@@ -84,18 +88,18 @@ pub fn start(workspace_name: Option<Option<Slug>>, yes: bool) -> eyre::Result<()
     Ok(())
 }
 
-/// Prints the containers of every project in the workspace.
+/// Prints the services of every project in the workspace, as they are right now.
 fn show_containers(ui: &UserInterface, workspace: &Workspace) -> eyre::Result<()> {
-    ui.heading("Containers")?;
+    let health = health::check_workspace(workspace, now());
+    ui.new_line()?;
+    report(ui, &health)
+}
 
-    for (name, project) in ordered_projects(workspace, Order::Startup)? {
-        // A failing `ps` shouldn't fail a start that already succeeded.
-        if project.compose(&["ps"]).unwrap_or(false) {
-            ui.writeln(&ui.theme.dim(&format!("↑ {name}")))?;
-        }
-    }
-
-    Ok(())
+fn now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 fn check_for_active_workspace(ui: &UserInterface, yes: bool) -> eyre::Result<()> {

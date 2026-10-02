@@ -30,7 +30,7 @@ const DEFAULT_COMPOSE_FILES: &[&str] = &[
 
 /// Check if a Docker Compose file exists in the given directory
 /// Returns the path to the first matching compose file, or None if not found
-fn find_compose_file_in_dir(dir: &Path) -> Option<PathBuf> {
+pub(crate) fn find_compose_file_in_dir(dir: &Path) -> Option<PathBuf> {
     for filename in DEFAULT_COMPOSE_FILES {
         let path = dir.join(filename);
         if path.exists() {
@@ -350,24 +350,35 @@ impl Project {
             return Ok(false);
         };
 
-        let status = Command::new("docker")
+        let status = match Command::new("docker")
             .arg("compose")
             .arg("-f")
             .arg(docker_compose_path)
             .args(args)
             .current_dir(self.dir())
             .status()
-            .map_err(|e| eyre!(e))
-            .wrap_err_with(|| {
-                format!(
-                    "Failed to run docker compose for project {}",
+        {
+            Ok(status) => status,
+            // The wording of a docker problem lives with the other docker wording
+            // (`workspace::health::DockerError`), so every surface says the same thing.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(eyre!(
+                    "{}",
+                    crate::workspace::health::DockerError::NotInstalled
+                ));
+            }
+            Err(e) => {
+                return Err(eyre!(
+                    "docker compose could not be run for project {} ({e})",
                     self.manifest().project().name
-                )
-            })?;
+                ));
+            }
+        };
 
         if !status.success() {
             return Err(eyre!(
-                "docker compose failed for project {} with status code: {}",
+                "docker compose did not finish for project {} (exit code {}); \
+                 its own message is just above",
                 self.manifest().project().name,
                 status.code().unwrap_or(-1)
             ));

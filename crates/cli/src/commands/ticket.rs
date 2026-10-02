@@ -40,7 +40,12 @@ fn now() -> eyre::Result<i64> {
 }
 
 fn open_state() -> eyre::Result<Store> {
-    Store::open_default(Kind::State)
+    Store::open_scoped(Kind::State)
+}
+
+/// The state database of the workspace a `-w` flag names, or the one this folder works in.
+fn open_state_for(workspace: Option<&Slug>) -> eyre::Result<Store> {
+    Store::open_scoped_for(workspace, Kind::State)
 }
 
 fn require_tracked(state: &Store, key: &TicketKey) -> eyre::Result<tickets::TicketTracking> {
@@ -49,8 +54,8 @@ fn require_tracked(state: &Store, key: &TicketKey) -> eyre::Result<tickets::Tick
 }
 
 /// The cached title of a ticket, if a cache row exists.
-fn cached_title(key: &TicketKey) -> Option<String> {
-    let cache = Store::open_default(Kind::Cache).ok()?;
+fn cached_title(key: &TicketKey, workspace: Option<&Slug>) -> Option<String> {
+    let cache = Store::open_scoped_for(workspace, Kind::Cache).ok()?;
     jira_cache::get(&cache, key).ok().flatten().map(|t| t.title)
 }
 
@@ -107,7 +112,7 @@ pub fn claim(key: TicketKey, title: Option<String>, hotfix: bool) -> eyre::Resul
         tickets::set_kind_override(&state, &key, Some(TicketKind::Hotfix), now)?;
     }
     if let Some(title) = &title {
-        let cache = Store::open_default(Kind::Cache)?;
+        let cache = Store::open_scoped(Kind::Cache)?;
         jira_cache::upsert(
             &cache,
             &JiraTicket {
@@ -188,7 +193,7 @@ pub fn list() -> eyre::Result<()> {
     let mut rows = Vec::new();
     for t in tickets::list(&state)? {
         rows.push(ListRow {
-            title: cached_title(&t.key),
+            title: cached_title(&t.key, None),
             seconds: time::total_seconds(&state, &t.key, now)?,
             kind: t.kind_override.unwrap_or(TicketKind::Normal),
             status: t.status,
@@ -347,9 +352,10 @@ pub fn render_show(data: &ShowData) -> Vec<String> {
 
 pub fn show(key: TicketKey, workspace: Option<Slug>) -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let state = open_state()?;
+    let state = open_state_for(workspace.as_ref())?;
     let now = now()?;
     let tracking = require_tracked(&state, &key)?;
+    let scope = workspace.as_ref().cloned();
 
     // A missing or broken workspace only costs the live branch view.
     let live: Option<Vec<RepoMatches>> = workspace_repos(workspace)
@@ -357,7 +363,7 @@ pub fn show(key: TicketKey, workspace: Option<Slug>) -> eyre::Result<()> {
         .map(|(_, repos)| find_matches(&key, &repos).matches);
 
     let data = ShowData {
-        title: cached_title(&key),
+        title: cached_title(&key, scope.as_ref()),
         kind: tracking.kind_override.unwrap_or(TicketKind::Normal),
         repos: merge_repo_lines(&links::list(&state, &key)?, live.as_deref()),
         overlays: overlays::list(&state, &key)?
@@ -410,7 +416,7 @@ pub fn link(
 ) -> eyre::Result<()> {
     let ui = UserInterface::new();
     let action = link_action(branch, exclude)?;
-    let state = open_state()?;
+    let state = open_state_for(workspace.as_ref())?;
     require_tracked(&state, &key)?;
 
     let workspace = get_workspace_for_cli(Some(workspace))?;
@@ -543,7 +549,7 @@ pub fn activate_cmd(
     workspace: Option<Slug>,
 ) -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let state = open_state()?;
+    let state = open_state_for(workspace.as_ref())?;
     let tracking = require_tracked(&state, &key)?;
 
     let (baseline, warning) = resolve_baseline(

@@ -2015,6 +2015,74 @@ mod tests {
         assert!(s.store().workspace().up, "stopping shop did not stop hbt");
     }
 
+    /// The env screen's services line is an exception: silence while everything runs, one
+    /// badge when it does not, and Refresh asks the engine again either way.
+    #[test]
+    fn the_services_line_is_an_exception_and_refresh_asks_the_engine_again() {
+        let mut s = Session::demo();
+        // All running: nothing to say, no badge.
+        assert_eq!(s.store().workspace().health, None);
+
+        // A check that could not run is the loudest thing on the screen, with what to do.
+        s.handle(Intent::Do(Command::Sim(SimEvent::DockerDown(true))));
+        let health = s
+            .store()
+            .workspace()
+            .health
+            .clone()
+            .expect("a failed check is said out loud");
+        assert_eq!(health.badge().text, "Docker unavailable");
+        assert!(
+            health.notice().unwrap().contains("Start Docker Desktop"),
+            "the notice says what to do next"
+        );
+
+        // Refresh asks again: with Docker still down it says so instead of pretending.
+        s.handle(Intent::Do(Command::RefreshHealth));
+        assert!(
+            s.view()
+                .toasts
+                .iter()
+                .any(|t| t.text.contains("Docker is not running")),
+            "{:?}",
+            s.view().toasts
+        );
+
+        // Docker back: refresh clears the exception back to silence, and says it checked.
+        s.handle(Intent::Do(Command::Sim(SimEvent::DockerDown(false))));
+        s.handle(Intent::Do(Command::RefreshHealth));
+        assert_eq!(s.store().workspace().health, None);
+        assert!(
+            s.view().toasts.iter().any(|t| t.text == "Services checked"),
+            "{:?}",
+            s.view().toasts
+        );
+
+        // A stopped workspace is one exception at the workspace level; each row counts its own.
+        // Stopping is guarded: it asks first, and only the confirmed stop changes anything.
+        s.handle(Intent::Do(Command::StopWorkspace));
+        assert!(
+            matches!(s.view().sheet, Some(SheetVm::Confirm { .. })),
+            "stopping the workspace asks first"
+        );
+        s.handle(Intent::ConfirmSheet);
+        let v = s.store().workspace();
+        assert!(
+            matches!(
+                v.health,
+                Some(HealthVm::Stopped { running: 0, declared }) if declared > 0
+            ),
+            "{:?}",
+            v.health
+        );
+        assert!(
+            v.rows
+                .iter()
+                .any(|r| matches!(&r.services, ServicesVm::Partial { running: 0, .. })),
+            "each row says how many of its services are stopped"
+        );
+    }
+
     #[test]
     fn opening_another_workspace_leaves_nothing_of_the_old_one_in_the_window() {
         let mut s = Session::demo();

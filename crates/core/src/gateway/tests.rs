@@ -437,8 +437,12 @@ fn only_the_gateway_runs_git_push() {
         for (n, line) in source.lines().enumerate() {
             // `git stash push` is local; a `#[cfg(test)]` module inside a file is not scanned
             // separately, so test-only pushes in production files would need an exemption here.
+            //
+            // The widgets crate is exempt: it has no git (or any process) to run — it draws the
+            // preview text of an action the gateway would confirm, which is plain display.
             if (line.contains("\"push\"") || line.contains("git push"))
                 && !line.contains("\"stash\"")
+                && !path.contains("/crates/widgets/")
             {
                 offenders.push(format!("{path}:{}: {}", n + 1, line.trim()));
             }

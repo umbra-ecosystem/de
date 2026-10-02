@@ -10,13 +10,11 @@ pub fn config(
     unset: bool,
 ) -> eyre::Result<()> {
     let mut workspace = if let Some(name) = workspace_name {
-        Workspace::load_from_name(&name)
-            .wrap_err("Failed to load workspace")?
-            .ok_or_else(|| eyre!("Workspace '{}' not found", name))?
+        crate::workspace::registry::load_workspace(&name).map_err(|e| eyre!(e))?
     } else {
         Workspace::active()
             .wrap_err("Failed to get active workspace")?
-            .ok_or_else(|| eyre!("No active workspace found"))?
+            .ok_or_else(crate::utils::cli::no_workspace_open)?
     };
 
     let action = if unset {

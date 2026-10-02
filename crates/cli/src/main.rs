@@ -6,7 +6,7 @@ mod utils;
 use de_core::{config, constants, project, types, workspace};
 
 use clap::Parser;
-use eyre::{Context, eyre};
+use eyre::eyre;
 use tracing_subscriber::EnvFilter;
 
 use crate::{
@@ -133,15 +133,13 @@ fn main() -> eyre::Result<()> {
         Commands::ExecAll { workspace, command } => commands::exec_all(workspace, command),
         Commands::List { workspace } => {
             if let Some(workspace_name) = workspace {
-                let workspace = Workspace::load_from_name(&workspace_name)
-                    .map_err(|e| eyre!(e))
-                    .wrap_err("Failed to load workspace")?
-                    .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
+                let workspace =
+                    workspace::registry::load_workspace(&workspace_name).map_err(|e| eyre!(e))?;
 
                 commands::list(workspace)
             } else {
-                let current_workspace =
-                    Workspace::active()?.ok_or_else(|| eyre!("No active workspace found"))?;
+                let current_workspace = Workspace::active()?
+                    .ok_or_else(crate::utils::cli::no_workspace_open)?;
                 commands::list(current_workspace)
             }
         }
@@ -177,6 +175,9 @@ fn main() -> eyre::Result<()> {
                 unset,
             } => commands::workspace::config(workspace, key, value, unset),
             WorkspaceCommands::Info { workspace } => commands::workspace::info(workspace),
+            WorkspaceCommands::List => commands::workspace::list(),
+            WorkspaceCommands::Select { name } => commands::workspace::select(name),
+            WorkspaceCommands::Status { workspace } => commands::workspace::status(workspace),
         },
         Commands::Config { key, value, unset } => commands::config(key, value, unset),
         Commands::Fallthrough(args) => commands::fallthrough(args),

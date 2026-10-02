@@ -3,17 +3,21 @@
 //! - [`tickets`]: the Jira mirror and local tracking, read as widget tickets (pure given the two databases).
 //! - [`logs`]: the raw sync logs (one file per run, see [`de_core::synclog`]) as list rows and text.
 //! - [`sync`]: a read-only Jira sync through the engine (`acli`), reported in the terms the status bar shows.
-//! - [`store::CoreStore`]: the [`de_widgets::Store`] that serves those tickets and runs that sync. What the
-//!   engine does not serve to the GUI yet (pull requests, review, shipping, the workspace) is still the
-//!   widgets' simulation, running on the real tickets.
+//! - [`lifecycle`]: opening, closing and switching a workspace as real steps on worker threads.
+//! - [`measure`]: the open workspace's services, git state and active ticket, read off the UI thread.
+//! - [`store::CoreStore`]: the [`de_widgets::Store`] that serves those tickets, runs that sync and
+//!   opens and closes workspaces. What the engine does not serve to the GUI yet (pull requests,
+//!   review, shipping) is still the widgets' simulation, running on the real tickets.
 
 // The widgets crate allows these for its view models; the store implements traits over them.
 #![allow(clippy::result_large_err)]
 
 pub mod audit;
+pub mod lifecycle;
 pub mod localtime;
 pub mod logs;
 pub mod mapping;
+pub mod measure;
 pub mod schedule;
 pub mod store;
 pub mod sync;

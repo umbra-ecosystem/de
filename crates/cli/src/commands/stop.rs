@@ -12,18 +12,27 @@ use de_core::git::{RiskReport, assess_risks, status_all};
 use dialoguer::Confirm;
 use eyre::{Context, eyre};
 
+fn now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
 pub fn stop(workspace_name: Option<Slug>, yes: bool) -> eyre::Result<()> {
     let ui = UserInterface::new();
 
     if let Some(workspace_name) = workspace_name {
         // Workspace mode - existing logic
-        let workspace = Workspace::load_from_name(&workspace_name)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to load workspace")?
-            .ok_or_else(|| eyre!("Workspace {} not found", workspace_name))?;
+        let workspace =
+            crate::workspace::registry::load_workspace(&workspace_name).map_err(|e| eyre!(e))?;
 
+        // Closing a workspace records when, too — before anything stops, so a workspace file
+        // that cannot be written fails the command while nothing has run yet.
+        crate::workspace::registry::stamp_last_used(&workspace.config().name, now())?;
         stop_guarded(&ui, workspace, yes)?;
     } else if let Some(active_workspace) = Workspace::active()? {
+        crate::workspace::registry::stamp_last_used(&active_workspace.config().name, now())?;
         stop_guarded(&ui, active_workspace, yes)?;
     } else {
         // Current project mode - can use inferred project

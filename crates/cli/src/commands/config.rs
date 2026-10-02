@@ -1,6 +1,7 @@
 use std::str::FromStr;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{config::Config, types::Slug, utils::theme::Theme};
+use crate::{config::Config, types::Slug, utils::theme::Theme, workspace::registry};
 use eyre::{WrapErr, eyre};
 
 pub enum ConfigAction {
@@ -41,9 +42,13 @@ pub fn config(key: String, value: Option<String>, unset: bool) -> eyre::Result<(
                     .map_err(|e| eyre!(e))
                     .wrap_err("Invalid workspace name")?;
 
-                Config::mutate_persisted(|config| {
-                    config.set_active_workspace(Some(workspace_name.clone()));
-                })?;
+                // Validated and recorded the same way `de workspace select` does it, so a
+                // name that is not saved never ends up in config.toml.
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+                registry::select_workspace(&workspace_name, now).map_err(|e| eyre!(e))?;
 
                 let theme = Theme::new();
                 println!(
@@ -52,9 +57,8 @@ pub fn config(key: String, value: Option<String>, unset: bool) -> eyre::Result<(
                 );
             }
             ConfigAction::Unset => {
-                Config::mutate_persisted(|config| {
-                    config.set_active_workspace(None);
-                })?;
+                registry::deselect_workspace()
+                    .map_err(|e| eyre!(e))?;
 
                 println!("Unset active workspace.");
             }

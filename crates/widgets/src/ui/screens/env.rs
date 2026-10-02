@@ -87,13 +87,28 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                         .child(v.order.clone()),
                 )
                 .child(div().flex_1())
-                .child(if v.up {
-                    faint(pal, "services up").into_any_element()
-                } else {
-                    pill(pal, &Badge::new("services down", Tone::Warn)).into_any_element()
-                })
+                // One badge, and only for something that is off: all running says nothing.
+                .children(
+                    v.health
+                        .iter()
+                        .map(|h| pill(pal, &h.badge()).into_any_element()),
+                )
+                .child(button_ghost(ui, &v.refresh))
                 .child(button(ui, &v.toggle)),
         )
+        // A failed check says what to do about it, once, in the quiet line under the strip.
+        .when_some(v.health.as_ref().and_then(HealthVm::notice), |d, n| {
+            d.child(
+                div()
+                    .px_4()
+                    .py_2()
+                    .border_b_1()
+                    .border_color(pal.border.opacity(0.6))
+                    .text_xs()
+                    .text_color(pal.muted)
+                    .child(n),
+            )
+        })
         .child(
             div()
                 .flex()
@@ -122,7 +137,13 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                         .text_sm()
                         .child(r.repo.to_string()),
                 )
-                .child(col(80.0).text_sm().child(r.services.to_string()))
+                .child(
+                    col(80.0)
+                        .text_sm()
+                        // The count on its own; only something off takes the warning colour.
+                        .when_some(r.services.tone(), |d, t| d.text_color(pal.tone(t)))
+                        .child(r.services.label()),
+                )
                 .child(
                     col(220.0)
                         .font_family(ui.mono.clone())

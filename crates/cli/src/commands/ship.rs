@@ -239,7 +239,7 @@ fn print_lines(ui: &UserInterface, lines: &[String]) -> eyre::Result<()> {
 /// `de ticket integrate <KEY> [--dry-run]`.
 pub fn integrate(key: TicketKey, dry_run: bool, workspace: Option<Slug>) -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let state = Store::open_default(Kind::State)?;
+    let state = Store::open_scoped_for(workspace.as_ref(), Kind::State)?;
     let config = Config::load()?;
     require_tracked(&state, &key)?;
     let repos = workspace_repos(workspace)?;
@@ -388,7 +388,7 @@ fn finish(
 /// `de ticket integration <KEY>`.
 pub fn integration(key: TicketKey) -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let state = Store::open_default(Kind::State)?;
+    let state = Store::open_scoped(Kind::State)?;
     let tracking = require_tracked(&state, &key)?;
     let touched: Vec<(String, String)> = restore::list(&state, &key)?
         .into_iter()
@@ -421,8 +421,8 @@ fn hosted_repos(workspace: Option<Slug>, config: &Config) -> Vec<HostedRepo> {
 /// `de ticket deploy <KEY>`.
 pub fn deploy(key: TicketKey, workspace: Option<Slug>) -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let state = Store::open_default(Kind::State)?;
-    let cache = Store::open_default(Kind::Cache)?;
+    let state = Store::open_scoped_for(workspace.as_ref(), Kind::State)?;
+    let cache = Store::open_scoped_for(workspace.as_ref(), Kind::Cache)?;
     let config = Config::load()?;
     require_tracked(&state, &key)?;
     let status = deploy_status(&state, &cache, &key, &hosted_repos(workspace, &config))?;
@@ -439,8 +439,8 @@ pub fn draft_comment(
     workspace: Option<Slug>,
 ) -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let state = Store::open_default(Kind::State)?;
-    let cache = Store::open_default(Kind::Cache)?;
+    let state = Store::open_scoped_for(workspace.as_ref(), Kind::State)?;
+    let cache = Store::open_scoped_for(workspace.as_ref(), Kind::Cache)?;
     let config = Config::load()?;
     require_tracked(&state, &key)?;
     let draft = compose_deploy_comment(
@@ -475,7 +475,7 @@ fn open_comment_draft(state: &Store, key: &TicketKey) -> eyre::Result<drafts::St
 /// `de ticket post-comment <KEY>`.
 pub fn post_comment_cmd(key: TicketKey) -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let state = Store::open_default(Kind::State)?;
+    let state = Store::open_scoped(Kind::State)?;
     let config = Config::load()?;
     require_tracked(&state, &key)?;
     let draft = open_comment_draft(&state, &key)?;
@@ -499,7 +499,7 @@ pub fn post_comment_cmd(key: TicketKey) -> eyre::Result<()> {
 /// `de ticket transition <KEY>`.
 pub fn transition(key: TicketKey) -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let state = Store::open_default(Kind::State)?;
+    let state = Store::open_scoped(Kind::State)?;
     let config = Config::load()?;
     require_tracked(&state, &key)?;
     let gateway = Gateway::from_config(&state, &config);
@@ -523,7 +523,7 @@ pub fn transition(key: TicketKey) -> eyre::Result<()> {
 /// `de ticket cancel-integration <KEY>`.
 pub fn cancel(key: TicketKey, workspace: Option<Slug>) -> eyre::Result<()> {
     let ui = UserInterface::new();
-    let state = Store::open_default(Kind::State)?;
+    let state = Store::open_scoped_for(workspace.as_ref(), Kind::State)?;
     require_tracked(&state, &key)?;
     let repos = workspace_repos(workspace)?;
     let removed = cancel_integration(&state, &data_dir()?, &key, &repos, now()?)?;

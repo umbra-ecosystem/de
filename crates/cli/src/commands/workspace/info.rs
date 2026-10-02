@@ -10,13 +10,11 @@ use crate::types::Slug;
 
 pub fn info(workspace_name: Option<Slug>) -> eyre::Result<()> {
     let workspace = if let Some(workspace_name) = workspace_name {
-        Workspace::load_from_name(&workspace_name)
-            .wrap_err("Failed to load workspace")?
-            .ok_or_else(|| eyre!("Workspace '{}' not found", workspace_name))?
+        crate::workspace::registry::load_workspace(&workspace_name).map_err(|e| eyre!(e))?
     } else {
         Workspace::active()
             .wrap_err("Failed to get active workspace")?
-            .ok_or_else(|| eyre!("No active workspace found"))?
+            .ok_or_else(|| eyre!("No workspace is open. Run `de workspace select <name>` to open one; `de workspace list` shows the saved ones."))?
     };
 
     let theme = Theme::new();

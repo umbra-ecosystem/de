@@ -18,15 +18,12 @@ pub fn exec_all(workspace_name: Option<Slug>, command: Vec<String>) -> Result<()
     let args = command_iter.collect::<Vec<_>>();
 
     let workspace = if let Some(workspace_name) = workspace_name {
-        Workspace::load_from_name(&workspace_name)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to load workspace")?
-            .ok_or_else(|| eyre!("Workspace '{}' not found", workspace_name))?
+        crate::workspace::registry::load_workspace(&workspace_name).map_err(|e| eyre!(e))?
     } else {
         Workspace::active()
             .map_err(|e| eyre!(e))
             .wrap_err("Failed to get active workspace")?
-            .ok_or_else(|| eyre!("No current workspace found"))?
+            .ok_or_else(crate::utils::cli::no_workspace_open)?
     };
 
     for (project_name, project) in workspace.config().projects.iter() {

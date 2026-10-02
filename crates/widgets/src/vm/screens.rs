@@ -584,10 +584,119 @@ pub struct OnUatVm {
     pub overlaps: Vec<String>,
 }
 
+/// What one project's Services cell says: the count when things are fine, `1 of 3` when they
+/// are not, and nothing claimed when the check could not run.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ServicesVm {
+    /// Every declared service is running — just the number.
+    All(u32),
+    /// Not all are running: shown as `1 of 3` in the warning colour.
+    Partial { running: u32, declared: u32 },
+    /// Docker could not be asked, so nothing is claimed: shown as `—`.
+    Unknown,
+}
+
+impl ServicesVm {
+    /// From what a health check found for this project; `running: None` is a check that could
+    /// not run (Docker missing or its daemon down), not a project with nothing running.
+    pub fn of(running: Option<u32>, declared: u32) -> Self {
+        match running {
+            None => ServicesVm::Unknown,
+            Some(running) if running >= declared => ServicesVm::All(declared),
+            Some(running) => ServicesVm::Partial {
+                running,
+                declared,
+            },
+        }
+    }
+
+    /// The count as the cell shows it.
+    pub fn label(&self) -> String {
+        match self {
+            ServicesVm::All(declared) => declared.to_string(),
+            ServicesVm::Partial { running, declared } => format!("{running} of {declared}"),
+            ServicesVm::Unknown => "—".to_string(),
+        }
+    }
+
+    /// The warning colour only for something that is off; the default and the unknown stay plain.
+    pub fn tone(&self) -> Option<Tone> {
+        match self {
+            ServicesVm::Partial { .. } => Some(Tone::Warn),
+            ServicesVm::All(_) | ServicesVm::Unknown => None,
+        }
+    }
+}
+
+/// How the workspace's services stand when they are not all running. The view model carries
+/// `None` instead of a value when everything runs (or there is nothing to run): the normal
+/// state is silence, and only an exception gets a badge.
+#[derive(Clone, Debug, PartialEq)]
+pub enum HealthVm {
+    /// Some or all of the declared services are stopped: `2 of 6 services`, `services down`.
+    Stopped { running: u32, declared: u32 },
+    /// Services are running but unhealthy: the names say which.
+    Unhealthy { named: Vec<String> },
+    /// Docker itself could not be asked; the reason says what to do about it.
+    Unavailable { reason: String },
+}
+
+impl HealthVm {
+    /// What a check that found the services not all running shows; `None` when they all run
+    /// (or the workspace declares none): silence, the normal state.
+    pub fn stopped(running: u32, declared: u32) -> Option<Self> {
+        (declared > 0 && running < declared).then_some(HealthVm::Stopped { running, declared })
+    }
+
+    /// Services that are up but not healthy (`project/service` names), the loudest of the three.
+    pub fn unhealthy(named: Vec<String>) -> Self {
+        HealthVm::Unhealthy { named }
+    }
+
+    /// The state of a check that could not run at all, in the tone of a real blocker.
+    pub fn unavailable(reason: impl Into<String>) -> Self {
+        HealthVm::Unavailable {
+            reason: reason.into(),
+        }
+    }
+
+    /// The one badge the strip shows, only ever for something that is off.
+    pub fn badge(&self) -> Badge {
+        match self {
+            HealthVm::Stopped { running: 0, .. } => Badge::new("services down", Tone::Warn),
+            HealthVm::Stopped { running, declared } => {
+                Badge::new(format!("{running} of {declared} services"), Tone::Warn)
+            }
+            HealthVm::Unhealthy { named } => {
+                Badge::new(format!("{} unhealthy", named.len()), Tone::Bad)
+            }
+            HealthVm::Unavailable { .. } => Badge::new("Docker unavailable", Tone::Bad),
+        }
+    }
+
+    /// The quiet line under the strip: only a failed check has anything to say about what to
+    /// do next.
+    pub fn notice(&self) -> Option<String> {
+        match self {
+            HealthVm::Unavailable { reason } => Some(reason.clone()),
+            HealthVm::Unhealthy { named } => {
+                let shown = named.iter().take(2).cloned().collect::<Vec<_>>().join(", ");
+                let more = if named.len() > 2 {
+                    format!(" and {} more", named.len() - 2)
+                } else {
+                    String::new()
+                };
+                Some(format!("Unhealthy: {shown}{more}"))
+            }
+            HealthVm::Stopped { .. } => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct WsRow {
     pub repo: RepoName,
-    pub services: u32,
+    pub services: ServicesVm,
     pub branch: Branch,
     pub badges: Vec<Badge>,
     pub break_lock: Option<Btn>,
@@ -598,8 +707,13 @@ pub struct WorkspaceVm {
     pub name: String,
     pub up: bool,
     pub order: String,
+    /// What to say about the services when they are not all running; `None` is silence (all
+    /// running, or none declared), the normal state.
+    pub health: Option<HealthVm>,
     pub rows: Vec<WsRow>,
     pub note: Option<String>,
+    /// Ask the engine again how the services stand.
+    pub refresh: Btn,
     pub toggle: Btn,
 }
 
@@ -898,4 +1012,82 @@ pub struct AllWorkspacesVm {
     pub query: String,
     pub items: Vec<WorkspaceItemVm>,
     pub total: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The defaults are silence: nothing runs, nothing needs a badge.
+    #[test]
+    fn all_services_running_says_nothing() {
+        assert_eq!(HealthVm::stopped(6, 6), None);
+        // A workspace with no services to run is not "down".
+        assert_eq!(HealthVm::stopped(0, 0), None);
+        assert_eq!(ServicesVm::of(Some(3), 3), ServicesVm::All(3));
+        assert_eq!(ServicesVm::of(Some(0), 0), ServicesVm::All(0));
+        assert_eq!(ServicesVm::of(Some(3), 3).label(), "3");
+        assert_eq!(ServicesVm::of(Some(3), 3).tone(), None);
+    }
+
+    /// What is off is named: `2 of 6 services` at the workspace, `1 of 3` in the row.
+    #[test]
+    fn stopped_services_say_how_many_are_missing() {
+        assert_eq!(
+            HealthVm::stopped(4, 6),
+            Some(HealthVm::Stopped {
+                running: 4,
+                declared: 6
+            })
+        );
+        assert_eq!(
+            HealthVm::stopped(0, 6).unwrap().badge(),
+            Badge::new("services down", Tone::Warn)
+        );
+        assert_eq!(
+            HealthVm::stopped(4, 6).unwrap().badge(),
+            Badge::new("4 of 6 services", Tone::Warn)
+        );
+        // A stopped workspace has nothing to say under the strip; the rows say which.
+        assert_eq!(HealthVm::stopped(0, 6).unwrap().notice(), None);
+
+        let row = ServicesVm::of(Some(1), 3);
+        assert_eq!(
+            row,
+            ServicesVm::Partial {
+                running: 1,
+                declared: 3
+            }
+        );
+        assert_eq!(row.label(), "1 of 3");
+        assert_eq!(row.tone(), Some(Tone::Warn));
+    }
+
+    /// A check that could not run claims nothing: the reason (with what to do) is the report.
+    #[test]
+    fn a_failed_check_claims_nothing_and_says_why() {
+        let health = HealthVm::unavailable("Docker is not running. Start Docker Desktop, then press Refresh.");
+        assert_eq!(
+            health.badge(),
+            Badge::new("Docker unavailable", Tone::Bad)
+        );
+        assert_eq!(
+            health.notice(),
+            Some("Docker is not running. Start Docker Desktop, then press Refresh.".to_string())
+        );
+        assert_eq!(ServicesVm::of(None, 3), ServicesVm::Unknown);
+        assert_eq!(ServicesVm::of(None, 3).label(), "—");
+        assert_eq!(ServicesVm::of(None, 3).tone(), None);
+    }
+
+    /// A service that runs but is not healthy is the loudest badge, and names the culprits.
+    #[test]
+    fn unhealthy_services_are_named() {
+        let health = HealthVm::unhealthy(vec!["api/db".into(), "web/api".into(), "worker/queue".into()]);
+        assert_eq!(health.badge(), Badge::new("3 unhealthy", Tone::Bad));
+        assert_eq!(
+            health.notice(),
+            Some("Unhealthy: api/db, web/api and 1 more".to_string())
+        );
+    }
 }

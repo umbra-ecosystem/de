@@ -203,6 +203,9 @@ pub enum Command {
     AbortSequence,
     StartWorkspace,
     StopWorkspace,
+    /// Ask the engine again how the workspace's services stand (the screen checks by itself
+    /// too, on open, after start and stop, and every so often while it is shown).
+    RefreshHealth,
     ResetDemo,
     Sim(SimEvent),
 }
@@ -449,6 +452,7 @@ mod tests {
             | Command::AbortSequence
             | Command::StartWorkspace
             | Command::StopWorkspace
+            | Command::RefreshHealth
             | Command::ResetDemo
             | Command::Sim(_) => false,
         }
@@ -510,6 +514,8 @@ mod tests {
             Command::Claim(key.clone()),
             Command::Park(key.clone()),
             Command::BreakLock("web".into()),
+            Command::StartWorkspace,
+            Command::RefreshHealth,
             Command::Sim(SimEvent::Offline(true)),
             Command::Undo(Undo::Claim(key)),
         ]

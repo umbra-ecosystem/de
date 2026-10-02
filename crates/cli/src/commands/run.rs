@@ -17,20 +17,15 @@ pub fn run(
     let ui = UserInterface::new();
 
     let workspace = match workspace_name.as_ref() {
-        Some(workspace_name) => Workspace::load_from_name(workspace_name)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to load workspace")?,
+        // A named workspace either loads or says why it cannot be opened.
+        Some(workspace_name) => Some(
+            crate::workspace::registry::load_workspace(workspace_name).map_err(|e| eyre!(e))?,
+        ),
         None => Workspace::active().ok().flatten(),
     };
 
     if let Some(project_name) = project_name {
-        let workspace = workspace.as_ref().ok_or_else(|| {
-            if let Some(workspace_name) = workspace_name.as_ref() {
-                eyre!("Workspace '{}' not found", workspace_name)
-            } else {
-                eyre!("No active workspace found")
-            }
-        })?;
+        let workspace = workspace.as_ref().ok_or_else(crate::utils::cli::no_workspace_open)?;
 
         // If a project is specified, check if it exists in the workspace
         let ws_project = workspace
@@ -76,7 +71,9 @@ pub fn run(
                 }
             }
         } else {
-            return Err(eyre!("Workspace '{}' not found", workspace_name));
+            // Unreachable now (a named workspace either loads or errors), kept so the
+            // message stays right if the resolution ever changes.
+            return Err(crate::utils::cli::no_workspace_open());
         }
     } else {
         // No project or workspace specified - try current/inferred project (no-config mode)

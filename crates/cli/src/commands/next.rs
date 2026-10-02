@@ -208,18 +208,18 @@ struct Loaded {
 }
 
 fn load_env(workspace: Option<Slug>) -> eyre::Result<Loaded> {
-    let state = Store::open_default(Kind::State)?;
-    let cache = Store::open_default(Kind::Cache)?;
     let config = Config::load()?;
     let workspace = match workspace {
+        // The same wording as everywhere else: it names the command to run next.
         Some(name) => Some(
-            Workspace::load_from_name(&name)
-                .map_err(|e| eyre!(e))
-                .wrap_err("Failed to load workspace")?
-                .ok_or_else(|| eyre!("Workspace '{name}' not found"))?,
+            crate::workspace::registry::load_workspace(&name).map_err(|e| eyre!(e))?,
         ),
         None => Workspace::active()?,
     };
+    // Each workspace has its own data; `de next` reads only the one it is running for.
+    let scope = workspace.as_ref().map(|w| w.config().name.clone());
+    let state = Store::open_scoped_for(scope.as_ref(), Kind::State)?;
+    let cache = Store::open_scoped_for(scope.as_ref(), Kind::Cache)?;
     let (repos, default_branch) = match &workspace {
         Some(w) => (
             WorkspaceRepo::from_workspace(w)

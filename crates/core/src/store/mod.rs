@@ -41,7 +41,7 @@ use std::path::{Path, PathBuf};
 use eyre::{Context, eyre};
 use rusqlite::Connection;
 
-use crate::utils::get_project_dirs;
+use crate::{config::Config, project::Project, types::Slug, utils::get_project_dirs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -60,6 +60,26 @@ impl Kind {
     }
 }
 
+/// The directory holding one workspace's own `state.db` and `cache.db`.
+///
+/// A workspace's tickets, notes, locks and audit log are its own; nothing of one is ever read
+/// from another's files.
+pub fn workspace_dir(workspace: &Slug) -> eyre::Result<PathBuf> {
+    Ok(get_project_dirs()?
+        .data_dir()
+        .join("workspaces")
+        .join(workspace.as_str()))
+}
+
+/// The workspace this process acts on: the one the current folder belongs to, else the one
+/// selected in `config.toml`, else none (the shared data directory still serves it).
+fn scoped_workspace_name() -> eyre::Result<Option<Slug>> {
+    if let Some(project) = Project::current()? {
+        return Ok(Some(project.manifest().project().workspace.clone()));
+    }
+    Ok(Config::load()?.get_active_workspace().cloned())
+}
+
 /// An open, migrated SQLite database.
 pub struct Store {
     kind: Kind,
@@ -67,10 +87,47 @@ pub struct Store {
 }
 
 impl Store {
-    /// Opens (creating if needed) the database of `kind` in the OS data directory.
-    pub fn open_default(kind: Kind) -> eyre::Result<Self> {
-        let dir = get_project_dirs()?.data_dir().to_path_buf();
-        Self::open_in(&dir, kind)
+    /// Opens (creating if needed) the database of `kind` for `workspace`'s own data.
+    ///
+    /// The first time a workspace opens, the shared databases from before workspaces were
+    /// isolated are moved into it (see [`adopt_shared_databases`]), so nothing is lost.
+    pub fn open_for_workspace(workspace: &Slug, kind: Kind) -> eyre::Result<Self> {
+        let dirs = get_project_dirs()?;
+        let data = dirs.data_dir();
+        let active = Config::load()?.get_active_workspace().cloned();
+        Self::open_for_workspace_in(data, workspace, active.as_ref(), kind)
+    }
+
+    /// [`Store::open_for_workspace`] with the paths handed in, so the adoption rules are
+    /// testable without touching the real data directory.
+    fn open_for_workspace_in(
+        data_root: &Path,
+        workspace: &Slug,
+        active: Option<&Slug>,
+        kind: Kind,
+    ) -> eyre::Result<Self> {
+        let target = data_root.join("workspaces").join(workspace.as_str());
+        adopt_shared_databases(data_root, &target, workspace, active)?;
+        Self::open_in(&target, kind)
+    }
+
+    /// Opens (creating if needed) the database of `kind` for the workspace this invocation
+    /// works in (see [`scoped_workspace_name`]), or the shared data directory when there is
+    /// none: a person with no workspace yet keeps working exactly as before.
+    pub fn open_scoped(kind: Kind) -> eyre::Result<Self> {
+        match scoped_workspace_name()? {
+            Some(workspace) => Self::open_for_workspace(&workspace, kind),
+            None => Self::open_in(get_project_dirs()?.data_dir(), kind),
+        }
+    }
+
+    /// `workspace`'s databases when there is one, else [`Store::open_scoped`]. This is what a
+    /// command with a `-w` flag hands its store opens to.
+    pub fn open_scoped_for(workspace: Option<&Slug>, kind: Kind) -> eyre::Result<Self> {
+        match workspace {
+            Some(workspace) => Self::open_for_workspace(workspace, kind),
+            None => Self::open_scoped(kind),
+        }
     }
 
     /// Opens (creating if needed) the database of `kind` inside `dir`.
@@ -136,6 +193,57 @@ impl Store {
         }
         Ok(path)
     }
+}
+
+/// Move the shared databases (one pair in the data directory, from before workspaces each had
+/// their own) into the workspace that is opening, exactly once.
+///
+/// Rules, so no history is ever lost or handed to the wrong workspace:
+///
+/// - Only when the target has no `state.db` yet, and the shared one exists.
+/// - Only for the workspace `[active] workspace` points at; when nothing is selected, the
+///   first workspace to open adopts it. Any other workspace gets its own fresh files and the
+///   shared pair waits where it is.
+/// - A file that already exists at the target is never overwritten.
+fn adopt_shared_databases(
+    data_root: &Path,
+    target: &Path,
+    workspace: &Slug,
+    active: Option<&Slug>,
+) -> eyre::Result<()> {
+    if target.join(Kind::State.file_name()).exists() {
+        return Ok(());
+    }
+    if !data_root.join(Kind::State.file_name()).exists() {
+        return Ok(());
+    }
+    if let Some(active) = active
+        && active != workspace
+    {
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(target)
+        .wrap_err_with(|| format!("Failed to create data directory {}", target.display()))?;
+
+    for kind in [Kind::State, Kind::Cache] {
+        for suffix in ["", "-wal", "-shm"] {
+            let name = format!("{}{suffix}", kind.file_name());
+            let from = data_root.join(&name);
+            let to = target.join(&name);
+            if !from.exists() || to.exists() {
+                continue;
+            }
+            std::fs::rename(&from, &to).wrap_err_with(|| {
+                format!(
+                    "The existing data could not be moved into the workspace '{}': {} could not be renamed",
+                    workspace,
+                    from.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -337,5 +445,149 @@ mod tests {
                 assert_eq!(status, "active");
             }
         }
+    }
+
+    fn slug(s: &str) -> Slug {
+        s.parse().unwrap()
+    }
+
+    /// One row proving the data is this workspace's, not somebody else's.
+    fn probe(store: &Store, value: &str) {
+        store
+            .conn()
+            .execute(
+                "INSERT INTO app_meta (key, value) VALUES ('probe', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [value],
+            )
+            .unwrap();
+    }
+
+    fn probe_of(store: &Store) -> Option<String> {
+        store
+            .conn()
+            .query_row("SELECT value FROM app_meta WHERE key = 'probe'", [], |r| {
+                r.get(0)
+            })
+            .ok()
+    }
+
+    #[test]
+    fn each_workspace_keeps_its_own_databases() {
+        let root = tempfile::tempdir().unwrap();
+        let shop = Store::open_for_workspace_in(root.path(), &slug("shop"), None, Kind::State).unwrap();
+        probe(&shop, "shop's data");
+        drop(shop);
+        let hbt = Store::open_for_workspace_in(root.path(), &slug("hbt"), None, Kind::State).unwrap();
+        probe(&hbt, "hbt's data");
+
+        assert_eq!(
+            probe_of(
+                &Store::open_for_workspace_in(root.path(), &slug("shop"), None, Kind::State)
+                    .unwrap()
+            )
+            .as_deref(),
+            Some("shop's data"),
+            "each workspace reads back only its own row"
+        );
+        assert_eq!(
+            probe_of(
+                &Store::open_for_workspace_in(root.path(), &slug("hbt"), None, Kind::State)
+                    .unwrap()
+            )
+            .as_deref(),
+            Some("hbt's data")
+        );
+        assert!(root.path().join("workspaces").join("shop").join("state.db").exists());
+        assert!(root.path().join("workspaces").join("hbt").join("state.db").exists());
+    }
+
+    #[test]
+    fn the_first_workspace_to_open_takes_over_the_shared_databases() {
+        let root = tempfile::tempdir().unwrap();
+        // The shared pair, as it was before workspaces were isolated.
+        {
+            let shared = Store::open_in(root.path(), Kind::State).unwrap();
+            probe(&shared, "years of history");
+        }
+
+        let opened =
+            Store::open_for_workspace_in(root.path(), &slug("shop"), None, Kind::State).unwrap();
+        assert_eq!(probe_of(&opened).as_deref(), Some("years of history"));
+        assert!(
+            !root.path().join("state.db").exists(),
+            "the shared file was moved, not copied"
+        );
+
+        // Nothing is left for the next workspace: it starts with its own empty files.
+        let other = Store::open_for_workspace_in(root.path(), &slug("hbt"), None, Kind::State).unwrap();
+        assert_eq!(probe_of(&other), None);
+    }
+
+    #[test]
+    fn the_shared_databases_wait_for_the_selected_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        {
+            let shared = Store::open_in(root.path(), Kind::State).unwrap();
+            probe(&shared, "history");
+        }
+        let active = slug("shop");
+
+        // Another workspace opening first must not swallow them.
+        let wrong =
+            Store::open_for_workspace_in(root.path(), &slug("hbt"), Some(&active), Kind::State)
+                .unwrap();
+        assert_eq!(probe_of(&wrong), None);
+        assert!(root.path().join("state.db").exists(), "still there");
+
+        // The selected workspace gets them.
+        let right =
+            Store::open_for_workspace_in(root.path(), &slug("shop"), Some(&active), Kind::State)
+                .unwrap();
+        assert_eq!(probe_of(&right).as_deref(), Some("history"));
+        assert!(!root.path().join("state.db").exists());
+    }
+
+    #[test]
+    fn opening_a_workspace_again_never_re_adopts_anything() {
+        let root = tempfile::tempdir().unwrap();
+        {
+            let shared = Store::open_in(root.path(), Kind::State).unwrap();
+            probe(&shared, "old");
+        }
+        let first =
+            Store::open_for_workspace_in(root.path(), &slug("shop"), None, Kind::State).unwrap();
+        probe(&first, "new");
+        drop(first);
+
+        // A shared database appears again (say, an old backup is put back); the workspace's
+        // own data wins and is never overwritten.
+        {
+            let shared = Store::open_in(root.path(), Kind::State).unwrap();
+            probe(&shared, "something else");
+        }
+        let again =
+            Store::open_for_workspace_in(root.path(), &slug("shop"), None, Kind::State).unwrap();
+        assert_eq!(probe_of(&again).as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn the_wal_files_move_with_their_database() {
+        let root = tempfile::tempdir().unwrap();
+        {
+            let shared = Store::open_in(root.path(), Kind::State).unwrap();
+            probe(&shared, "history");
+        }
+        // A sidecar left behind, as a database that was not closed cleanly would leave one.
+        std::fs::write(root.path().join("state.db-wal"), b"").unwrap();
+        let _shop = Store::open_for_workspace_in(root.path(), &slug("shop"), None, Kind::State)
+            .unwrap();
+        assert!(!root.path().join("state.db-wal").exists(), "taken along");
+        assert!(root
+            .path()
+            .join("workspaces")
+            .join("shop")
+            .join("state.db-wal")
+            .exists());
     }
 }
