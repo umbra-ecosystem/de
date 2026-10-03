@@ -1,5 +1,6 @@
 //! The whole window as one view model: what the shell, the screen, the sheet and the toasts show right now.
 
+use super::branchpick::BranchPickerVm;
 use super::common::*;
 use super::ids::*;
 use super::intent::{Command, ComposeKind, Field, Then};
@@ -95,6 +96,8 @@ pub enum SheetVm {
     CloseTab(TicketKey),
     /// Every saved workspace, searchable: the landing page shows only a few.
     AllWorkspaces(AllWorkspacesVm),
+    /// The branches of the open workspace, searchable: pick one to move the whole workspace to.
+    Branches(BranchPickerVm),
 }
 
 #[derive(Clone, Debug, PartialEq)]

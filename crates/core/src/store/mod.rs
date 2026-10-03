@@ -73,7 +73,10 @@ pub fn workspace_dir(workspace: &Slug) -> eyre::Result<PathBuf> {
 
 /// The workspace this process acts on: the one the current folder belongs to, else the one
 /// selected in `config.toml`, else none (the shared data directory still serves it).
-fn scoped_workspace_name() -> eyre::Result<Option<Slug>> {
+///
+/// `pub(crate)` so everything that stores local data (`synclog`, for instance) resolves an unset
+/// scope exactly as [`Store::open_scoped_for`] does.
+pub(crate) fn scoped_workspace_name() -> eyre::Result<Option<Slug>> {
     if let Some(project) = Project::current()? {
         return Ok(Some(project.manifest().project().workspace.clone()));
     }

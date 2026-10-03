@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `de doctor` and `de status`.
 - `de git switch` and `de git base-reset` (to be rebuilt around tickets).
 
+### Fixed
+
+- Sync runs no longer leak between workspaces: each workspace keeps its own logs under `workspaces/<workspace>/logs` and the app lists only the open workspace's. With no workspace open it lists none instead of the shared folder; a run started with none is still written there and `de sync` prints its path.
+
 ## [0.6.1] - 2025-12-23
 
 ### Fixed

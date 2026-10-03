@@ -10,8 +10,8 @@ use super::model::*;
 use super::worlds::INIT_COMMAND;
 use crate::store::Outcome;
 use crate::vm::{
-    Btn, Command, Intent, PhaseVm, SequenceState, SequenceVm, ProgressState, StepVm, ToastKind,
-    WorkspaceName,
+    Branch, Btn, Command, Intent, PhaseVm, ProgressState, SequenceState, SequenceVm, StepVm,
+    ToastKind, WorkspaceName,
 };
 
 /// How long the modal shows "Ready" before it closes by itself.
@@ -28,6 +28,8 @@ enum StepKind {
     Load,
     Check,
     Save,
+    /// Move one project onto a branch (or onto its baseline when it does not have it).
+    Switch,
 }
 
 #[derive(Clone, Debug)]
@@ -39,6 +41,8 @@ struct Step {
     detail: String,
     /// What it reports when it goes well.
     ok: String,
+    /// Why it must not run, when it must not; empty when it always can.
+    fail: String,
 }
 
 #[derive(Clone, Debug)]
@@ -47,7 +51,7 @@ struct Phase {
     steps: Vec<Step>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
     /// Nothing is open: open the saved workspace at this index.
     Open(usize),
@@ -55,6 +59,8 @@ pub(crate) enum Kind {
     Close,
     /// Close the open one, then open the one at this index.
     Switch(usize),
+    /// Move every project of the open one onto this branch.
+    SwitchBranch(Branch),
 }
 
 #[derive(Clone, Debug)]
@@ -79,6 +85,7 @@ fn step(label: impl Into<String>, kind: StepKind, ms: i64, ok: impl Into<String>
         state: ProgressState::Waiting,
         detail: String::new(),
         ok: ok.into(),
+        fail: String::new(),
     }
 }
 
@@ -161,11 +168,38 @@ impl Sim {
         }
     }
 
+    /// The steps of moving every project onto `target`: the check that gates anything else, then
+    /// one step per project saying where it ends up (or why it does not move).
+    fn switch_phase(&self, target: &Branch) -> Phase {
+        let mut steps = vec![step(
+            "Check nothing is in progress",
+            StepKind::Check,
+            500,
+            "nothing is",
+        )];
+        for r in &self.repos {
+            let (detail, _, fail) = self.switch_here(r, target);
+            let mut s = step(
+                format!("Switch \u{b7} {}", r.name),
+                StepKind::Switch,
+                550,
+                detail,
+            );
+            s.fail = fail.unwrap_or_default();
+            steps.push(s);
+        }
+        Phase {
+            title: format!("Switch to {target}"),
+            steps,
+        }
+    }
+
     fn build(&self, kind: Kind) -> Seq {
-        let phases = match kind {
-            Kind::Open(i) => vec![self.open_phase(i)],
+        let phases = match &kind {
+            Kind::Open(i) => vec![self.open_phase(*i)],
             Kind::Close => vec![self.close_phase()],
-            Kind::Switch(i) => vec![self.close_phase(), self.open_phase(i)],
+            Kind::Switch(i) => vec![self.close_phase(), self.open_phase(*i)],
+            Kind::SwitchBranch(branch) => vec![self.switch_phase(branch)],
         };
         Seq {
             kind,
@@ -212,6 +246,20 @@ impl Sim {
         Outcome::ok()
     }
 
+    /// Move every project of the open workspace onto `branch`, showing every step of it.
+    pub(crate) fn start_switch(&mut self, branch: Branch) -> Outcome {
+        if self.wseq.is_some() {
+            return Outcome::fail("A workspace is being opened or closed. Wait for it to finish.");
+        }
+        if self.open_ws.is_none() {
+            return Outcome::fail(
+                "No workspace is open, so there are no projects to switch. Open one first.",
+            );
+        }
+        self.wseq = Some(self.build(Kind::SwitchBranch(branch)));
+        Outcome::ok()
+    }
+
     /// Run the steps for `ms` milliseconds of real time.
     pub fn progress_sequence(&mut self, ms: i64) {
         let Some(mut seq) = self.wseq.take() else {
@@ -253,6 +301,7 @@ impl Sim {
         let (p, s) = seq.at;
         let kind = seq.phases[p].steps[s].kind;
         let ok = seq.phases[p].steps[s].ok.clone();
+        let fail = seq.phases[p].steps[s].fail.clone();
         let (state, detail) = match kind {
             StepKind::DockerUp | StepKind::DockerDown if self.sims.docker_down => {
                 (ProgressState::Failed, DOCKER_DOWN.to_string())
@@ -261,6 +310,9 @@ impl Sim {
                 Some(why) => (ProgressState::Failed, why),
                 None => (ProgressState::Done, ok),
             },
+            // A project that must not be switched (its work would be left behind, or it has
+            // nowhere to go) says why, and the rest carry on: only the check stops everything.
+            StepKind::Switch if !fail.is_empty() => (ProgressState::Failed, fail),
             _ => (ProgressState::Done, ok),
         };
         let blocked_now = kind == StepKind::Check && state == ProgressState::Failed;
@@ -332,6 +384,7 @@ impl Sim {
                 self.apply_close();
                 self.apply_select(i)
             }
+            Kind::SwitchBranch(branch) => self.finish_switch(&branch),
         };
         if let Outcome::Done {
             toast: Some(t), ..
@@ -339,6 +392,27 @@ impl Sim {
         {
             self.toast(t.text, t.kind);
         }
+    }
+
+    /// What moving every project to `target` left behind, in one line.
+    ///
+    /// The projects that already had the branch and the ones that fell back are both "done" for
+    /// the toast's purposes; only a project that could not be moved at all is worth a warning,
+    /// because its work is still sitting where it was.
+    fn finish_switch(&mut self, target: &Branch) -> Outcome {
+        let (on_target, refused, total) = self.apply_switch(target);
+        self.ok("workspace.branch", None, None, target);
+        let text = if refused == 0 && on_target == total {
+            format!("Switched to {target}")
+        } else {
+            format!("Switched {on_target} of {total} projects to {target}")
+        };
+        let kind = if refused == 0 {
+            ToastKind::Ok
+        } else {
+            ToastKind::Warn
+        };
+        Outcome::ok().with_toast(text, kind, None)
     }
 
     /// After failures: carry on anyway.
@@ -355,7 +429,7 @@ impl Sim {
 
     /// After failures: run it again from the top.
     pub(crate) fn retry_sequence(&mut self) -> Outcome {
-        match self.wseq.as_ref().map(|s| (s.state, s.kind)) {
+        match self.wseq.as_ref().map(|s| (s.state, s.kind.clone())) {
             Some((SequenceState::NeedsDecision, kind)) => {
                 self.wseq = Some(self.build(kind));
                 Outcome::ok()
@@ -382,31 +456,34 @@ impl Sim {
     /// The modal's view: phases and steps, how far along, and what the footer offers.
     pub fn sequence_vm(&self) -> Option<SequenceVm> {
         let seq = self.wseq.as_ref()?;
-        let title = match seq.kind {
-            Kind::Open(i) => format!("Opening {}", self.saved[i].name),
+        let title = match &seq.kind {
+            Kind::Open(i) => format!("Opening {}", self.saved[*i].name),
             Kind::Close => format!(
                 "Closing {}",
                 self.current_workspace().map(|n| n.as_str()).unwrap_or("the workspace")
             ),
-            Kind::Switch(i) => format!("Switching to {}", self.saved[i].name),
+            Kind::Switch(i) => format!("Switching to {}", self.saved[*i].name),
+            Kind::SwitchBranch(branch) => format!("Switch to {branch}"),
         };
         let all: Vec<&Step> = seq.phases.iter().flat_map(|p| &p.steps).collect();
         let done = all
             .iter()
             .filter(|s| matches!(s.state, ProgressState::Done | ProgressState::Failed | ProgressState::Skipped))
             .count();
-        let closing = matches!(seq.kind, Kind::Close);
+        // What carrying on past a failure means here: closing the workspace, opening the other
+        // one, or finishing the switch that is part-way through.
+        let carry = match &seq.kind {
+            Kind::Close => "Close anyway",
+            Kind::SwitchBranch(_) => "Switch anyway",
+            _ => "Open anyway",
+        };
         let mut actions = Vec::new();
         if seq.state == SequenceState::NeedsDecision {
             actions.push(Btn::new("Back", Intent::Do(Command::AbortSequence)));
             actions.push(Btn::new("Try again", Intent::Do(Command::RetrySequence)));
             if !seq.blocked {
                 actions.push(
-                    Btn::new(
-                        if closing { "Close anyway" } else { "Open anyway" },
-                        Intent::Do(Command::ContinueSequence),
-                    )
-                    .primary(),
+                    Btn::new(carry, Intent::Do(Command::ContinueSequence)).primary(),
                 );
             }
         }

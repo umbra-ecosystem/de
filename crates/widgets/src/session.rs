@@ -41,6 +41,10 @@ enum Sheet {
     CloseTab(TicketKey),
     /// The modal that lists every saved workspace.
     AllWorkspaces,
+    /// The modal that picks a branch for the workspace to move to, and what is picked in it.
+    Branches {
+        chosen: Option<Branch>,
+    },
 }
 
 const TOAST_SECS: f32 = 6.0;
@@ -209,6 +213,15 @@ impl Session {
                 self.texts.remove(&Field::WorkspaceSearch);
                 self.sheet = Some(Sheet::AllWorkspaces);
             }
+            Intent::OpenBranchPicker => {
+                self.texts.remove(&Field::BranchSearch);
+                self.sheet = Some(Sheet::Branches { chosen: None });
+            }
+            Intent::PickBranch(branch) => {
+                if let Some(Sheet::Branches { chosen }) = &mut self.sheet {
+                    *chosen = Some(branch);
+                }
+            }
             Intent::Go(route) => self.go(route),
             Intent::OpenTicket(key) => self.go(Route::ticket(key, TicketTab::Overview)),
             Intent::CloseTab(key) => {
@@ -274,6 +287,7 @@ impl Session {
                 self.sheet = None;
                 self.texts.remove(&Field::TypedKey);
                 self.texts.remove(&Field::Compose);
+                self.texts.remove(&Field::BranchSearch);
             }
             Intent::Do(cmd) => {
                 if !matches!(self.sheet, Some(Sheet::Confirm { .. })) {
@@ -442,6 +456,24 @@ impl Session {
         self.store.workspaces().current.is_some()
     }
 
+    /// What the log screen says when it has no runs. A run belongs to the workspace it was made in,
+    /// so without one the screen says so instead of showing runs nobody chose to see.
+    fn logs_empty(&self) -> EmptyVm {
+        if self.has_workspace() {
+            EmptyVm::new(
+                "No sync logs yet",
+                "Every sync writes a raw log of what it asked Jira for and what came back. Run a sync and it appears here.",
+            )
+            .action(Btn::new("Sync now", Intent::Do(Command::Sync)).primary())
+        } else {
+            EmptyVm::new(
+                "No workspace is open",
+                "A sync run belongs to the workspace it was made in. Open a workspace and its runs are listed here.",
+            )
+            .action(Btn::new("Open a workspace", Intent::ToggleWorkspacePicker).primary())
+        }
+    }
+
     fn go(&mut self, route: Route) {
         // What belongs to a workspace cannot be shown without one: the list of workspaces is the way in.
         let route = if route.needs_workspace() && !self.has_workspace() {
@@ -584,6 +616,8 @@ impl Session {
         self.viewed.clear();
         self.composer = None;
         self.seen_snap.clear();
+        // The run that was open belonged to the workspace that is gone.
+        self.log_view = None;
         // Only settings text is not about a workspace.
         self.texts.retain(|f, _| matches!(f, Field::Mapping(_)));
         let start = if self.has_workspace() {
@@ -835,6 +869,10 @@ impl Session {
                 self.store
                     .all_workspaces(&self.text(&Field::WorkspaceSearch)),
             ),
+            Sheet::Branches { chosen } => SheetVm::Branches(self.store.branch_picker(
+                &self.text(&Field::BranchSearch),
+                chosen.as_ref(),
+            )),
             Sheet::Palette => {
                 let query = self.text(&Field::Palette);
                 SheetVm::Palette {
@@ -959,6 +997,7 @@ impl Session {
                     lines: shown.map(|(_, l)| l.clone()).unwrap_or_default(),
                     runs,
                     note,
+                    empty: self.logs_empty(),
                 })
             }
             Route::Settings => {
@@ -1110,6 +1149,7 @@ mod tests {
             Some(Sheet::Diagnose) => "diagnose",
             Some(Sheet::CloseTab(_)) => "close-tab",
             Some(Sheet::AllWorkspaces) => "all-workspaces",
+            Some(Sheet::Branches { .. }) => "branches",
         }
     }
 
@@ -2091,6 +2131,8 @@ mod tests {
         s.handle(Intent::Go(Route::Tickets(Group::Mine)));
         s.handle(Intent::OpenTicket(k("PROJ-139")));
         assert!(s.view().tabs.len() > 1);
+        s.handle(Intent::Go(Route::Logs));
+        s.handle(Intent::SelectLog("sync-run-2.log".into()));
 
         open_ws(&mut s, "threadplay");
         let v = s.view();
@@ -2099,6 +2141,17 @@ mod tests {
         assert!(v.sheet.is_none() && v.picker.is_none());
         assert_eq!(s.text(&Field::Comment(k("PROJ-142"))), "", "no draft of the old one");
         assert_eq!(v.workspace.label, "threadplay");
+
+        // The run that was open belonged to the workspace that was open.
+        s.handle(Intent::Go(Route::Logs));
+        let ScreenVm::Logs(v) = s.view().screen else {
+            panic!("not the log screen")
+        };
+        assert_eq!(
+            v.selected.as_deref(),
+            Some("sync-run-0.log"),
+            "the run of the old workspace is forgotten; the newest of this one is open"
+        );
     }
 
     #[test]
@@ -2366,6 +2419,54 @@ mod tests {
     }
 
     #[test]
+    fn the_branch_picker_says_what_switching_would_do_then_switches() {
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Workspace));
+        s.handle(Intent::OpenBranchPicker);
+        let SheetVm::Branches(b) = s.view().sheet.expect("the modal") else {
+            panic!("not the branch picker")
+        };
+        assert!(!b.groups.is_empty(), "the workspace has branches to pick");
+        assert_eq!(b.chosen, None);
+        assert!(!b.switch.enabled, "nothing to switch to yet");
+
+        s.handle(Intent::PickBranch(Branch::from("develop")));
+        let SheetVm::Branches(b) = s.view().sheet.expect("still open") else {
+            panic!("picking keeps the modal open")
+        };
+        assert_eq!(b.chosen.as_ref().map(Branch::as_str), Some("develop"));
+        let effect = b.effect.expect("a choice shows what it would do");
+        assert!(effect.summary.contains("develop"), "{}", effect.summary);
+
+        // Confirming closes the modal and runs the switch as a sequence of steps.
+        s.handle(Intent::Do(Command::SwitchBranch(Branch::from("develop"))));
+        assert!(s.view().sheet.is_none());
+        assert_eq!(s.view().sequence.as_ref().expect("the switch").title, "Switch to develop");
+        settle(&mut s);
+        match s.view().sequence {
+            None => {}
+            Some(q) => {
+                // A project with uncommitted changes is refused and the decision is left to the
+                // person; carrying on finishes the rest.
+                assert_eq!(q.state, SequenceState::NeedsDecision);
+                assert!(
+                    q.phases.iter().flat_map(|p| &p.steps).any(|st| {
+                        st.state == ProgressState::Failed
+                            && st.detail.contains("uncommitted changes")
+                    }),
+                    "the refusal says why: {q:?}"
+                );
+                assert!(
+                    q.actions.iter().any(|a| a.label == "Switch anyway"),
+                    "carrying on is a switch: {q:?}"
+                );
+                s.handle(Intent::Do(Command::ContinueSequence));
+                assert!(s.view().sequence.is_none(), "the switch finished");
+            }
+        }
+    }
+
+    #[test]
     fn the_palette_can_switch_workspace() {
         let mut s = Session::demo();
         s.handle(Intent::OpenPalette);
@@ -2491,6 +2592,26 @@ mod tests {
         };
         assert_eq!(v.selected, None);
         assert!(v.lines.is_empty());
+    }
+
+    #[test]
+    fn the_log_screen_without_a_workspace_says_that_runs_belong_to_one() {
+        let mut s = Session::new(Box::new(Sim::without_workspace()));
+        s.handle(Intent::Go(Route::Logs));
+        let ScreenVm::Logs(v) = s.view().screen else {
+            panic!("not the log screen")
+        };
+        assert!(v.runs.is_empty(), "runs belong to a workspace: {v:?}");
+        assert_eq!(v.empty.title, "No workspace is open");
+        assert_eq!(v.empty.actions.len(), 1, "the way to any run is to open one");
+
+        // With a workspace open the same screen offers the way to the first run.
+        let mut s = Session::demo();
+        s.handle(Intent::Go(Route::Logs));
+        let ScreenVm::Logs(v) = s.view().screen else {
+            panic!("not the log screen")
+        };
+        assert_eq!(v.empty.title, "No sync logs yet");
     }
 
     #[test]

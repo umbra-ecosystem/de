@@ -108,10 +108,12 @@ An automatic sync never overlaps a running one, is quiet (no toasts unless it st
 
 ## Sync logs
 
-Every sync writes a raw log of what it asked Jira for and what came back: the `acli` commands, their exit codes and timings, and the output as `acli` printed it. One file per run, named by its start time in UTC (`sync-20261001-094012.log`; the app lists runs in your local time), in `<data dir>/logs` (on macOS `~/Library/Application Support/Umbra.de/logs`).
+Every sync writes a raw log of what it asked Jira for and what came back: the `acli` commands, their exit codes and timings, and the output as `acli` printed it. One file per run, named by its start time in UTC (`sync-20261001-094012.log`; the app lists runs in your local time).
+
+A run belongs to the workspace it was made in: its file goes into that workspace's own folder, `<data dir>/workspaces/<workspace>/logs` (on macOS `~/Library/Application Support/Umbra.de/workspaces/shop/logs`), and only that workspace lists it. A sync started with no workspace open is written to `<data dir>/logs`, which the app never lists.
 
 - In the app, open **System → Sync logs** to pick a run and read it. `de sync` prints the path of its log when it finishes.
-- The newest 20 runs are kept; older ones are deleted when a new run starts. Change that in `config.toml`:
+- The newest 20 runs of a workspace are kept; older ones are deleted when a new run starts. Change that in `config.toml`:
 
 ```toml
 [logs]

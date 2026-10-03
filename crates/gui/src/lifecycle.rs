@@ -13,6 +13,7 @@ use de_core::domain::TicketKey;
 use de_core::git::GitRepo;
 use de_core::project::git_enabled_in;
 use de_core::store::{Kind as DbKind, Store as Db, tickets};
+use de_core::switch;
 use de_core::types::Slug;
 use de_core::workspace::health::{ComposePlan, compose_plan, parse_services_list, run_compose};
 use de_core::workspace::{Workspace, WorkspaceError, registry, startup_order};
@@ -36,6 +37,9 @@ pub enum Kind {
     Open { to: Slug },
     Close { from: Slug },
     Switch { from: Slug, to: Slug },
+    /// Move every project of `scope` onto `branch`; the projects that do not have it fall back
+    /// to their own baseline, and a project with uncommitted changes is left alone.
+    SwitchBranch { scope: Slug, branch: String },
 }
 
 impl Kind {
@@ -45,12 +49,17 @@ impl Kind {
             Kind::Open { to } => format!("Opening {to}"),
             Kind::Close { from } => format!("Closing {from}"),
             Kind::Switch { to, .. } => format!("Switching to {to}"),
+            Kind::SwitchBranch { branch, .. } => format!("Switch to {branch}"),
         }
     }
 
-    /// Whether the footer's last button offers to carry on closing rather than opening.
-    fn closing(&self) -> bool {
-        matches!(self, Kind::Close { .. })
+    /// What the footer's last button offers when there is a failure to carry on past.
+    fn carry_on(&self) -> &'static str {
+        match self {
+            Kind::Close { .. } => "Close anyway",
+            Kind::SwitchBranch { .. } => "Switch anyway",
+            Kind::Open { .. } | Kind::Switch { .. } => "Open anyway",
+        }
     }
 }
 
@@ -79,6 +88,14 @@ pub enum Job {
     Load { scope: Slug },
     /// The check that gates a close: no ticket may be holding the workspace's repos.
     CheckActive { scope: Slug },
+    /// Move one project onto a branch, or onto its own baseline when it does not have it.
+    Branch {
+        project: Slug,
+        dir: PathBuf,
+        target: String,
+        /// The workspace's `default_branch`, part of what the project falls back to.
+        workspace_default: Option<String>,
+    },
     /// Stop one project's services.
     Down {
         project: Slug,
@@ -104,6 +121,12 @@ impl Job {
                 .and_then(|state| tickets::active(&state).map_err(data_unreadable))
                 .and_then(|found| report_active(Ok(found.map(|t| t.key)))),
             Job::Down { project, file, dir } => stop_services(&project, &file, &dir),
+            Job::Branch {
+                project,
+                dir,
+                target,
+                workspace_default,
+            } => switch_branch(&project, &dir, &target, workspace_default.as_deref()),
             Job::Save { scope } => save(&scope),
         }
     }
@@ -159,6 +182,22 @@ fn missing_folder(id: &Slug, dir: &Path, config: &Path) -> String {
         dir.display(),
         config.display()
     )
+}
+
+/// Move one project onto `target`, or onto the first of its fallbacks it actually has.
+///
+/// The rule and the words it comes back with live in `de-core`, so this is the same switch the
+/// rest of the engine makes. Nothing is forced: a project with uncommitted changes is left
+/// exactly as it was found and says so.
+fn switch_branch(
+    project: &Slug,
+    dir: &Path,
+    target: &str,
+    workspace_default: Option<&str>,
+) -> Result<String, String> {
+    switch::facts(project.as_str(), dir, workspace_default)
+        .into_move(target)
+        .apply()
 }
 
 /// One project's git state as the row shows it: `develop, clean`.
@@ -314,6 +353,12 @@ impl Seq {
                 close_phase(from, current),
                 open_phase(to, target.ok_or_else(|| not_found(to))?),
             ],
+            Kind::SwitchBranch { scope, branch } => vec![branch_phase(
+                scope,
+                branch,
+                current,
+                current.and_then(|ws| ws.config().default_branch.clone()),
+            )],
         };
         Ok(Seq {
             kind,
@@ -337,6 +382,25 @@ impl Seq {
     /// Whether the check at the start failed, so there is nothing to carry on past.
     pub fn blocked(&self) -> bool {
         self.blocked
+    }
+
+    /// How the branch switch went: the projects that could not be moved (their steps say why),
+    /// or `None` when this sequence is not a branch switch.
+    pub fn switch_result(&self) -> Option<Vec<Slug>> {
+        if !matches!(&self.kind, Kind::SwitchBranch { .. }) {
+            return None;
+        }
+        let left = self
+            .phases
+            .iter()
+            .flat_map(|p| &p.steps)
+            .filter(|s| s.state == ProgressState::Failed)
+            .filter_map(|s| match &s.job {
+                Job::Branch { project, .. } => Some(project.clone()),
+                _ => None,
+            })
+            .collect();
+        Some(left)
     }
 
     /// Drive one step: report its worker's result, then start the next one.
@@ -413,15 +477,8 @@ impl Seq {
             ));
             if !self.blocked {
                 actions.push(
-                    Btn::new(
-                        if self.kind.closing() {
-                            "Close anyway"
-                        } else {
-                            "Open anyway"
-                        },
-                        Intent::Do(Command::ContinueSequence),
-                    )
-                    .primary(),
+                    Btn::new(self.kind.carry_on(), Intent::Do(Command::ContinueSequence))
+                        .primary(),
                 );
             }
         }
@@ -626,6 +683,45 @@ fn close_phase(from: &Slug, ws: Option<&Workspace>) -> Phase {
     ));
     Phase {
         title: format!("Closing {from}"),
+        steps,
+    }
+}
+
+/// The steps that move `ws`'s projects onto `branch`: the check that gates anything else, then
+/// one step per project saying where it ends up — or why it stays where it is.
+fn branch_phase(
+    scope: &Slug,
+    branch: &str,
+    ws: Option<&Workspace>,
+    workspace_default: Option<String>,
+) -> Phase {
+    let mut steps = vec![step(
+        "Check nothing is in progress".to_string(),
+        Job::CheckActive { scope: scope.clone() },
+    )];
+    if let Some(ws) = ws {
+        for id in startup_order(ws) {
+            let Some(dir) = ws.config().projects.get(&id).map(|p| p.dir.clone()) else {
+                continue;
+            };
+            // The same rule a project's git state is read under: with git off there is nothing
+            // to switch, so there is no step either.
+            if !git_enabled_in(&dir) {
+                continue;
+            }
+            steps.push(step(
+                format!("Switch \u{b7} {id}"),
+                Job::Branch {
+                    project: id.clone(),
+                    dir,
+                    target: branch.to_string(),
+                    workspace_default: workspace_default.clone(),
+                },
+            ));
+        }
+    }
+    Phase {
+        title: format!("Switch to {branch}"),
         steps,
     }
 }

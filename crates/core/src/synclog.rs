@@ -4,6 +4,10 @@
 //! a line to its file. With no run in progress [`log`] does nothing, so the provider adapters can call it
 //! freely (a gateway write, for instance, is not logged here).
 //!
+//! **A run belongs to one workspace.** [`begin_for`] writes it into that workspace's own folder, and
+//! [`dir_for`] is the only way to read runs back: a workspace's runs are never listed for another, and the
+//! shared folder is never listed at all (see [`shared_dir`]).
+//!
 //! The files hold what the tools printed, raw, so they can contain ticket titles and comments: they stay in
 //! the local data directory and should be reviewed before being shared.
 
@@ -17,6 +21,7 @@ use std::time::Instant;
 use eyre::Context;
 
 use crate::config::Config;
+use crate::types::Slug;
 use crate::utils::get_project_dirs;
 
 /// Files kept when `[logs] keep` is not set.
@@ -61,15 +66,37 @@ impl Drop for RunLog {
     }
 }
 
-/// Where logs live: `<data dir>/logs`.
-pub fn default_dir() -> eyre::Result<PathBuf> {
+/// The shared log folder, `<data dir>/logs`: where a run started with no workspace open is written.
+///
+/// Nothing reads it — the app lists only a workspace's own runs through [`dir_for`] — so the runs made
+/// before workspaces were isolated, or with none open, never surface in a workspace's view. `de sync`
+/// prints the path of the file it wrote, so one is still readable from there.
+fn shared_dir() -> eyre::Result<PathBuf> {
     Ok(get_project_dirs()?.data_dir().join("logs"))
 }
 
-/// Starts a run in the default directory, keeping the number of files `config` asks for. A log that cannot
-/// be written must never stop a sync, so a failure here is only reported to `tracing` and gives `None`.
-pub fn begin_default(now: i64, config: &Config) -> Option<RunLog> {
-    let dir = match default_dir() {
+/// One workspace's own log folder: `<data dir>/workspaces/<workspace>/logs`.
+fn workspace_logs(workspace: &Slug) -> eyre::Result<PathBuf> {
+    Ok(crate::store::workspace_dir(workspace)?.join("logs"))
+}
+
+/// The folder to read `scope`'s runs from: the workspace the caller has open, and `None` when it has
+/// none. Nothing is listed without a workspace, so one workspace's runs are never shown in another's
+/// view (or in a view that has not chosen one).
+pub fn dir_for(scope: Option<&Slug>) -> eyre::Result<Option<PathBuf>> {
+    scope.map(workspace_logs).transpose()
+}
+
+/// Starts a run for `scope`'s workspace, keeping the number of files `config` asks for. Its file lands in
+/// the folder [`dir_for`] reads. An unset `scope` is resolved the way [`Store::open_scoped_for`] resolves
+/// it, and a run with no workspace at all goes to [`shared_dir`]: written, but never listed.
+///
+/// A log that cannot be written must never stop a sync, so a failure here is only reported to `tracing`
+/// and gives `None`.
+///
+/// [`Store::open_scoped_for`]: crate::store::Store::open_scoped_for
+pub fn begin_for(scope: Option<&Slug>, now: i64, config: &Config) -> Option<RunLog> {
+    let dir = match write_dir(scope) {
         Ok(dir) => dir,
         Err(e) => {
             tracing::warn!("sync log disabled: {e:#}");
@@ -82,6 +109,21 @@ pub fn begin_default(now: i64, config: &Config) -> Option<RunLog> {
             tracing::warn!("sync log disabled: {e:#}");
             None
         }
+    }
+}
+
+/// Where a run for `scope` is written: its workspace's own logs, resolved the way
+/// [`Store::open_scoped_for`] resolves an unset scope, else the shared folder.
+///
+/// [`Store::open_scoped_for`]: crate::store::Store::open_scoped_for
+fn write_dir(scope: Option<&Slug>) -> eyre::Result<PathBuf> {
+    let workspace = match scope {
+        Some(workspace) => Some(workspace.clone()),
+        None => crate::store::scoped_workspace_name()?,
+    };
+    match workspace {
+        Some(workspace) => workspace_logs(&workspace),
+        None => shared_dir(),
     }
 }
 
@@ -304,6 +346,40 @@ mod tests {
     fn stamps_are_utc_and_fixed_width() {
         assert_eq!(utc_stamp(0), "19700101-000000");
         assert_eq!(utc_stamp(1_700_000_000), "20231114-221320");
+    }
+
+    fn slug(name: &str) -> Slug {
+        Slug::sanitize(name).unwrap()
+    }
+
+    // The whole point of the folders: what one workspace logs, another never reads.
+    #[test]
+    fn runs_are_listed_from_the_open_workspace_and_never_from_the_shared_folder() {
+        let shop = dir_for(Some(&slug("shop"))).unwrap().unwrap();
+        let hbt = dir_for(Some(&slug("hbt"))).unwrap().unwrap();
+        assert_ne!(shop, hbt, "each workspace reads its own runs");
+        assert!(
+            shop.ends_with(Path::new("workspaces").join("shop").join("logs")),
+            "{}",
+            shop.display()
+        );
+        assert_eq!(
+            dir_for(None).unwrap(),
+            None,
+            "with no workspace open nothing is listed, not the runs of whoever logged last"
+        );
+        assert_ne!(
+            dir_for(Some(&slug("shop"))).unwrap(),
+            Some(shared_dir().unwrap()),
+            "the shared folder of older runs is never handed out"
+        );
+
+        // A run lands where its workspace reads them.
+        for name in ["shop", "hbt"] {
+            let w = slug(name);
+            let listed = dir_for(Some(&w)).unwrap().unwrap();
+            assert_eq!(write_dir(Some(&w)).unwrap(), listed);
+        }
     }
 
     // One test owns the process-wide "current run", so tests cannot interleave.

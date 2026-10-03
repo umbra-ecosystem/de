@@ -180,6 +180,43 @@ fn all_workspaces_row(ui: &Ui, w: &WorkspaceItemVm) -> Stateful<Div> {
         })
 }
 
+/// One branch in the picker: the name in the mono face, why it is worth considering beside it,
+/// and a mark on the one that is picked.
+fn branch_row(ui: &Ui, item: &BranchItemVm) -> Stateful<Div> {
+    let pal = &ui.pal;
+    div()
+        .id(hash_id("branch", &item.branch))
+        .flex()
+        .items_center()
+        .gap_3()
+        .h_9()
+        .px_2()
+        .rounded_md()
+        .cursor_pointer()
+        .hover(|d| d.bg(pal.hover))
+        .when(item.selected, |d| d.bg(pal.hover))
+        .on_click(ui.on_click(item.pick.clone()))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .font_family(ui.mono.clone())
+                .text_sm()
+                .child(item.branch.to_string()),
+        )
+        .child(
+            div()
+                .flex_none()
+                .text_xs()
+                .text_color(pal.faint)
+                .child(item.hint.clone()),
+        )
+        .when(item.selected, |d| {
+            d.child(Icon::new(IconName::Check).small().text_color(pal.accent))
+        })
+}
+
 /// One step of a sequence: a mark for where it is, what it does, and its result on the right.
 fn step_row(ui: &Ui, st: &StepVm) -> Div {
     let pal = &ui.pal;
@@ -1407,6 +1444,95 @@ pub fn sheet(ui: &Ui, cx: &App, inputs: &Inputs, sheet: &SheetVm) -> Div {
                 ),
             div().child(button_ghost(ui, &Btn::new("Close", Intent::CancelSheet))),
         ),
+        SheetVm::Branches(b) => {
+            let mut items: Vec<AnyElement> = Vec::new();
+            if b.reading {
+                items.push(
+                    div()
+                        .py_3()
+                        .child(muted(
+                            pal,
+                            "Reading the branches in this workspace\u{2026}",
+                        ))
+                        .into_any_element(),
+                );
+            } else if b.groups.is_empty() {
+                items.push(
+                    div().py_3().child(muted(pal, if b.total == 0 {
+                        "No branches yet. Create one in a project with \
+                         `git switch -c my-branch`, then open this again."
+                            .to_string()
+                    } else {
+                        format!("Nothing matches \u{201c}{}\u{201d}.", b.query.trim())
+                    })).into_any_element(),
+                );
+            } else {
+                for group in &b.groups {
+                    items.push(
+                        div()
+                            .pt_2()
+                            .text_xs()
+                            .text_color(pal.muted)
+                            .child(group.heading.clone())
+                            .into_any_element(),
+                    );
+                    for item in &group.items {
+                        items.push(div().child(branch_row(ui, item)).into_any_element());
+                    }
+                }
+            }
+            sheet_frame(
+                ui,
+                560.0,
+                div().child("Switch to a branch"),
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .child(inputs.line(&Field::BranchSearch))
+                    .child(
+                        div()
+                            .id("branch-picker")
+                            .flex()
+                            .flex_col()
+                            .max_h(px(320.0))
+                            .overflow_y_scroll()
+                            .children(items),
+                    )
+                    // What the choice does, once there is one: how many move, who falls back to
+                    // what, and who cannot go anywhere at all.
+                    .when_some(b.effect.as_ref(), |d, e| {
+                        d.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .pt_3()
+                                .border_t_1()
+                                .border_color(pal.border.opacity(0.6))
+                                .child(div().text_sm().child(e.summary.clone()))
+                                .children(e.fallbacks.iter().map(|l| {
+                                    div()
+                                        .font_family(ui.mono.clone())
+                                        .text_xs()
+                                        .text_color(pal.faint)
+                                        .child(l.clone())
+                                }))
+                                .children(e.stuck.iter().map(|l| {
+                                    div()
+                                        .text_xs()
+                                        .text_color(pal.tone(Tone::Warn))
+                                        .child(l.clone())
+                                })),
+                        )
+                    }),
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(button_ghost(ui, &Btn::new("Cancel", Intent::CancelSheet)))
+                    .child(button(ui, &b.switch)),
+            )
+        }
         SheetVm::CloseTab(key) => sheet_frame(
             ui,
             460.0,

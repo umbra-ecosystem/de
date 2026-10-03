@@ -101,6 +101,9 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                         .iter()
                         .map(|h| pill(pal, &h.badge()).into_any_element()),
                 )
+                // Actions sit together at the end of the strip: the one that asks first, the one
+                // that only re-reads, and the one that changes what is running (primary, last).
+                .child(button_ghost(ui, &v.switch_branch))
                 .child(button_ghost(ui, &v.refresh))
                 .child(button(ui, &v.toggle)),
         )
@@ -202,14 +205,12 @@ pub fn audit(ui: &Ui, rows: &[AuditRow]) -> Div {
 pub fn logs(ui: &Ui, cx: &App, v: &LogsVm) -> Div {
     let pal = &ui.pal;
     if v.runs.is_empty() {
-        return div().size_full().py_8().flex().justify_center().child(empty_panel(
-            ui,
-            &EmptyVm::new(
-                "No sync logs yet",
-                "Every sync writes a raw log of what it asked Jira for and what came back. Run a sync and it appears here.",
-            )
-            .action(Btn::new("Sync now", Intent::Do(Command::Sync)).primary()),
-        ));
+        return div()
+            .size_full()
+            .py_8()
+            .flex()
+            .justify_center()
+            .child(empty_panel(ui, &v.empty));
     }
     let list = div()
         .flex()

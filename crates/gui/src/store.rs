@@ -517,16 +517,16 @@ impl CoreStore {
     /// it cannot start.
     fn start_sequence(&mut self, kind: lifecycle::Kind) -> Result<(), String> {
         let current = match &kind {
-            lifecycle::Kind::Close { from } | lifecycle::Kind::Switch { from, .. } => {
-                registry::load_workspace(from).ok()
-            }
+            lifecycle::Kind::Close { from }
+            | lifecycle::Kind::Switch { from, .. }
+            | lifecycle::Kind::SwitchBranch { scope: from, .. } => registry::load_workspace(from).ok(),
             lifecycle::Kind::Open { .. } => None,
         };
         let target = match &kind {
             lifecycle::Kind::Open { to } | lifecycle::Kind::Switch { to, .. } => {
                 Some(registry::load_workspace(to).map_err(|e| e.to_string())?)
             }
-            lifecycle::Kind::Close { .. } => None,
+            lifecycle::Kind::Close { .. } | lifecycle::Kind::SwitchBranch { .. } => None,
         };
         self.lifecycle = Some(Seq::build(kind, current.as_ref(), target.as_ref())?);
         Ok(())
@@ -566,6 +566,25 @@ impl CoreStore {
             return Outcome::ok();
         };
         match self.start_sequence(lifecycle::Kind::Close { from }) {
+            Ok(()) => Outcome::ok(),
+            Err(why) => Outcome::fail(why),
+        }
+    }
+
+    /// Move every project of the open workspace onto `branch`, showing every step of it.
+    fn switch_branch(&mut self, branch: Branch) -> Outcome {
+        if self.lifecycle.is_some() {
+            return Outcome::fail(BUSY);
+        }
+        let Some(scope) = self.workspace.clone() else {
+            return Outcome::fail(
+                "No workspace is open, so there are no projects to switch. Open one first.",
+            );
+        };
+        match self.start_sequence(lifecycle::Kind::SwitchBranch {
+            scope,
+            branch: branch.to_string(),
+        }) {
             Ok(()) => Outcome::ok(),
             Err(why) => Outcome::fail(why),
         }
@@ -617,6 +636,7 @@ impl CoreStore {
         let Some(seq) = self.lifecycle.take() else {
             return;
         };
+        let left = seq.switch_result();
         let toasts = match seq.kind().clone() {
             lifecycle::Kind::Open { to } => self.apply_open(to),
             lifecycle::Kind::Close { from } => self.apply_close(from, true),
@@ -631,8 +651,40 @@ impl CoreStore {
                 );
                 toasts
             }
+            lifecycle::Kind::SwitchBranch { branch, .. } => self.finish_switch(&branch, left),
         };
         self.queued.extend(toasts);
+    }
+
+    /// The projects moved on disk: read them again now, record what was done, and say how it went.
+    ///
+    /// A project that could not be moved was already shown, with why, in the sequence that just
+    /// finished; this only says which ones kept the branch they were on.
+    fn finish_switch(
+        &mut self,
+        branch: &str,
+        left: Option<Vec<Slug>>,
+    ) -> Vec<(String, ToastKind)> {
+        self.start_measure();
+        let mut toasts = Vec::new();
+        if let Some(warning) = self.record("workspace.branch", true, branch) {
+            toasts.push(warning);
+        }
+        match left {
+            Some(names) if !names.is_empty() => {
+                let names = names
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                toasts.push((
+                    format!("Switched to {branch}. {names} stayed where they were."),
+                    ToastKind::Warn,
+                ));
+            }
+            _ => toasts.push((format!("Switched to {branch}"), ToastKind::Ok)),
+        }
+        toasts
     }
 
     /// The workspace is open now: record it as active, load what it shows, start fresh on it.
@@ -842,15 +894,23 @@ impl Store for CoreStore {
         v
     }
     fn logs(&self) -> (Vec<LogRunVm>, String) {
-        match (synclog::default_dir(), Config::load()) {
-            (Ok(dir), Ok(config)) => logs::runs_in(&dir, config.log_keep()),
-            (Ok(dir), Err(_)) => logs::runs_in(&dir, synclog::DEFAULT_KEEP),
-            (Err(_), _) => (Vec::new(), String::new()),
+        let keep = Config::load()
+            .map(|c| c.log_keep())
+            .unwrap_or(synclog::DEFAULT_KEEP);
+        match synclog::dir_for(self.workspace.as_ref()) {
+            Ok(Some(dir)) => logs::runs_in(&dir, keep),
+            // Runs belong to the workspace they were made in: with none open there is nothing
+            // to list, and the shared folder of older runs is never read.
+            Ok(None) => (Vec::new(), logs::note(keep)),
+            Err(_) => (Vec::new(), String::new()),
         }
     }
     fn log_text(&self, id: &str) -> String {
-        match synclog::default_dir() {
-            Ok(dir) => logs::text_in(&dir, id),
+        match synclog::dir_for(self.workspace.as_ref()) {
+            Ok(Some(dir)) => logs::text_in(&dir, id),
+            Ok(None) => "No workspace is open, so there are no sync logs to read here. \
+                         Open a workspace and its runs are listed."
+                .to_string(),
             Err(e) => format!("The log folder could not be found: {e:#}"),
         }
     }
@@ -897,6 +957,31 @@ impl Store for CoreStore {
     fn simulate(&self) -> Vec<SimGroup> {
         self.sim.simulate()
     }
+    fn branch_picker(&self, query: &str, chosen: Option<&Branch>) -> BranchPickerVm {
+        let Some(measured) = self.measured.as_ref() else {
+            // The first reading of the workspace is still running: claim nothing before it lands.
+            return de_widgets::vm::branch_picker(query, chosen, &[], true);
+        };
+        let repos: Vec<BranchRepoVm> = measured
+            .facts
+            .iter()
+            .map(|f| BranchRepoVm {
+                name: RepoName::new(f.name.as_str()),
+                branches: f
+                    .branches
+                    .iter()
+                    .map(|b| Branch::new(b.as_str()))
+                    .collect(),
+                fallback: f
+                    .fallback
+                    .iter()
+                    .map(|b| Branch::new(b.as_str()))
+                    .collect(),
+                current: f.current.as_ref().map(|b| Branch::new(b.as_str())),
+            })
+            .collect();
+        de_widgets::vm::branch_picker(query, chosen, &repos, false)
+    }
     fn comments_seen(&self, key: &TicketKey) -> u32 {
         self.sim.comments_seen(key)
     }
@@ -931,6 +1016,7 @@ impl Store for CoreStore {
             Command::RetrySequence => self.retry_sequence(),
             Command::AbortSequence => self.abort_sequence(),
             Command::RefreshHealth => self.refresh_health(),
+            Command::SwitchBranch(branch) => self.switch_branch(branch.clone()),
             Command::StartWorkspace => self.spin_services(true),
             _ => self.sim.dispatch(command),
         }

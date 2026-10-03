@@ -82,8 +82,9 @@ pub fn sync_real(scope: Option<&Slug>, now: i64) -> SyncDone {
     });
     match opened {
         Ok((config, state, cache)) => {
-            // Kept until the sync is done; dropping it ends the run.
-            let _run_log = de_core::synclog::begin_default(now, &config);
+            // Kept until the sync is done; dropping it ends the run. Its file goes to the
+            // workspace whose data this sync writes.
+            let _run_log = de_core::synclog::begin_for(scope, now, &config);
             let providers = Providers::from_config(&config);
             sync_now(&state, &cache, &config, providers.jira.as_deref(), now)
         }

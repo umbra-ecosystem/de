@@ -1327,6 +1327,11 @@ impl Store for Sim {
         self.all_workspaces_vm(query)
     }
 
+    fn branch_picker(&self, query: &str, chosen: Option<&Branch>) -> BranchPickerVm {
+        // The simulation always knows what its projects have; nothing is ever "still reading".
+        crate::vm::branch_picker(query, chosen, &self.branch_repos(), false)
+    }
+
     fn welcome(&self) -> WelcomeVm {
         self.welcome_vm(self.settings().providers)
     }
@@ -1408,6 +1413,7 @@ impl Store for Sim {
                 )
             }),
             refresh: Btn::new("Refresh", cmd(Command::RefreshHealth)),
+            switch_branch: Btn::new("Switch branch…", Intent::OpenBranchPicker),
             toggle: if self.ws.up {
                 Btn::new("Stop…", cmd(Command::StopWorkspace))
             } else {
@@ -1421,6 +1427,11 @@ impl Store for Sim {
     }
 
     fn logs(&self) -> (Vec<LogRunVm>, String) {
+        let note = "Keeping the latest 20 runs. Change logs.keep in config.toml.".to_string();
+        // A run belongs to the workspace it was made in: with none open there is nothing to list.
+        if self.current_workspace().is_none() {
+            return (Vec::new(), note);
+        }
         let runs = (0..3)
             .map(|i| LogRunVm {
                 id: format!("sync-run-{i}.log"),
@@ -1428,10 +1439,7 @@ impl Store for Sim {
                 size: "12 KB".to_string(),
             })
             .collect();
-        (
-            runs,
-            "Keeping the latest 20 runs. Change logs.keep in config.toml.".to_string(),
-        )
+        (runs, note)
     }
 
     fn log_text(&self, id: &str) -> String {
@@ -1871,6 +1879,7 @@ impl Sim {
                     Outcome::ok().with_toast("Services checked", ToastKind::Info, None)
                 }
             }
+            Command::SwitchBranch(branch) => self.start_switch(branch.clone()),
             Command::ResetDemo => {
                 *self = Sim::new();
                 Outcome::ok().with_toast("Demo reset", ToastKind::Info, None)

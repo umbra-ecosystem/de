@@ -69,7 +69,7 @@ pub fn sync(only: Option<SyncSource>, force: bool, full: bool) -> eyre::Result<(
 
     let providers = Providers::from_config(&config);
     let now = now()?;
-    let run_log = de_core::synclog::begin_default(now, &config);
+    let run_log = de_core::synclog::begin_for(scope.as_ref(), now, &config);
     let ctx = SyncContext {
         state: &state,
         cache: &cache,

@@ -12,6 +12,7 @@ mod ranking;
 mod rules;
 mod sequence;
 mod store_impl;
+mod switch;
 mod worlds;
 
 pub use rules::{Rule, Sug};

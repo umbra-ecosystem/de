@@ -718,6 +718,9 @@ pub struct WorkspaceVm {
     /// Ask the engine again how the services stand.
     pub refresh: Btn,
     pub toggle: Btn,
+    /// Move every project of the workspace to one branch; opens the picker that says what that
+    /// would do first.
+    pub switch_branch: Btn,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -906,6 +909,10 @@ pub struct LogsVm {
     pub selected: Option<String>,
     /// The selected log, one entry per line. Shared so a frame does not copy a large file.
     pub lines: std::rc::Rc<Vec<String>>,
+    /// What the screen says when there are no runs: what this place is for, and what to do next.
+    /// A run belongs to the workspace it was made in, so this also carries the reason when the
+    /// open workspace has none yet.
+    pub empty: EmptyVm,
 }
 
 /* ------------------------------ workspaces ------------------------------ */

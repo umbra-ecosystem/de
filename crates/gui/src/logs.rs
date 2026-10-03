@@ -12,11 +12,15 @@ pub fn runs_in(dir: &Path, keep: usize) -> (Vec<LogRunVm>, String) {
         .iter()
         .map(row)
         .collect();
-    let note = format!(
+    (runs, note(keep))
+}
+
+/// The line under the list heading: how many runs are kept and where that is set.
+pub fn note(keep: usize) -> String {
+    format!(
         "Keeping the latest {keep} run{}. Change `keep` under [logs] in config.toml.",
         if keep == 1 { "" } else { "s" }
-    );
-    (runs, note)
+    )
 }
 
 /// The text of one log. A log that has since been pruned reads as a sentence that says what to do.

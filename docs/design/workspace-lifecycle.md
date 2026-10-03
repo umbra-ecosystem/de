@@ -7,10 +7,12 @@ design the widgets are built to first (with a simulated store); the engine is wi
 
 - **One workspace is open at a time.** Opening another closes the current one first. Several open at once may come
   later; nothing here should make that impossible, but nothing is built for it.
-- **A workspace's data is its own.** Tickets, repos, review answers, repo locks and the audit log belong to the open
-  workspace. Nothing of one shows in another, and the window keeps nothing of the old one (tabs, drafts, filters).
+- **A workspace's data is its own.** Tickets, repos, review answers, repo locks, the audit log and the sync runs
+  belong to the open workspace. Nothing of one shows in another, and the window keeps nothing of the old one
+  (tabs, drafts, filters).
 - **Nothing of a workspace without a workspace.** With none open, the screens that show a workspace's data cannot be
-  reached. What does not need one stays: the settings, the sync logs and the list of workspaces.
+  reached. What does not need one stays: the settings, the list of workspaces, and the sync logs screen — which has
+  no runs to list until one is open.
 - **Opening and closing are real work, so they are shown and not interrupted.** Starting services and reading git
   state takes seconds and can fail. The person sees each step, and the window cannot be used (or the step list
   closed) while it runs.

@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use de_core::git::{GitRepo, RepoStatus};
 use de_core::project::git_enabled_in;
 use de_core::store::{Kind, Store as Db, tickets};
+use de_core::switch::{self, RepoFacts};
 use de_core::types::Slug;
 use de_core::workspace::health::{self, Overall, ProjectHealth, WorkspaceHealth};
 use de_core::workspace::{Workspace, registry, startup_order};
@@ -27,6 +28,9 @@ pub struct Measured {
     pub running: HashMap<Slug, bool>,
     /// Each project of the open workspace as git reported it, in the order they start.
     pub git: Vec<(Slug, Result<RepoStatus, String>)>,
+    /// The same projects for the branch picker: what each one has and where it falls back to,
+    /// read alongside the git state so the window never has to ask the disk while drawing.
+    pub facts: Vec<RepoFacts>,
     /// The ticket holding the open workspace's repos, as its key.
     pub active: Option<String>,
 }
@@ -64,6 +68,7 @@ pub fn measure(scope: Option<&Slug>, saved: &[Slug]) -> Measured {
         health: Some(health::check_workspace(&workspace, now())),
         running,
         git: git_state(&workspace),
+        facts: project_facts(&workspace),
         active: active_ticket(scope),
     }
 }
@@ -84,6 +89,25 @@ fn git_state(workspace: &Workspace) -> Vec<(Slug, Result<RepoStatus, String>)> {
                 .and_then(|repo| repo.status())
                 .map_err(|e| format!("{e:#}"));
             Some((id, read))
+        })
+        .collect()
+}
+
+/// Each project for the branch picker: what it has, where it falls back to and what it is on, in
+/// the order they start.
+///
+/// A project with `[git] enabled = false` has no entry, so it is never offered a branch — the
+/// same rule its git state is read under.
+fn project_facts(workspace: &Workspace) -> Vec<RepoFacts> {
+    let default = workspace.config().default_branch.as_deref();
+    startup_order(workspace)
+        .into_iter()
+        .filter_map(|id| {
+            let dir = workspace.config().projects.get(&id)?.dir.clone();
+            if !git_enabled_in(&dir) {
+                return None;
+            }
+            Some(switch::facts(id.as_str(), &dir, default))
         })
         .collect()
 }
@@ -148,6 +172,7 @@ pub fn workspace_vm(
             )
         }),
         refresh: Btn::new("Refresh", Intent::Do(Command::RefreshHealth)),
+        switch_branch: Btn::new("Switch branch\u{2026}", Intent::OpenBranchPicker),
         toggle: if up {
             Btn::new("Stop\u{2026}", Intent::Do(Command::StopWorkspace))
         } else {

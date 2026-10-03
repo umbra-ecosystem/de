@@ -95,6 +95,7 @@ fn needs(vm: &AppVm) -> Vec<Need> {
         }
         Some(SheetVm::Compose { .. }) => add(Field::Compose, true, "Write the comment…"),
         Some(SheetVm::Palette { .. }) => add(Field::Palette, false, "Go to…"),
+        Some(SheetVm::Branches(_)) => add(Field::BranchSearch, false, "Search branches…"),
         _ => {}
     }
     out
@@ -109,6 +110,7 @@ fn focus_token(vm: &AppVm) -> Option<String> {
         Some(SheetVm::Compose { title, .. }) => Some(format!("compose:{title}")),
         Some(SheetVm::Palette { .. }) => Some("palette".to_string()),
         Some(SheetVm::AllWorkspaces(_)) => Some("all-workspaces".to_string()),
+        Some(SheetVm::Branches(_)) => Some("branches".to_string()),
         _ if vm.picker.is_some() => Some("workspace-picker".to_string()),
         _ => match &vm.screen {
             ScreenVm::Ticket { body, .. } => match body.as_ref() {
@@ -154,6 +156,11 @@ fn apply_env(session: &mut Session) {
     }
     if std::env::var("DE_SHOWCASE_ALL").is_ok() {
         session.handle(Intent::OpenAllWorkspaces);
+    }
+    // `DE_SHOWCASE_BRANCHES=1` opens the branch picker on the workspace screen.
+    if std::env::var("DE_SHOWCASE_BRANCHES").is_ok() {
+        session.handle(Intent::Go(Route::Workspace));
+        session.handle(Intent::OpenBranchPicker);
     }
     // `DE_SHOWCASE_PICKER=1` opens the workspace menu.
     if std::env::var("DE_SHOWCASE_PICKER").is_ok() {
@@ -368,6 +375,7 @@ impl AppView {
                 let field = match &vm.sheet {
                     _ if vm.picker.is_some() && vm.sheet.is_none() => Some(Field::WorkspaceSearch),
                     Some(SheetVm::AllWorkspaces(_)) => Some(Field::WorkspaceSearch),
+                    Some(SheetVm::Branches(_)) => Some(Field::BranchSearch),
                     Some(SheetVm::Compose { .. }) => Some(Field::Compose),
                     Some(SheetVm::Palette { .. }) => Some(Field::Palette),
                     Some(SheetVm::Confirm { .. }) => Some(Field::TypedKey),

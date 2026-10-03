@@ -119,6 +119,10 @@ pub trait Store {
     fn sequence(&self) -> Option<SequenceVm>;
     /// Every saved workspace matching `query`, for the modal.
     fn all_workspaces(&self, query: &str) -> AllWorkspacesVm;
+    /// The branches of the open workspace for the modal that picks one, narrowed by `query`; `chosen`
+    /// is what has been picked in it, so the modal can say what switching would do. `reading` while
+    /// the first check of the workspace is still running: nothing is claimed before it is known.
+    fn branch_picker(&self, query: &str, chosen: Option<&Branch>) -> BranchPickerVm;
     fn audit(&self) -> Vec<AuditRow>;
     fn settings(&self) -> SettingsVm;
     /// The sync logs on disk, newest first, and the line that says how many are kept.

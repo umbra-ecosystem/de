@@ -206,6 +206,10 @@ pub enum Command {
     /// Ask the engine again how the workspace's services stand (the screen checks by itself
     /// too, on open, after start and stop, and every so often while it is shown).
     RefreshHealth,
+    /// Move every project of the open workspace to this branch. Projects that do not have it fall
+    /// back to their own baseline, and a project with uncommitted changes is left alone and says
+    /// why. It runs as a sequence of steps, one project at a time.
+    SwitchBranch(Branch),
     ResetDemo,
     Sim(SimEvent),
 }
@@ -248,6 +252,8 @@ pub enum Field {
     TicketFilter,
     /// The search box of the workspace menu.
     WorkspaceSearch,
+    /// The search box of the branch picker.
+    BranchSearch,
     /// One of the editable Jira mapping fields on the settings page.
     Mapping(MappingKey),
 }
@@ -263,6 +269,8 @@ pub enum Intent {
     ToggleWorkspacePicker,
     /// Open the modal that lists every saved workspace.
     OpenAllWorkspaces,
+    /// Open the modal that picks a branch for the whole workspace to move to.
+    OpenBranchPicker,
     /// Save every edited Jira mapping field in one go.
     SaveMapping,
     /// Put the Jira mapping fields back to what is stored.
@@ -287,6 +295,8 @@ pub enum Intent {
     ConfirmSheet,
     CancelSheet,
     PickBaseline(Baseline),
+    /// Pick (or pick again) a branch in the branch picker; it then says what switching would do.
+    PickBranch(Branch),
     SetDiffMode(DiffMode),
     SetSinceMode {
         key: TicketKey,
@@ -453,6 +463,7 @@ mod tests {
             | Command::StartWorkspace
             | Command::StopWorkspace
             | Command::RefreshHealth
+            | Command::SwitchBranch(_)
             | Command::ResetDemo
             | Command::Sim(_) => false,
         }
@@ -516,6 +527,7 @@ mod tests {
             Command::BreakLock("web".into()),
             Command::StartWorkspace,
             Command::RefreshHealth,
+            Command::SwitchBranch("develop".into()),
             Command::Sim(SimEvent::Offline(true)),
             Command::Undo(Undo::Claim(key)),
         ]
