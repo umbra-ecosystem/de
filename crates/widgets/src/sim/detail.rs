@@ -422,8 +422,9 @@ impl Sim {
             local: local_badge(st),
             hotfix: self.is_hotfix(t),
             uat_flag: self.uat_flag(t),
-            // The engine's address when it knows one; the synthetic one while it does not.
-            jira_url: t.jira_url.clone().or_else(|| Some(jira_url(key))),
+            // Only what the engine cached: never a fabricated address. Showcase tickets
+            // carry the synthetic one from their seed; unknown stays a static key.
+            jira_url: t.jira_url.clone(),
             actions,
             banners,
             stepper: self.stepper(t),

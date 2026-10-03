@@ -170,14 +170,29 @@ fn timestamp_of(value: &Value, what: &str, output: &str) -> ProviderResult<i64> 
     }
 }
 
+fn clean_host(site: &str) -> String {
+    site.trim()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/')
+        .to_string()
+}
+
+/// The site acli itself is logged into, from `jira auth status` output (`Site: <host>`).
+/// That host is the human site; the API `self` host is not (it can be an internal address).
+/// `None` when the line is missing or empty, so the caller falls back instead of linking wrong.
+pub fn parse_auth_site(output: &str) -> Option<String> {
+    let value = output
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("Site:"))
+        .next()?
+        .trim();
+    (!value.is_empty()).then(|| clean_host(value))
+}
+
 fn browse_url(key: &TicketKey, site: Option<&str>, self_url: Option<&str>) -> Option<String> {
     let host = match site {
-        Some(s) if !s.trim().is_empty() => s
-            .trim()
-            .trim_start_matches("https://")
-            .trim_start_matches("http://")
-            .trim_end_matches('/')
-            .to_string(),
+        Some(s) if !s.trim().is_empty() => clean_host(s),
         _ => {
             let rest = self_url?.strip_prefix("https://")?;
             rest.split('/')

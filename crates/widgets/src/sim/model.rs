@@ -694,6 +694,8 @@ pub struct Ticket {
     pub updated: &'static str,
     /// When Jira last changed the ticket (unix seconds), when known: what the "2d ago" is worked out from.
     pub updated_at: Option<i64>,
+    /// When the ticket was created (unix seconds), when known: what the panel's "Created … ago" is worked out from.
+    pub created_at: Option<i64>,
     /// When the store first saw the ticket in its current Jira status (unix seconds), when it keeps that: a wait
     /// for a missing pull request is measured from it. Without it the wait runs from when it is first noticed.
     pub status_since: Option<i64>,
@@ -745,6 +747,7 @@ impl Ticket {
             created: "today",
             updated: "just now",
             updated_at: None,
+            created_at: None,
             status_since: None,
             labels: Vec::new(),
             components: Vec::new(),

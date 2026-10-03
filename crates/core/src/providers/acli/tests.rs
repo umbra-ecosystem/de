@@ -243,6 +243,67 @@ fn search_combines_pages_and_maps_fields() {
     assert_eq!(fake.calls().len(), 1);
 }
 
+/// What `acli jira auth status` prints when logged in (invented values, real shape).
+const AUTH_STATUS: &str = "✓ Authenticated\n  Site: auth-site.atlassian.net\n  Email: jane.doe@example.com\n  Authentication Type: oauth_global\n";
+
+#[test]
+fn auth_status_site_is_read_from_aclis_own_report() {
+    let status = |site: &str| {
+        format!("✓ Authenticated\n  Site: {site}\n  Email: jane.doe@example.com\n")
+    };
+    assert_eq!(
+        wire::parse_auth_site(&status("example.atlassian.net")).as_deref(),
+        Some("example.atlassian.net")
+    );
+    assert_eq!(
+        wire::parse_auth_site(&status("https://example.atlassian.net/")).as_deref(),
+        Some("example.atlassian.net")
+    );
+    assert_eq!(wire::parse_auth_site(&status("")), None);
+    assert_eq!(wire::parse_auth_site("✗ Not logged in\n"), None);
+    assert_eq!(wire::parse_auth_site(""), None);
+}
+
+#[test]
+fn ticket_links_use_the_site_acli_reports_not_the_api_host() {
+    let fake = Fake::default()
+        .on(&["jira", "auth", "status"], ok(AUTH_STATUS))
+        .on(&search_argv("q"), ok(SEARCH));
+    let fake = Arc::new(fake);
+    let jira = AcliJira::with_runner(Shared(fake.clone()), None);
+    // The fixture's API host is `example.atlassian.net`; the link must use the reported site.
+    let found = jira.search("q").unwrap();
+    assert_eq!(
+        found[0].url.as_deref(),
+        Some("https://auth-site.atlassian.net/browse/PROJ-123")
+    );
+    // ... and the site is asked once no matter how many reads follow.
+    jira.search("q").unwrap();
+    assert_eq!(
+        fake.calls()
+            .iter()
+            .filter(|c| c.join(" ") == "jira auth status")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn a_configured_site_is_used_without_asking_acli() {
+    let (jira, fake) = reader(Fake::default().on(&search_argv("q"), ok(SEARCH)));
+    let found = jira.search("q").unwrap();
+    assert_eq!(
+        found[0].url.as_deref(),
+        Some("https://example.atlassian.net/browse/PROJ-123")
+    );
+    assert!(
+        fake.calls()
+            .iter()
+            .all(|c| c.join(" ") != "jira auth status"),
+        "the configured site skips discovery entirely"
+    );
+}
+
 #[test]
 fn every_acli_call_is_written_to_the_run_log() {
     let _serial = crate::synclog::TEST_LOCK
@@ -498,6 +559,8 @@ fn get_maps_one_ticket_with_updated_and_reports_missing() {
     let jira = AcliJira::with_runner(
         Shared(Arc::new(
             Fake::default()
+                // acli cannot say what the site is here, so the URL falls back to the API host.
+                .on(&["jira", "auth", "status"], fail(1, "Unauthorized"))
                 .on(&view("PROJ-123"), ok(VIEW))
                 .on(&view("PROJ-2"), fail(1, MISSING_ERR))
                 .on(&view("PROJ-3"), fail(1, "401 Unauthorized"))
@@ -516,7 +579,7 @@ fn get_maps_one_ticket_with_updated_and_reports_missing() {
     );
     // `updated` is only available from view: 2026-01-15T09:30:45Z.
     assert_eq!(t.updated_at, 1_768_469_445);
-    // No site configured: the URL is derived from `self`.
+    // No site configured and acli cannot say what it is: the URL falls back to the API host.
     assert_eq!(
         t.url.as_deref(),
         Some("https://example.atlassian.net/browse/PROJ-123")
@@ -957,6 +1020,23 @@ fn live_search_get_and_comments_parse() {
         comments.len(),
         mentions,
         jira.take_warnings().len()
+    );
+
+    // The browse URL uses the site acli itself reports, not the API host: whatever both
+    // happen to be on this machine, they must agree.
+    let status = std::process::Command::new("acli")
+        .args(["jira", "auth", "status"])
+        .output()
+        .expect("acli runs");
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    let site = wire::parse_auth_site(&text).expect("auth status names a site");
+    assert_eq!(
+        t.url.as_deref(),
+        Some(format!("https://{site}/browse/{}", t.key).as_str())
     );
 }
 

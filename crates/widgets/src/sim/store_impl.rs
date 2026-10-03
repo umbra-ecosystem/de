@@ -463,11 +463,22 @@ impl Sim {
                 Self::fmt_dur(self.duration_ms(t)),
             )));
         }
-        let when: Vec<String> = [("Created", t.created), ("updated", t.updated)]
+        let when: Vec<String> = {
+            // Ages, not timestamps: what the lists say. Without a clock (or without the
+            // time) the raw stamp is all there is, as in the showcase.
+            let age = |at: Option<i64>, raw: &str| match at.and_then(|a| self.ago_text(a)) {
+                Some(a) => Some(a),
+                None if raw.is_empty() => None,
+                None => Some(raw.to_string()),
+            };
+            [
+                ("Created", age(t.created_at, t.created)),
+                ("Updated", age(t.updated_at, t.updated)),
+            ]
             .into_iter()
-            .filter(|(_, v)| !v.is_empty())
-            .map(|(k, v)| format!("{k} {v}"))
-            .collect();
+            .filter_map(|(k, v)| v.map(|v| format!("{k} {v}")))
+            .collect()
+        };
         if !when.is_empty() {
             plan.push(RightRow::Muted(when.join(" · ")));
         }

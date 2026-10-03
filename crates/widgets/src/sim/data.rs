@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use super::detail::jira_url;
 use super::model::*;
 use crate::vm::{Block, Branch, LineAnchor, Phase, PrNumber, RepoName};
 
@@ -805,6 +806,12 @@ pub fn seed_tickets() -> Vec<Ticket> {
     ]);
     out.push(t);
 
+    // The showcase has no engine: every seeded ticket carries the synthetic address the
+    // views open. Real tickets carry the cached one instead; nothing is ever fabricated
+    // in the views.
+    for t in &mut out {
+        t.jira_url = Some(jira_url(&t.key));
+    }
     out
 }
 
@@ -852,6 +859,8 @@ pub fn arriving_ticket() -> Ticket {
             ],
         )],
     )];
+    // Showcase-only address; real tickets carry the cached one.
+    t.jira_url = Some(jira_url(&t.key));
     t
 }
 

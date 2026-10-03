@@ -39,7 +39,7 @@ All keys are optional:
 | `review_jql` | JQL for the pool of tickets in your Review column. This is what fills the app. | the query above, using your review status name |
 | `account_id` | Your Jira account id. Comments that mention it are the "you were tagged" signal. | none (no mention signal) |
 | `returned_jql` | JQL for tickets sent back to you. | `status = "<returned status>"` |
-| `site` | Only overrides the host used for ticket links. `de` otherwise takes it from the `acli` results. | taken from `acli` |
+| `site` | Only overrides the host used for ticket links. Otherwise `de` asks `acli` (`auth status`) once per sync; if that fails it falls back to the API host, which is wrong for some sites — then set this. | from `acli` |
 | `[jira.statuses]` | Your workflow's status names, below. | see below |
 
 Quote status names inside JQL (`\"In Review\"` in a double-quoted TOML string, or a single-quoted TOML string with double quotes inside).

@@ -95,6 +95,9 @@ pub const UPDATED_UNKNOWN: i64 = 0;
 struct Acli<R> {
     runner: R,
     site: Option<String>,
+    /// What `auth status` said the site is, once asked (inside is `None` until then).
+    /// Ticket links need the human host; the API `self` host is not it.
+    auth_site: Mutex<Option<Option<String>>>,
 }
 
 impl<R: CommandRunner> Acli<R> {
@@ -135,6 +138,36 @@ impl<R: CommandRunner> Acli<R> {
             Err(e) => synclog::log(format!("could not run it after {took:.2}s: {e:#}")),
         }
         result.map_err(|e| spawn_error(&e))
+    }
+
+    /// The site acli itself is logged into (`auth status`'s `Site:` line), asked once per
+    /// adapter and kept. `None` when acli cannot say: the caller falls back to the API host.
+    fn auth_site(&self) -> Option<String> {
+        let mut slot = self
+            .auth_site
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if slot.is_none() {
+            let out = self
+                .run_raw(&["jira", "auth", "status"])
+                .ok()
+                .filter(|o| o.success)
+                .map(|o| format!("{}\n{}", o.stdout, o.stderr));
+            *slot = Some(out.and_then(|t| wire::parse_auth_site(&t)));
+        }
+        slot.clone().flatten()
+    }
+
+    /// The host for per-ticket links: the configured site, else what acli reports. Only when
+    /// both are missing does the parser fall back to the API host. The resulting URL is stored
+    /// per ticket in the cache; nothing here runs at display time.
+    fn link_site(&self) -> Option<String> {
+        let configured = self
+            .site
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string);
+        configured.or_else(|| self.auth_site())
     }
 }
 
@@ -283,7 +316,11 @@ impl<R: CommandRunner + Send + Sync> AcliJira<R> {
     /// An adapter over a custom runner (tests use a fake).
     pub fn with_runner(runner: R, site: Option<String>) -> Self {
         Self {
-            inner: Acli { runner, site },
+            inner: Acli {
+                runner,
+                site,
+                auth_site: Mutex::new(None),
+            },
             warnings: Mutex::new(Vec::new()),
         }
     }
@@ -395,7 +432,7 @@ impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
             "--fields",
             SEARCH_FIELDS,
         ])?;
-        wire::parse_search(&out.stdout, self.inner.site.as_deref())
+        wire::parse_search(&out.stdout, self.inner.link_site().as_deref())
     }
 
     fn get(&self, key: &TicketKey) -> ProviderResult<RemoteTicket> {
@@ -408,7 +445,7 @@ impl<R: CommandRunner + Send + Sync> TicketProvider for AcliJira<R> {
             "--fields",
             VIEW_FIELDS,
         ])?;
-        wire::parse_view(&out.stdout, self.inner.site.as_deref())?
+        wire::parse_view(&out.stdout, self.inner.link_site().as_deref())?
             .ok_or_else(|| ProviderError::NotFound(format!("{key} was not returned by acli")))
     }
 
@@ -493,7 +530,11 @@ impl AcliJiraWriter<ProcessRunner> {
 impl<R: CommandRunner + Send + Sync> AcliJiraWriter<R> {
     pub(crate) fn with_runner(runner: R, site: Option<String>) -> Self {
         Self {
-            inner: Acli { runner, site },
+            inner: Acli {
+                runner,
+                site,
+                auth_site: Mutex::new(None),
+            },
         }
     }
 }

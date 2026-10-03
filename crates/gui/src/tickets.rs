@@ -92,6 +92,7 @@ fn apply_detail(
     t.estimate = leak(d.original_estimate.as_deref().unwrap_or(""));
     if let Some(at) = d.created_at {
         t.created = leak(&format_time(at));
+        t.created_at = Some(at);
     }
     if let Some(at) = d.updated_at {
         t.updated = leak(&format_time(at));
@@ -359,6 +360,7 @@ mod tests {
         assert_eq!(t.reporter, "Riley Reporter");
         assert_eq!((t.sprint, t.epic, t.fix_version, t.estimate), ("Sprint 41", "Reporting", "2.14.0, 2.15.0", "3d"));
         assert_eq!(t.updated_at, Some(1_700_003_600), "kept as a time, for the age");
+        assert_eq!(t.created_at, Some(1_700_000_000), "kept as a time, for the age");
         assert_eq!(t.created, format_time(1_700_000_000));
         assert_eq!(t.updated, format_time(1_700_003_600));
         assert_eq!(t.labels, ["web"]);

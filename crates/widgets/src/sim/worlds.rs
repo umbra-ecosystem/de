@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use super::Sim;
+use super::detail::jira_url;
 use super::model::*;
 use crate::store::Outcome;
 use crate::vm::{
@@ -58,6 +59,8 @@ fn ticket(key: &str, title: &str, kind: &'static str, p: Priority, who: &'static
     t.sprint = "";
     t.fix_version = "";
     t.estimate = "";
+    // Showcase-only address; real tickets carry the cached one.
+    t.jira_url = Some(jira_url(&t.key));
     t
 }
 

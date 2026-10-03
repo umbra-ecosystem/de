@@ -3126,6 +3126,31 @@ mod tests {
     }
 
     #[test]
+    fn the_planning_panel_says_ages_not_timestamps() {
+        use crate::sim::model::Ticket;
+        let mut t = Ticket::blank("PROJ-1", "T");
+        t.created = "2023-08-17 17:15";
+        t.updated = "2026-10-01 11:58";
+        t.created_at = Some(1_000_000 - 3 * 86_400);
+        t.updated_at = Some(1_000_000 - 2 * 3600);
+        let mut sim = Sim::with_tickets(vec![t]);
+        sim.set_wall_clock_start(1_000_000);
+        let s = Session::new(Box::new(sim));
+        let rows = s
+            .store()
+            .right_panel(&Route::ticket("PROJ-1", TicketTab::Overview));
+        let planning = rows
+            .iter()
+            .find(|r| r.title == "Planning")
+            .expect("planning");
+        let text = format!("{planning:?}");
+        assert!(
+            text.contains("Created 3d ago · Updated 2h ago"),
+            "ages in one line, not raw stamps: {text}"
+        );
+    }
+
+    #[test]
     fn audit_tickets_link_back_to_their_tickets() {
         let mut s = Session::demo();
         s.handle(Intent::Do(Command::Undo(Undo::Claim("PROJ-142".into()))));
