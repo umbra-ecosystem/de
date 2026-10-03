@@ -8,7 +8,7 @@ use crate::ui::widgets::*;
 use crate::vm::*;
 
 /// The repo table runs flush: every row has its hairline from edge to edge.
-fn repos_table(ui: &Ui, rows: &[RepoRowVm]) -> Div {
+fn repos_table(ui: &Ui, key: &TicketKey, rows: &[RepoRowVm]) -> Div {
     let pal = &ui.pal;
     let col = |w: f32| div().flex_none().w(px(w)).px_2();
     div()
@@ -80,14 +80,28 @@ fn repos_table(ui: &Ui, rows: &[RepoRowVm]) -> Div {
                 )
                 .child(div().flex_1().px_2().child(branch))
                 .child(col(150.0).child(match (&r.pr, &r.pr_url) {
+                    // The label stays in-app (the PR's Review tab); the icon leaves it.
                     (Some(label), Some(url)) => div()
                         .flex()
                         .items_center()
                         .gap_1()
                         .text_sm()
-                        .child(label.clone())
+                        .child(key_link(
+                            ui,
+                            label,
+                            Intent::go_ticket(key.clone(), TicketTab::Review),
+                        ))
                         .child(open_button(ui, url.clone(), "Open pull request")),
-                    (Some(label), None) => div().text_sm().child(label.clone()),
+                    (Some(label), None) => div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .text_sm()
+                        .child(key_link(
+                            ui,
+                            label,
+                            Intent::go_ticket(key.clone(), TicketTab::Review),
+                        )),
                     (None, _) => div().text_sm().child("–".to_string()),
                 }))
                 .child(col(180.0).child(match &r.deploy {
@@ -215,7 +229,7 @@ pub fn overview(ui: &Ui, cx: &App, inputs: &Inputs, o: &OverviewVm) -> Div {
     }
     bands.push((
         "Repos and pull requests".to_string(),
-        repos_table(ui, &o.repos).into_any_element(),
+        repos_table(ui, &o.key, &o.repos).into_any_element(),
     ));
     bands.push((
         format!("Comments ({})", o.comments.len()),

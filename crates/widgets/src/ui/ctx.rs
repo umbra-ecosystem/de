@@ -19,11 +19,20 @@ pub struct Ui {
 }
 
 impl Ui {
-    /// Send an intent to the session and redraw.
+    /// Send an intent to the session and redraw. Copy/open intents are platform effects the
+    /// session only records, so they are performed here, once, where the UI thread lives: the
+    /// clipboard and the browser both belong to it. Any future caller that handles a
+    /// `Copy`/`OpenExternal` without going through `send` must drain the same way.
     pub fn send(&self, intent: Intent, cx: &mut App) {
         self.view
             .update(cx, move |v, cx| {
                 v.session.handle(intent);
+                for text in v.session.take_copied() {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                }
+                for url in v.session.take_opened() {
+                    cx.open_url(&url);
+                }
                 cx.notify();
             })
             .ok();

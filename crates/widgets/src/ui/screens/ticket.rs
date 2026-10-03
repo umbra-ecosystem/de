@@ -35,11 +35,20 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
                                 .flex_wrap()
                                 .items_center()
                                 .gap_2()
-                                .child(key_text(ui, &h.key))
-                                .child(copy_button(ui, h.key.to_string()))
-                                .when_some(h.jira_url.clone(), |d, url| {
-                                    d.child(open_button(ui, url, "Open in Jira"))
+                                // The key itself opens Jira: you are already on the ticket, so there is
+                                // nowhere in-app to go. The copy button beside it keeps the key copyable.
+                                .child(match h.jira_url.clone() {
+                                    Some(url) => key_link(ui, &h.key, Intent::OpenExternal(url))
+                                        .tooltip(|window, cx| {
+                                            gpui_kit::component::tooltip::Tooltip::new(
+                                                "Open in Jira",
+                                            )
+                                            .build(window, cx)
+                                        })
+                                        .into_any_element(),
+                                    None => key_text(ui, &h.key).into_any_element(),
                                 })
+                                .child(copy_button(ui, h.key.to_string()))
                                 .child(pill(pal, &h.jira))
                                 .when_some(h.local.clone(), |d, b| d.child(pill(pal, &b)))
                                 .when(h.hotfix, |d| d.child(hotfix_pill(pal)))

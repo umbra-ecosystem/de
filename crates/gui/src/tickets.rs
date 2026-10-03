@@ -34,6 +34,9 @@ pub fn load(state: &Store, cache: &Store, config: &Config) -> eyre::Result<Vec<T
         let (status, name) = status_of(&jira.jira_status, config);
         t.jira = status;
         t.jira_name = name;
+        // The mirror keeps the browse address `acli` reported; the views prefer it over the
+        // synthetic one (which is all the showcase has).
+        t.jira_url = jira.url.clone();
         t.priority = priority_of(jira.priority.as_deref());
         t.assignee = leak(jira.assignee.as_deref().unwrap_or(""));
         // Nothing is invented: what Jira has not told us yet stays empty and the views leave it out.
@@ -472,6 +475,30 @@ mod tests {
             status_of("Blocked", &config),
             (JiraStatus::Other, Some("Blocked".into()))
         );
+    }
+
+    #[test]
+    fn the_cached_jira_url_reaches_the_widget_ticket() {
+        let state = Store::open_in_memory(Kind::State).unwrap();
+        let cache = Store::open_in_memory(Kind::Cache).unwrap();
+        let mut r = remote("PROJ-1", "In Review", "High");
+        r.url = Some("https://acme.atlassian.net/browse/PROJ-1".into());
+        jira_cache::upsert_remote(&cache, &r, 10).unwrap();
+
+        let all = load(&state, &cache, &Config::default()).unwrap();
+        assert_eq!(
+            all[0].jira_url.as_deref(),
+            Some("https://acme.atlassian.net/browse/PROJ-1")
+        );
+
+        // Without a cached address the views fall back to the synthetic one, so the
+        // key still opens something.
+        let mut r2 = remote("PROJ-2", "In Review", "High");
+        r2.url = None;
+        jira_cache::upsert_remote(&cache, &r2, 10).unwrap();
+        let mut all = load(&state, &cache, &Config::default()).unwrap();
+        all.sort_by(|a, b| a.key.cmp(&b.key));
+        assert_eq!(all[1].jira_url, None);
     }
 
     #[test]

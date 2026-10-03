@@ -102,6 +102,7 @@ fn pr(
         title: title.to_string(),
         src: src.into(),
         dst: dst.into(),
+        url: None,
         updated_seq: 1,
         reviewers: rev,
         files,
@@ -167,6 +168,7 @@ fn deployed(run: u32) -> Deploy {
         step: "Deploy alpha".to_string(),
         log: None,
         uat_moved: None,
+        url: None,
     }
 }
 

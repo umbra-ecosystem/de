@@ -673,6 +673,7 @@ impl Sim {
                     step: "Queued".to_string(),
                     log: None,
                     uat_moved: None,
+                    url: None,
                 },
             };
             if let Some(h) = self.tickets[i].stage.held_mut() {

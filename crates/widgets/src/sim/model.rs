@@ -221,6 +221,9 @@ pub struct Deploy {
     pub step: String,
     pub log: Option<Vec<String>>,
     pub uat_moved: Option<UatMoved>,
+    /// The run in the browser, when the engine knows it (core's `pipeline_runs.url`). The views
+    /// fall back to the synthetic address while it does not.
+    pub url: Option<String>,
 }
 
 /// A merge of the ticket that was pushed to `uat`, with the Actions run it started. One value, so a merge
@@ -656,6 +659,9 @@ pub struct Pr {
     pub title: String,
     pub src: Branch,
     pub dst: Branch,
+    /// The pull request in the browser, when the engine knows it (core's `prs.url`). The views
+    /// fall back to the synthetic address while it does not.
+    pub url: Option<String>,
     pub updated_seq: u32,
     pub reviewers: Vec<Reviewer>,
     pub files: Vec<FileDiff>,
@@ -716,6 +722,9 @@ pub struct Ticket {
     pub accepted: Vec<ThreadId>,
     pub conflict_sent: Option<(String, String)>,
     pub test_from_n: Option<u32>,
+    /// The ticket in the browser, from the engine (core's `jira_tickets.url`). The views fall back
+    /// to the synthetic address while it is unknown, as in the showcase.
+    pub jira_url: Option<String>,
 }
 
 impl Ticket {
@@ -761,6 +770,7 @@ impl Ticket {
             accepted: Vec::new(),
             conflict_sent: None,
             test_from_n: None,
+            jira_url: None,
         }
     }
 
@@ -1096,6 +1106,7 @@ mod tests {
                             step: String::new(),
                             log: None,
                             uat_moved: None,
+                            url: None,
                         },
                     }],
                     drafts: Vec::new(),
@@ -1126,6 +1137,7 @@ mod tests {
                 step: String::new(),
                 log: None,
                 uat_moved: None,
+                url: None,
             },
         };
         let mut s = Stage::Integrated {

@@ -176,7 +176,11 @@ pub fn deploy_chip_for(host: &str, d: &Deploy) -> DeployChip {
         run: d.run,
         step: matches!(d.state, DeployState::Pending | DeployState::Running)
             .then(|| d.step.clone()),
-        url: (d.run > 0).then(|| run_url(host, d.run)),
+        // The engine's address when it knows one; the synthetic one while it does not.
+        url: d
+            .url
+            .clone()
+            .or_else(|| (d.run > 0).then(|| run_url(host, d.run))),
     }
 }
 
@@ -418,7 +422,8 @@ impl Sim {
             local: local_badge(st),
             hotfix: self.is_hotfix(t),
             uat_flag: self.uat_flag(t),
-            jira_url: Some(jira_url(key)),
+            // The engine's address when it knows one; the synthetic one while it does not.
+            jira_url: t.jira_url.clone().or_else(|| Some(jira_url(key))),
             actions,
             banners,
             stepper: self.stepper(t),
@@ -490,7 +495,11 @@ impl Sim {
                     repo: p.repo.clone(),
                     branch,
                     pr: pr.map(|x| format!("#{} → {}", x.id, x.dst)),
-                    pr_url: pr.map(|x| pr_url(self.repo(&x.repo).host, x.id)),
+                    pr_url: pr.map(|x| {
+                        x.url
+                            .clone()
+                            .unwrap_or_else(|| pr_url(self.repo(&x.repo).host, x.id))
+                    }),
                     deploy: t.landing(&p.repo).map(|l| {
                         deploy_chip_for(self.repo(&p.repo).host, &l.deploy)
                     }),
@@ -835,7 +844,11 @@ impl Sim {
         Some(ReviewVm {
             key: key.clone(),
             pr_id: pr.id,
-            pr_url: Some(pr_url(self.repo(&pr.repo).host, pr.id)),
+            pr_url: Some(
+                pr.url
+                    .clone()
+                    .unwrap_or_else(|| pr_url(self.repo(&pr.repo).host, pr.id)),
+            ),
             uat,
             stale: stale_banner,
             since_toggle,
@@ -857,7 +870,11 @@ impl Sim {
             pr: Some(PrHeadVm {
                 title: pr.title.clone(),
                 source: pr.src.to_string(),
-                url: Some(pr_url(self.repo(&pr.repo).host, pr.id)),
+                url: Some(
+                    pr.url
+                        .clone()
+                        .unwrap_or_else(|| pr_url(self.repo(&pr.repo).host, pr.id)),
+                ),
                 dest: {
                     let cfg = self.repo(&pr.repo);
                     Badge::new(
@@ -1263,7 +1280,11 @@ impl Sim {
                     let ok = p.reviewers.iter().any(|r| r.name == ME && r.approved);
                     AfterRow {
                         label: format!("{} #{}", p.repo, p.id),
-                        url: Some(pr_url(self.repo(&p.repo).host, p.id)),
+                        url: Some(
+                            p.url
+                                .clone()
+                                .unwrap_or_else(|| pr_url(self.repo(&p.repo).host, p.id)),
+                        ),
                         badge: if ok {
                             Badge::new("approved by you", Tone::Ok)
                         } else {

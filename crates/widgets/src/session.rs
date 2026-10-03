@@ -3109,6 +3109,23 @@ mod tests {
     }
 
     #[test]
+    fn the_head_prefers_the_engines_jira_url_over_the_synthetic_one() {
+        use crate::sim::model::Ticket;
+        let mut t = Ticket::blank("PROJ-1", "T");
+        t.jira_url = Some("https://acme.atlassian.net/browse/PROJ-1".into());
+        let s = Session::new(Box::new(Sim::with_tickets(vec![t])));
+        let head = s
+            .store()
+            .ticket_head(&k("PROJ-1"), TicketTab::Overview)
+            .expect("head");
+        assert_eq!(
+            head.jira_url.as_deref(),
+            Some("https://acme.atlassian.net/browse/PROJ-1"),
+            "the cached address wins; the synthetic one is only a fallback"
+        );
+    }
+
+    #[test]
     fn audit_tickets_link_back_to_their_tickets() {
         let mut s = Session::demo();
         s.handle(Intent::Do(Command::Undo(Undo::Claim("PROJ-142".into()))));
