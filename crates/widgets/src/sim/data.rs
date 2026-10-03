@@ -370,6 +370,7 @@ pub fn seed_tickets() -> Vec<Ticket> {
         p(
             "On viewports narrower than 380px the header menu wraps under the logo and pushes the page sideways. The search field is the culprit.",
         ),
+        p("Taken on an iPhone SE: ![iphone-se.png]"),
         h("Acceptance"),
         ul(&[
             "No horizontal scroll at 320px",

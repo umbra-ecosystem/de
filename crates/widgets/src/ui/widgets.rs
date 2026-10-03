@@ -347,7 +347,7 @@ pub fn blocks(pal: &Pal, cx: &App, items: &[Block]) -> Div {
             match b {
                 Block::Para(x) => div()
                     .text_sm()
-                    .child(inline_text(pal, x))
+                    .child(inline_text(pal, cx, x))
                     .into_any_element(),
                 Block::Heading(x) => div().text_base().pt_2().child(x.clone()).into_any_element(),
                 Block::List(items) => div()
@@ -360,7 +360,7 @@ pub fn blocks(pal: &Pal, cx: &App, items: &[Block]) -> Div {
                             .gap_2()
                             .text_sm()
                             .child(div().text_color(pal.muted).child("•"))
-                            .child(div().child(inline_text(pal, i)))
+                            .child(div().child(inline_text(pal, cx, i)))
                     }))
                     .into_any_element(),
                 Block::Code(x) => code_block(pal, cx, x.clone()).into_any_element(),
@@ -380,7 +380,7 @@ pub fn blocks(pal: &Pal, cx: &App, items: &[Block]) -> Div {
                                     .text_color(pal.muted)
                                     .child(format!("{}.", n + 1)),
                             )
-                            .child(div().child(inline_text(pal, i)))
+                            .child(div().child(inline_text(pal, cx, i)))
                     }))
                     .into_any_element(),
                 Block::Quote(x) => div()
@@ -389,38 +389,60 @@ pub fn blocks(pal: &Pal, cx: &App, items: &[Block]) -> Div {
                     .border_color(pal.border)
                     .text_sm()
                     .text_color(pal.muted)
-                    .child(inline_text(pal, x))
+                    .child(inline_text(pal, cx, x))
                     .into_any_element(),
             }
         }))
 }
 
 /// Text with `@[name]` mentions highlighted. Words are separate flex items so it wraps like a paragraph.
-pub fn inline_text(pal: &Pal, text: &str) -> Div {
+pub fn inline_text(pal: &Pal, cx: &App, text: &str) -> Div {
     let mut row = div().flex().flex_wrap().items_baseline().gap_x_1();
     let mut rest = text;
     let word = |w: &str| div().child(w.to_string());
-    while let Some(start) = rest.find("@[") {
+    // Two markers ride in the text: `@[Name|id]` mentions, and `![name]` references to attached
+    // files, which render as a chip naming the file where the body references it. The file itself
+    // stays in the Attachments band only when nothing references it.
+    loop {
+        let mention = rest.find("@[").map(|s| (s, false));
+        let file = rest.find("![").map(|s| (s, true));
+        let Some((start, is_file)) = mention.into_iter().chain(file).min_by_key(|(s, _)| *s)
+        else {
+            break;
+        };
         let Some(len) = rest[start..].find(']') else {
             break;
         };
         for w in rest[..start].split_whitespace() {
             row = row.child(word(w));
         }
-        let name = &rest[start + 2..start + len];
-        let me = name.eq_ignore_ascii_case("you");
-        row = row.child(
-            div()
-                .px_1()
-                .rounded_sm()
-                .text_color(if me { pal.accent } else { pal.fg })
-                .bg(if me {
-                    pal.accent.opacity(0.18)
-                } else {
-                    pal.border.opacity(0.4)
-                })
-                .child(format!("@{}", if me { "you" } else { name })),
-        );
+        if is_file {
+            let name = &rest[start + 2..start + len];
+            row = row.child(
+                div()
+                    .px_1()
+                    .rounded_sm()
+                    .font_family(mono(cx))
+                    .text_color(pal.fg)
+                    .bg(pal.border.opacity(0.4))
+                    .child(name.to_string()),
+            );
+        } else {
+            let name = &rest[start + 2..start + len];
+            let me = name.eq_ignore_ascii_case("you");
+            row = row.child(
+                div()
+                    .px_1()
+                    .rounded_sm()
+                    .text_color(if me { pal.accent } else { pal.fg })
+                    .bg(if me {
+                        pal.accent.opacity(0.18)
+                    } else {
+                        pal.border.opacity(0.4)
+                    })
+                    .child(format!("@{}", if me { "you" } else { name })),
+            );
+        }
         rest = &rest[start + len + 1..];
     }
     for w in rest.split_whitespace() {

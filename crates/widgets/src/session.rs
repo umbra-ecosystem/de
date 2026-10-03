@@ -1249,6 +1249,45 @@ mod tests {
     }
 
     #[test]
+    fn a_referenced_file_shows_where_it_sits_not_in_the_band() {
+        let mut s = Session::demo();
+        // PROJ-150's description names its screenshot where it sits: the band stays empty
+        // rather than listing it a second time.
+        go_ticket(&mut s, "PROJ-150", TicketTab::Overview);
+        let ScreenVm::Ticket { body, .. } = s.view().screen else {
+            panic!()
+        };
+        let TicketBody::Overview(o) = *body else {
+            panic!()
+        };
+        assert!(
+            o.description.iter().any(|b| matches!(b, Block::Para(t) if t.contains("![iphone-se.png]"))),
+            "the reference is in the description"
+        );
+        assert!(
+            o.attachments.is_empty(),
+            "referenced files leave the band: {:?}",
+            o.attachments
+        );
+
+        // PROJ-142's files are referenced nowhere: they stay listed.
+        go_ticket(&mut s, "PROJ-142", TicketTab::Overview);
+        let ScreenVm::Ticket { body, .. } = s.view().screen else {
+            panic!()
+        };
+        let TicketBody::Overview(o) = *body else {
+            panic!()
+        };
+        assert_eq!(
+            o.attachments,
+            vec![
+                ("session-expiry.mov".to_string(), "2.1 MB".to_string()),
+                ("network-trace.har".to_string(), "340 KB".to_string())
+            ]
+        );
+    }
+
+    #[test]
     fn new_comments_are_marked_until_the_tab_is_reopened() {
         let mut s = Session::demo();
         // PROJ-131 has a mention we have not seen

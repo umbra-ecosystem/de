@@ -140,6 +140,44 @@ fn is_inline(t: &str) -> bool {
     )
 }
 
+/// What a media node (a file dropped into the body) reads as: a reference naming the file when
+/// the node says which one it is, else the bare placeholder. Jira names the file in
+/// `attrs.alt` when it was inserted with its name; the `id` is a media-store id rather than the
+/// attachment, so there is nothing to match it against. The reference reads `![name]`, which the
+/// views render as a chip where the file sits.
+fn media_ref(node: &Value) -> String {
+    // A group holds several files, each named (or not) on its own.
+    if node_type(node) == "mediaGroup" {
+        let refs = children(node)
+            .iter()
+            .filter(|c| node_type(c) == "media")
+            .map(media_ref)
+            .collect::<Vec<_>>();
+        if refs.is_empty() {
+            return "[attachment]".into();
+        }
+        return refs.join("\n");
+    }
+    // `mediaSingle` wraps the `media` node that carries the file's name.
+    let inner = if node_type(node) == "media" {
+        node
+    } else {
+        children(node)
+            .iter()
+            .find(|c| node_type(c) == "media")
+            .unwrap_or(node)
+    };
+    match attr_str(inner, "alt").map(str::trim) {
+        Some(alt)
+            if !alt.is_empty()
+                && !alt.chars().any(|c| c == '[' || c == ']' || c == '\n') =>
+        {
+            format!("![{alt}]")
+        }
+        _ => "[attachment]".into(),
+    }
+}
+
 fn block_children(node: &Value) -> Vec<String> {
     children(node)
         .iter()
@@ -193,7 +231,7 @@ fn render_block(node: &Value) -> String {
             })
             .collect::<Vec<_>>()
             .join("\n"),
-        "media" | "mediaSingle" | "mediaGroup" => "[attachment]".into(),
+        "media" | "mediaSingle" | "mediaGroup" => media_ref(node),
         _ if is_inline(t) => render_inline(node, false),
         // "doc", "listItem", "panel", "expand", table cells and node types we have never
         // heard of: render what is inside.
@@ -276,7 +314,7 @@ fn render_inline(node: &Value, rich: bool) -> String {
         "inlineCard" => attr_str(node, "url").unwrap_or("").into(),
         "status" => attr_str(node, "text").unwrap_or("").into(),
         "date" => attr_str(node, "timestamp").unwrap_or("").into(),
-        "media" | "mediaInline" => "[attachment]".into(),
+        "media" | "mediaInline" => media_ref(node),
         _ => {
             let inner: String = children(node).iter().map(|n| render_inline(n, rich)).collect();
             if inner.is_empty() {
@@ -292,7 +330,8 @@ fn render_inline(node: &Value, rich: bool) -> String {
 
 /// A body as light markup the views turn into blocks: paragraphs and other blocks separated by a blank line,
 /// `#` headings, `- ` and `1. ` lists (`- [ ]` tasks, nested items indented two spaces), fenced code,
-/// `> ` quotes and `@[Name|account id]` mentions. Unlike [`body_to_text`] it keeps the block structure.
+/// `> ` quotes, `@[Name|account id]` mentions and `![file]` references to attached files (a bare
+/// `[attachment]` when the body does not say which file). Unlike [`body_to_text`] it keeps the block structure.
 pub fn body_to_rich(body: &Value) -> String {
     match body {
         Value::Null => String::new(),
@@ -379,7 +418,7 @@ fn rich_block(node: &Value) -> String {
             })
             .collect::<Vec<_>>()
             .join("\n"),
-        "media" | "mediaSingle" | "mediaGroup" => "[attachment]".into(),
+        "media" | "mediaSingle" | "mediaGroup" => media_ref(node),
         _ if is_inline(t) => render_inline(node, true),
         _ => {
             let kids = children(node);
@@ -455,6 +494,40 @@ mod tests {
         );
         // The plain rendering is unchanged: no headings marks, mentions as `@Name`.
         assert!(adf_to_text(&doc).starts_with("Plan\nAsk @Ada"));
+    }
+
+    /// A file dropped into the body reads as a reference naming it, wherever it sits: on its own
+    /// line, mid-paragraph, or in a list. A node that does not say which file stays the bare
+    /// placeholder, so nothing claims a name it was never given.
+    #[test]
+    fn attached_files_read_as_references_where_they_sit() {
+        let media = |alt: Option<&str>| {
+            let mut attrs = serde_json::Map::new();
+            attrs.insert("id".into(), json!("media-id-1"));
+            attrs.insert("type".into(), json!("file"));
+            if let Some(alt) = alt {
+                attrs.insert("alt".into(), json!(alt));
+            }
+            json!({"type":"media","attrs":Value::Object(attrs)})
+        };
+        let doc = json!({"type":"doc","version":1,"content":[
+            {"type":"paragraph","content":[
+                {"type":"text","text":"See "},
+                {"type":"mediaInline","attrs":{"id":"media-id-2","type":"file","alt":"shot.png"}},
+                {"type":"text","text":" for the glitch."}
+            ]},
+            {"type":"mediaSingle","content":[media(Some("trace.har"))]},
+            {"type":"mediaGroup","content":[media(None), media(Some("a]b.png"))]},
+        ]});
+        assert_eq!(
+            adf_to_rich(&doc),
+            "See ![shot.png] for the glitch.\n\n![trace.har]\n\n[attachment]\n[attachment]"
+        );
+        // The plain rendering names the file too: it reads as well in a notification as here.
+        assert_eq!(
+            adf_to_text(&doc),
+            "See ![shot.png] for the glitch.\n![trace.har]\n[attachment]\n[attachment]"
+        );
     }
 
     #[test]

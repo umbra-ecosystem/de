@@ -416,6 +416,29 @@ impl Sim {
 
     /* ---------------------------- overview ---------------------------- */
 
+    /// The ticket's attachments that no body references: a file the description or a comment
+    /// already shows where it sits stays out of the Attachments band rather than appearing twice.
+    fn unreferenced_attachments(t: &Ticket) -> Vec<(String, String)> {
+        fn texts(blocks: &[Block]) -> impl Iterator<Item = &str> {
+            blocks.iter().flat_map(|b| match b {
+                Block::Para(s) | Block::Heading(s) | Block::Quote(s) | Block::Code(s) => {
+                    vec![s.as_str()]
+                }
+                Block::List(items) | Block::Numbered(items) => {
+                    items.iter().map(String::as_str).collect()
+                }
+            })
+        }
+        let bodies: Vec<&str> = texts(&t.desc)
+            .chain(t.comments.iter().flat_map(|c| texts(&c.body)))
+            .collect();
+        t.attachments
+            .iter()
+            .filter(|(name, _)| !bodies.iter().any(|b| b.contains(&format!("![{name}]"))))
+            .map(|(a, b)| ((*a).to_string(), (*b).to_string()))
+            .collect()
+    }
+
     pub(crate) fn vm_overview(&self, key: &TicketKey, seen: Option<u32>) -> Option<OverviewVm> {
         let t = self.tk(key)?;
         let snap = seen.unwrap_or(t.seen_n);
@@ -489,11 +512,7 @@ impl Sim {
                     is_new: c.n > snap && c.who != ME,
                 })
                 .collect(),
-            attachments: t
-                .attachments
-                .iter()
-                .map(|(a, b)| ((*a).to_string(), (*b).to_string()))
-                .collect(),
+            attachments: Self::unreferenced_attachments(t),
             notes: t.notes.clone(),
         })
     }
