@@ -283,6 +283,8 @@ pub enum Intent {
     ToggleAttention,
     ToggleSimulate,
     TogglePanel,
+    /// Expand the review diff to fill the window, hiding everything else; again to leave.
+    ToggleDiffFocus,
     SetTheme(ThemeChoice),
     ToggleShowAll,
     ToggleTicketFilter(TicketFilter),

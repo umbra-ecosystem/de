@@ -166,6 +166,10 @@ fn apply_env(session: &mut Session) {
     if std::env::var("DE_SHOWCASE_PICKER").is_ok() {
         session.handle(Intent::ToggleWorkspacePicker);
     }
+    // `DE_SHOWCASE_FOCUS=1` expands the review diff to fill the window (with a review route).
+    if std::env::var("DE_SHOWCASE_FOCUS").is_ok() {
+        session.handle(Intent::ToggleDiffFocus);
+    }
     let Ok(route) = std::env::var("DE_SHOWCASE_ROUTE") else {
         return;
     };
@@ -510,6 +514,13 @@ impl Render for AppView {
             ScreenVm::Welcome(w) => Some(w),
             _ => None,
         };
+        // Focus is only the diff: it takes the dock's place, like the landing page does.
+        let focus = match &vm.screen {
+            ScreenVm::Ticket { body, .. } => {
+                matches!(body.as_ref(), TicketBody::Review(r) if r.focus)
+            }
+            _ => false,
+        };
         div()
             .key_context("Showcase")
             .track_focus(&self.focus)
@@ -534,11 +545,18 @@ impl Render for AppView {
                 shell::title_bar_content(&ui, &vm, vm.simulate.is_some())
             }))
             // With no workspace open there is no dock: a centred page comes first.
+            // In focus the diff takes its place instead.
             .child(match landing {
                 Some(w) => div().flex_1().min_h_0().child(env::landing(&ui, w)),
+                None if focus => div()
+                    .flex_1()
+                    .min_h_0()
+                    .child(self.screen(&ui, cx, &vm.screen)),
                 None => div().flex_1().min_h_0().child(self.area.clone()),
             })
-            .when(landing.is_none(), |d| d.child(shell::status_bar(&ui, &vm.status)))
+            .when(landing.is_none() && !focus, |d| {
+                d.child(shell::status_bar(&ui, &vm.status))
+            })
             .when_some(vm.picker.as_ref(), |d, p| {
                 d.child(shell::workspace_picker(&ui, &self.inputs, p))
             })

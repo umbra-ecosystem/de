@@ -493,6 +493,8 @@ pub struct ReviewVm {
     pub request_changes: Btn,
     pub approve: Btn,
     pub note: String,
+    /// The diff fills the window (file tree, ticket header and side panels hidden).
+    pub focus: bool,
     /// The inline comment being written: `(path, anchor)`.
     pub composer: Option<(String, LineAnchor)>,
     pub empty: bool,

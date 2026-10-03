@@ -1,6 +1,7 @@
 //! Review tab: the pull request's own diff. Two panes (files, diff) between a slim toolbar and an action bar,
 //! filling the screen; the tab strip above stays put.
 
+use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, Sizable};
@@ -512,6 +513,22 @@ fn toolbar(ui: &Ui, r: &ReviewVm) -> Div {
                     r.diff_mode == DiffMode::Split,
                     Intent::SetDiffMode(DiffMode::Split),
                 )),
+        )
+        .child(
+            Button::new("diff-focus")
+                .ghost()
+                .small()
+                .icon(if r.focus {
+                    IconName::Minimize
+                } else {
+                    IconName::Maximize
+                })
+                .tooltip(if r.focus {
+                    "Exit focus (Esc)"
+                } else {
+                    "Focus on this diff"
+                })
+                .on_click(ui.on_click(Intent::ToggleDiffFocus)),
         )
 }
 

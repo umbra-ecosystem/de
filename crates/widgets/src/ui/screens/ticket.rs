@@ -96,6 +96,8 @@ pub fn ticket(
 ) -> Div {
     let pal = &ui.pal;
     let _ = (comment, checklist_add);
+    // Focus is only the diff: the ticket's header and tabs stay hidden (Esc leaves it).
+    let focus = matches!(body, TicketBody::Review(r) if r.focus);
     let notices = div()
         .flex()
         .flex_col()
@@ -147,7 +149,7 @@ pub fn ticket(
         .flex_col()
         .size_full()
         .text_color(pal.fg)
-        .child(head(ui, h, tab))
+        .when(!focus, |d| d.child(head(ui, h, tab)))
         .child(content)
 }
 

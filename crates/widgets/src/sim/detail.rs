@@ -644,6 +644,7 @@ impl Sim {
             approve: Btn::new("Approve…", Intent::Noop).disabled(Some("No pull requests".into())),
             note: String::new(),
             composer: None,
+            focus: false,
             empty: true,
         };
         if t.prs.is_empty() {
@@ -926,6 +927,7 @@ impl Sim {
             .disabled(approve_why.clone()),
             note: approve_why.unwrap_or_default(),
             composer,
+            focus: false,
             empty: false,
         })
     }

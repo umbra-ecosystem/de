@@ -69,6 +69,8 @@ pub struct Session {
     picker_open: bool,
     simulate_open: bool,
     right_open: bool,
+    /// The review diff fills the window. Set from the review toolbar; leaving the review leaves it.
+    diff_focus: bool,
     theme: ThemeChoice,
     diff_mode: DiffMode,
     since: BTreeMap<TicketKey, SinceMode>,
@@ -110,6 +112,7 @@ impl Session {
             picker_open: false,
             simulate_open: false,
             right_open: true,
+            diff_focus: false,
             theme: ThemeChoice::System,
             diff_mode: DiffMode::Unified,
             since: BTreeMap::new(),
@@ -295,6 +298,7 @@ impl Session {
             Intent::ToggleAttention => self.attention_open = !self.attention_open,
             Intent::ToggleSimulate => self.simulate_open = !self.simulate_open,
             Intent::TogglePanel => self.right_open = !self.right_open,
+            Intent::ToggleDiffFocus => self.diff_focus = !self.diff_focus,
             Intent::SetTheme(t) => self.theme = t,
             Intent::ToggleShowAll => self.show_all = !self.show_all,
             Intent::ToggleTicketFilter(f) => self.ticket_filters.toggle(f),
@@ -313,11 +317,22 @@ impl Session {
                 self.texts.remove(&Field::Palette);
                 self.sheet = Some(Sheet::Palette);
             }
-            Intent::ClosePalette | Intent::CancelSheet => {
+            Intent::ClosePalette => {
                 self.sheet = None;
                 self.texts.remove(&Field::TypedKey);
                 self.texts.remove(&Field::Compose);
                 self.texts.remove(&Field::BranchSearch);
+            }
+            Intent::CancelSheet => {
+                if self.sheet.is_some() {
+                    self.sheet = None;
+                    self.texts.remove(&Field::TypedKey);
+                    self.texts.remove(&Field::Compose);
+                    self.texts.remove(&Field::BranchSearch);
+                } else {
+                    // Escape with nothing open leaves the diff's focus mode.
+                    self.diff_focus = false;
+                }
             }
             Intent::Do(cmd) => {
                 if !matches!(self.sheet, Some(Sheet::Confirm { .. })) {
@@ -529,6 +544,16 @@ impl Session {
             return;
         }
         self.picker_open = false;
+        // Focus belongs to the diff: leaving the review leaves it.
+        if !matches!(
+            &route,
+            Route::Ticket {
+                tab: TicketTab::Review,
+                ..
+            }
+        ) {
+            self.diff_focus = false;
+        }
         if route == Route::Settings && !self.mapping_seeded {
             self.seed_mapping();
         }
@@ -657,6 +682,8 @@ impl Session {
         self.viewed.clear();
         self.composer = None;
         self.seen_snap.clear();
+        // Focus belongs to the diff of the workspace that is gone.
+        self.diff_focus = false;
         // The run that was open belonged to the workspace that is gone.
         self.log_view = None;
         // Only settings text is not about a workspace.
@@ -1069,7 +1096,10 @@ impl Session {
                     TicketTab::Review => self
                         .store
                         .review(key, &self.review_sel(key))
-                        .map(TicketBody::Review),
+                        .map(|mut r| {
+                            r.focus = self.diff_focus;
+                            TicketBody::Review(r)
+                        }),
                     TicketTab::Test => self.store.test(key).map(TicketBody::Test),
                     TicketTab::Ship => self.store.ship(key).map(TicketBody::Ship),
                     TicketTab::Timeline => Some(TicketBody::Timeline(self.store.timeline(key))),
@@ -1268,6 +1298,44 @@ mod tests {
         assert_eq!(s.toasts.len(), 1);
         s.tick(9000);
         assert!(s.toasts.is_empty());
+    }
+
+    fn review_focus(s: &Session) -> bool {
+        let ScreenVm::Ticket { body, .. } = &s.view().screen else {
+            panic!("not on a ticket")
+        };
+        let TicketBody::Review(r) = body.as_ref() else {
+            panic!("not on the review tab")
+        };
+        r.focus
+    }
+
+    #[test]
+    fn the_diff_expands_to_fill_the_window_until_esc() {
+        let mut s = Session::demo();
+        go_ticket(&mut s, "PROJ-142", TicketTab::Review);
+        assert!(!review_focus(&s));
+        s.handle(Intent::ToggleDiffFocus);
+        assert!(review_focus(&s));
+        // Esc with nothing open leaves focus mode.
+        s.handle(Intent::CancelSheet);
+        assert!(!review_focus(&s));
+    }
+
+    #[test]
+    fn leaving_the_review_leaves_focus() {
+        let mut s = Session::demo();
+        go_ticket(&mut s, "PROJ-142", TicketTab::Review);
+        s.handle(Intent::ToggleDiffFocus);
+        // Switching files keeps it; switching tabs leaves it.
+        s.handle(Intent::SelectFile {
+            key: k("PROJ-142"),
+            pr: PrNumber(1),
+            index: 0,
+        });
+        assert!(review_focus(&s));
+        go_ticket(&mut s, "PROJ-142", TicketTab::Overview);
+        assert!(!s.diff_focus);
     }
 
     #[test]
