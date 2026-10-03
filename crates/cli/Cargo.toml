@@ -30,3 +30,13 @@ tempfile.workspace = true
 
 [lints]
 workspace = true
+
+# Publishing the desktop app: `cargo bundle` reads this to build Deus.app
+# (the `de` binary inside keeps the tool name). Icon: assets/icon/Deus.icns
+# is a placeholder mark; the generator beside it makes a new one.
+[package.metadata.bundle]
+name = "Deus"
+identifier = "dev.umbra.deus"
+icon = ["../../assets/icon/Deus.icns"]
+category = "Developer Tool"
+short_description = "A calm desk for Jira reviews, local testing and releases."
