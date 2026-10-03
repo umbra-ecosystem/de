@@ -242,8 +242,12 @@ impl Sim {
     /// How long ago a unix time was, in the words of the lists (`5m ago`, `3h ago`, `2d ago`, `3w ago`, `4mo ago`,
     /// `1y ago`); `None` when there is no wall clock.
     pub(crate) fn ago_text(&self, at: i64) -> Option<String> {
-        let now = self.wall_start? + self.ms.div_euclid(MS_PER_MIN) * 60;
-        Some(ago(now - at))
+        Some(ago(self.now_unix()? - at))
+    }
+
+    /// The unix time on the simulation's clock; `None` without a wall clock.
+    pub(crate) fn now_unix(&self) -> Option<i64> {
+        Some(self.wall_start? + self.ms.div_euclid(MS_PER_MIN) * 60)
     }
 
     /// What minute of the day it is now (local time), for the times the audit log and waits show.
@@ -387,20 +391,7 @@ impl Sim {
 }
 
 /// `secs` seconds ago in the lists' words. Anything under a minute, or from the future (clock skew), is "just now".
-pub fn ago(secs: i64) -> String {
-    const MIN: i64 = 60;
-    const HOUR: i64 = 60 * MIN;
-    const DAY: i64 = 24 * HOUR;
-    match secs {
-        s if s < MIN => "just now".to_string(),
-        s if s < HOUR => format!("{}m ago", s / MIN),
-        s if s < DAY => format!("{}h ago", s / HOUR),
-        s if s < 14 * DAY => format!("{}d ago", s / DAY),
-        s if s < 60 * DAY => format!("{}w ago", s / (7 * DAY)),
-        s if s < 365 * DAY => format!("{}mo ago", s / (30 * DAY)),
-        s => format!("{}y ago", s / (365 * DAY)),
-    }
-}
+pub use crate::vm::ago;
 
 #[cfg(test)]
 mod tests {

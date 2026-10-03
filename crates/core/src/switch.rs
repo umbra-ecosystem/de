@@ -9,6 +9,7 @@
 //! [`RepoMove::apply`] then does one project, and never forces: a working tree with uncommitted
 //! changes is left exactly as it was found, so no work has to be hunted out of a stash after.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::domain::BaselineChoice;
@@ -24,6 +25,9 @@ pub struct RepoFacts {
     pub dir: PathBuf,
     /// Every branch the project has, local or on a remote.
     pub branches: Vec<String>,
+    /// Tip commit time of each branch in `branches`, unix seconds (the newest tip among its
+    /// refs): what the picker orders by. A branch with no entry is of unknown age and sorts last.
+    pub tips: BTreeMap<String, i64>,
     /// Where it falls back to when it does not have the branch asked for, best first: its
     /// `[branches] base`, else the workspace's `default_branch`, else `develop`.
     pub fallback: Vec<String>,
@@ -170,12 +174,15 @@ pub fn facts(name: &str, dir: &Path, workspace_default: Option<&str>) -> RepoFac
         .chain([BranchesConfig::DEFAULT_BASE.to_string()])
         .collect();
     let mut branches = Vec::new();
+    let mut tips = BTreeMap::new();
     let mut current = None;
     if let Ok(repo) = GitRepo::open(dir) {
-        branches = repo
-            .logical_branches()
-            .map(|list| list.iter().map(|b| b.name.clone()).collect())
-            .unwrap_or_default();
+        if let Ok(list) = repo.logical_branches() {
+            for b in &list {
+                branches.push(b.name.clone());
+                tips.insert(b.name.clone(), b.tip_time());
+            }
+        }
         current = repo.status().ok().and_then(|s| s.branch);
     }
     if let Ok(project) = Project::from_dir(dir) {
@@ -191,6 +198,7 @@ pub fn facts(name: &str, dir: &Path, workspace_default: Option<&str>) -> RepoFac
         name: name.to_string(),
         dir: dir.to_path_buf(),
         branches,
+        tips,
         fallback,
         current,
     }
@@ -205,6 +213,7 @@ mod tests {
             name: name.to_string(),
             dir: PathBuf::from(format!("/tmp/{name}")),
             branches: branches.iter().map(|b| b.to_string()).collect(),
+            tips: BTreeMap::new(),
             fallback: fallback.iter().map(|b| b.to_string()).collect(),
             current: current.map(str::to_string),
         }

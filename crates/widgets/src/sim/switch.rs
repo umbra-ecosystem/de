@@ -34,13 +34,40 @@ impl Sim {
 
     /// The open workspace's projects, for the picker.
     pub(crate) fn branch_repos(&self) -> Vec<BranchRepoVm> {
+        const HOUR: i64 = 3600;
+        const DAY: i64 = 24 * HOUR;
+        // The simulation's branches were touched at believable times: the one in hand just now,
+        // the baseline a couple of days back, production a quiet while ago, and the tickets'
+        // branches in between. Without a wall clock there is no "now" to tell ages against, so
+        // the tips are bare offsets and the picker shows no ages (but keeps the order).
+        let now = self.now_unix().unwrap_or(0);
         self.repos
             .iter()
-            .map(|r| BranchRepoVm {
-                name: r.name.clone(),
-                branches: self.branches_of(r),
-                fallback: vec![r.base.clone()],
-                current: self.ws.branches.get(&r.name).cloned(),
+            .map(|r| {
+                let branches = self.branches_of(r);
+                let current = self.ws.branches.get(&r.name).cloned();
+                let tips = branches
+                    .iter()
+                    .map(|b| {
+                        let offset = if current.as_ref() == Some(b) {
+                            0
+                        } else if *b == r.base {
+                            2 * DAY
+                        } else if *b == r.prod {
+                            10 * DAY
+                        } else {
+                            5 * HOUR
+                        };
+                        (b.clone(), now - offset)
+                    })
+                    .collect();
+                BranchRepoVm {
+                    name: r.name.clone(),
+                    branches,
+                    tips,
+                    fallback: vec![r.base.clone()],
+                    current,
+                }
             })
             .collect()
     }

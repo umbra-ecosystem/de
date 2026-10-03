@@ -960,7 +960,7 @@ impl Store for CoreStore {
     fn branch_picker(&self, query: &str, chosen: Option<&Branch>) -> BranchPickerVm {
         let Some(measured) = self.measured.as_ref() else {
             // The first reading of the workspace is still running: claim nothing before it lands.
-            return de_widgets::vm::branch_picker(query, chosen, &[], true);
+            return de_widgets::vm::branch_picker(query, chosen, &[], true, None);
         };
         let repos: Vec<BranchRepoVm> = measured
             .facts
@@ -972,6 +972,11 @@ impl Store for CoreStore {
                     .iter()
                     .map(|b| Branch::new(b.as_str()))
                     .collect(),
+                tips: f
+                    .tips
+                    .iter()
+                    .map(|(b, t)| (Branch::new(b.as_str()), *t))
+                    .collect(),
                 fallback: f
                     .fallback
                     .iter()
@@ -980,7 +985,7 @@ impl Store for CoreStore {
                 current: f.current.as_ref().map(|b| Branch::new(b.as_str())),
             })
             .collect();
-        de_widgets::vm::branch_picker(query, chosen, &repos, false)
+        de_widgets::vm::branch_picker(query, chosen, &repos, false, Some(now()))
     }
     fn comments_seen(&self, key: &TicketKey) -> u32 {
         self.sim.comments_seen(key)

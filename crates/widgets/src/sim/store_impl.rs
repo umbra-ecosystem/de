@@ -1329,7 +1329,7 @@ impl Store for Sim {
 
     fn branch_picker(&self, query: &str, chosen: Option<&Branch>) -> BranchPickerVm {
         // The simulation always knows what its projects have; nothing is ever "still reading".
-        crate::vm::branch_picker(query, chosen, &self.branch_repos(), false)
+        crate::vm::branch_picker(query, chosen, &self.branch_repos(), false, self.now_unix())
     }
 
     fn welcome(&self) -> WelcomeVm {

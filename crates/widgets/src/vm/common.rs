@@ -59,6 +59,22 @@ impl EmptyVm {
     }
 }
 
+/// `secs` seconds ago in the lists' words. Anything under a minute, or from the future (clock skew), is "just now".
+pub fn ago(secs: i64) -> String {
+    const MIN: i64 = 60;
+    const HOUR: i64 = 60 * MIN;
+    const DAY: i64 = 24 * HOUR;
+    match secs {
+        s if s < MIN => "just now".to_string(),
+        s if s < HOUR => format!("{}m ago", s / MIN),
+        s if s < DAY => format!("{}h ago", s / HOUR),
+        s if s < 14 * DAY => format!("{}d ago", s / DAY),
+        s if s < 60 * DAY => format!("{}w ago", s / (7 * DAY)),
+        s if s < 365 * DAY => format!("{}mo ago", s / (30 * DAY)),
+        s => format!("{}y ago", s / (365 * DAY)),
+    }
+}
+
 /// A button the view model offers. The view renders it and emits `intent` when clicked.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Btn {
