@@ -36,7 +36,7 @@ pub(crate) struct Saved {
 /// The command that creates a workspace.
 pub const INIT_COMMAND: &str = "de init";
 
-fn cfg(name: &str, base: &str, services: u32) -> RepoCfg {
+fn cfg(name: &str, base: &str, services: &'static [&'static str]) -> RepoCfg {
     RepoCfg {
         name: name.into(),
         base: base.into(),
@@ -70,17 +70,17 @@ fn seed_world(name: &str) -> World {
                 ticket("TP-15", "Show the round timer on small screens", "Task", Priority::Medium, "Marta Lind"),
                 ticket("TP-18", "Leaderboard shows yesterday's scores", "Bug", Priority::High, "Priya Nair"),
             ],
-            vec![cfg("tp-server", "develop", 2), cfg("tp-client", "develop", 1)],
+            vec![cfg("tp-server", "develop", &["server", "db"]), cfg("tp-client", "develop", &["client"])],
         ),
         "hbt" => (
             vec![
                 ticket("HBT-204", "Invoice PDF drops the second page", "Bug", Priority::High, "Sam Okoye"),
                 ticket("HBT-207", "Export the supplier list as CSV", "Task", Priority::Low, "Sam Okoye"),
             ],
-            vec![cfg("hbt-api", "develop", 2), cfg("hbt-web", "develop", 1), cfg("hbt-docs", "main", 0)],
+            vec![cfg("hbt-api", "develop", &["api", "db"]), cfg("hbt-web", "develop", &["web"]), cfg("hbt-docs", "main", &[])],
         ),
         // A workspace with nothing in its Review column yet.
-        _ => (Vec::new(), vec![cfg(&format!("{name}-app"), "main", 1)]),
+        _ => (Vec::new(), vec![cfg(&format!("{name}-app"), "main", &["app"])]),
     };
     World {
         ws: Workspace {

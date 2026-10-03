@@ -119,12 +119,12 @@ impl Sim {
                 format!("{branch}, {state}"),
             ));
         }
-        for r in w.repos.iter().filter(|r| r.services > 0) {
+        for r in w.repos.iter().filter(|r| !r.services.is_empty()) {
             steps.push(step(
                 format!("Start services \u{b7} {}", r.name),
                 StepKind::DockerUp,
                 1700,
-                plural(r.services as usize, "service"),
+                plural(r.services.len(), "service"),
             ));
         }
         steps.push(step(
@@ -148,7 +148,7 @@ impl Sim {
             500,
             "nothing is",
         )];
-        for r in self.repos.iter().rev().filter(|r| r.services > 0) {
+        for r in self.repos.iter().rev().filter(|r| !r.services.is_empty()) {
             steps.push(step(
                 format!("Stop services \u{b7} {}", r.name),
                 StepKind::DockerDown,

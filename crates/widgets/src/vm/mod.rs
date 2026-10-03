@@ -8,6 +8,7 @@ pub mod common;
 pub mod ids;
 pub mod intent;
 pub mod screens;
+pub mod services;
 
 pub use app::*;
 pub use branchpick::*;
@@ -15,3 +16,4 @@ pub use common::*;
 pub use ids::*;
 pub use intent::*;
 pub use screens::*;
+pub use services::*;

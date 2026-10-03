@@ -1018,6 +1018,7 @@ impl Store for Sim {
             sync_text,
             sync_tone,
             sync_running: self.sync.running,
+            services: self.service_indicator(),
         }
     }
 
@@ -1332,6 +1333,10 @@ impl Store for Sim {
         crate::vm::branch_picker(query, chosen, &self.branch_repos(), false, self.now_unix())
     }
 
+    fn services_modal(&self) -> ServicesModalVm {
+        self.services_modal()
+    }
+
     fn welcome(&self) -> WelcomeVm {
         self.welcome_vm(self.settings().providers)
     }
@@ -1339,11 +1344,11 @@ impl Store for Sim {
     fn workspace(&self) -> WorkspaceVm {
         let active = self.active_key().and_then(|k| self.tk(&k));
         let docker_down = self.sims.docker_down;
-        let declared: u32 = self.repos.iter().map(|r| r.services).sum();
+        let declared: u32 = self.repos.iter().map(|r| r.services.len() as u32).sum();
         // What each row's services are doing; a check that could not run claims nothing.
-        let row_running = |services: u32| match (docker_down, self.ws.up) {
+        let row_running = |count: u32| match (docker_down, self.ws.up) {
             (true, _) => None,
-            (false, true) => Some(services),
+            (false, true) => Some(count),
             (false, false) => Some(0),
         };
         let rows = self
@@ -1382,7 +1387,10 @@ impl Store for Sim {
                 }
                 WsRow {
                     repo: r.name.clone(),
-                    services: ServicesVm::of(row_running(r.services), r.services),
+                    services: ServicesVm::of(
+                        row_running(r.services.len() as u32),
+                        r.services.len() as u32,
+                    ),
                     branch: self.ws.branches.get(&r.name).cloned().unwrap_or_default(),
                     badges,
                     break_lock,

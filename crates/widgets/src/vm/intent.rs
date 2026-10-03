@@ -269,6 +269,8 @@ pub enum Intent {
     ToggleWorkspacePicker,
     /// Open the modal that lists every saved workspace.
     OpenAllWorkspaces,
+    /// Open the modal that lists every service of the open workspace and how each one stands.
+    OpenServices,
     /// Open the modal that picks a branch for the whole workspace to move to.
     OpenBranchPicker,
     /// Save every edited Jira mapping field in one go.

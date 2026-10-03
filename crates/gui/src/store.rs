@@ -14,7 +14,7 @@ use de_core::config::Config;
 use de_core::store::{Kind, Store as Db};
 use de_core::synclog;
 use de_core::types::Slug;
-use de_core::workspace::health::Overall;
+use de_core::workspace::health::{Overall, ProjectHealth, ServiceHealth};
 use de_core::workspace::{Workspace, registry, startup_order};
 use de_widgets::sim::{INIT_COMMAND, Sim, ago};
 use de_widgets::sim::model::MS_PER_MIN;
@@ -844,6 +844,73 @@ impl CoreStore {
             })
             .collect()
     }
+
+    /// The footer's services dot from the last reading; `None` until the first one lands, so
+    /// nothing is claimed before it is known.
+    fn service_indicator(&self) -> Option<ServiceIndicatorVm> {
+        let health = self.measured.as_ref()?.health.as_ref()?;
+        service_indicator(
+            health.running() as u32,
+            health.declared() as u32,
+            health.unhealthy() as u32,
+            !matches!(health.overall(), Overall::Unavailable),
+        )
+    }
+
+    /// The modal: every service grouped by project from the last reading, or why docker could
+    /// not be asked.
+    fn services_modal_vm(&self) -> ServicesModalVm {
+        let Some(health) = self.measured.as_ref().and_then(|m| m.health.as_ref()) else {
+            return ServicesModalVm {
+                title: "Services".to_string(),
+                groups: Vec::new(),
+                note: Some("The services have not been checked yet.".to_string()),
+            };
+        };
+        if let Some(reason) = health.exception() {
+            return ServicesModalVm {
+                title: "Services".to_string(),
+                groups: Vec::new(),
+                note: Some(reason),
+            };
+        }
+        let groups = health
+            .projects
+            .iter()
+            .filter_map(|p| match &p.health {
+                ProjectHealth::Services(services) => Some(ServiceGroupVm {
+                    project: RepoName::new(p.project.as_str()),
+                    rows: services
+                        .iter()
+                        .map(|s| {
+                            let tone = if s.health == ServiceHealth::Unhealthy {
+                                Some(Tone::Bad)
+                            } else if !s.state.is_running() {
+                                Some(Tone::Warn)
+                            } else {
+                                None
+                            };
+                            ServiceRowVm {
+                                service: s.service.clone(),
+                                state: s
+                                    .exception()
+                                    .unwrap_or_else(|| "running".to_string()),
+                                tone,
+                            }
+                        })
+                        .collect(),
+                }),
+                // A project with no compose file has no services to list; a missing folder is
+                // already badged on the workspace screen.
+                ProjectHealth::NoCompose | ProjectHealth::MissingFolder | ProjectHealth::Unavailable(_) => None,
+            })
+            .collect();
+        ServicesModalVm {
+            title: "Services".to_string(),
+            groups,
+            note: None,
+        }
+    }
 }
 
 impl Store for CoreStore {
@@ -851,7 +918,10 @@ impl Store for CoreStore {
         self.sim.counts()
     }
     fn status(&self) -> StatusVm {
-        self.sim.status()
+        let mut status = self.sim.status();
+        // The simulation does not know what docker is doing; the last reading does.
+        status.services = self.service_indicator();
+        status
     }
     fn tab_info(&self, key: &TicketKey) -> Option<TabInfo> {
         self.sim.tab_info(key)
@@ -1008,6 +1078,9 @@ impl Store for CoreStore {
             })
             .collect();
         de_widgets::vm::branch_picker(query, chosen, &repos, false, Some(now()))
+    }
+    fn services_modal(&self) -> ServicesModalVm {
+        self.services_modal_vm()
     }
     fn comments_seen(&self, key: &TicketKey) -> u32 {
         self.sim.comments_seen(key)

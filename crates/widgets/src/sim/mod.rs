@@ -11,6 +11,7 @@ mod queries;
 mod ranking;
 mod rules;
 mod sequence;
+mod services;
 mod store_impl;
 mod switch;
 mod worlds;

@@ -90,7 +90,8 @@ pub struct RepoCfg {
     pub base: Branch,
     pub prod: Branch,
     pub host: &'static str,
-    pub services: u32,
+    /// The services the project's compose file declares, in its own order.
+    pub services: &'static [&'static str],
     pub overlay_consumer: bool,
     pub consumes: Option<RepoName>,
     pub checks: &'static [&'static str],
@@ -101,7 +102,7 @@ pub fn repos() -> Vec<RepoCfg> {
                base: &str,
                prod: &str,
                host: &'static str,
-               services: u32,
+               services: &'static [&'static str],
                consumes: Option<&str>,
                checks: &'static [&'static str]| RepoCfg {
         name: name.into(),
@@ -119,7 +120,7 @@ pub fn repos() -> Vec<RepoCfg> {
             "develop",
             "master",
             "acme/api-client",
-            3,
+            &["api", "db", "redis"],
             None,
             &["Unit tests pass", "Lint clean"],
         ),
@@ -128,7 +129,7 @@ pub fn repos() -> Vec<RepoCfg> {
             "develop",
             "main",
             "acme/web",
-            2,
+            &["web", "db"],
             Some("api-client"),
             &["Unit tests pass", "Build succeeds"],
         ),
@@ -137,11 +138,11 @@ pub fn repos() -> Vec<RepoCfg> {
             "develop",
             "master",
             "acme/worker",
-            1,
+            &["worker"],
             None,
             &["Unit tests pass"],
         ),
-        cfg("docs", "master", "master", "acme/docs", 0, None, &[]),
+        cfg("docs", "master", "master", "acme/docs", &[], None, &[]),
     ]
 }
 

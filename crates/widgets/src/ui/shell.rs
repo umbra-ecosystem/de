@@ -217,6 +217,35 @@ fn branch_row(ui: &Ui, item: &BranchItemVm) -> Stateful<Div> {
         })
 }
 
+/// One service in the modal: its name, and how it stands beside it. A running service is
+/// plain text; only something off takes a colour.
+fn service_row(ui: &Ui, row: &ServiceRowVm) -> Div {
+    let pal = &ui.pal;
+    div()
+        .flex()
+        .items_center()
+        .gap_3()
+        .h_8()
+        .px_2()
+        .rounded_md()
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .font_family(ui.mono.clone())
+                .text_sm()
+                .child(row.service.clone()),
+        )
+        .child(
+            div()
+                .flex_none()
+                .text_xs()
+                .text_color(row.tone.map(|t| pal.tone(t)).unwrap_or(pal.faint))
+                .child(row.state.clone()),
+        )
+}
+
 /// One step of a sequence: a mark for where it is, what it does, and its result on the right.
 fn step_row(ui: &Ui, st: &StepVm) -> Div {
     let pal = &ui.pal;
@@ -866,6 +895,24 @@ pub fn status_bar(ui: &Ui, s: &StatusVm) -> Div {
                 .children(s.chips.iter().map(|c| pill(pal, c)))
                 .child(health("Jira", s.jira_ready))
                 .child(health("GitHub", s.gh_ready))
+                .when_some(s.services.clone(), |d, v| {
+                    // The footer's services dot: quiet when everything runs, loud when something
+                    // does not. Clicking opens what each service is doing.
+                    d.child(
+                        div()
+                            .id("status-services")
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .cursor_pointer()
+                            .when(v.tone != Tone::Ok, |d| {
+                                d.text_color(pal.tone(v.tone))
+                            })
+                            .on_click(ui.on_click(v.open.clone()))
+                            .child(dot(pal.tone(v.tone)))
+                            .child(v.label.clone()),
+                    )
+                })
                 .child(
                     div()
                         .id("status-sync")
@@ -1444,6 +1491,51 @@ pub fn sheet(ui: &Ui, cx: &App, inputs: &Inputs, sheet: &SheetVm) -> Div {
                 ),
             div().child(button_ghost(ui, &Btn::new("Close", Intent::CancelSheet))),
         ),
+        SheetVm::Services(m) => {
+            let mut items: Vec<AnyElement> = Vec::new();
+            if let Some(note) = m.note.as_ref() {
+                items.push(div().py_3().child(muted(pal, note.clone())).into_any_element());
+            } else if m.groups.is_empty() {
+                items.push(
+                    div()
+                        .py_3()
+                        .child(muted(pal, "No services declared.".to_string()))
+                        .into_any_element(),
+                );
+            } else {
+                for group in &m.groups {
+                    items.push(
+                        div()
+                            .pt_2()
+                            .text_xs()
+                            .text_color(pal.muted)
+                            .child(group.project.to_string())
+                            .into_any_element(),
+                    );
+                    for row in &group.rows {
+                        items.push(service_row(ui, row).into_any_element());
+                    }
+                }
+            }
+            sheet_frame(
+                ui,
+                520.0,
+                div().child(m.title.clone()),
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .id("services-modal")
+                            .flex()
+                            .flex_col()
+                            .max_h(px(360.0))
+                            .overflow_y_scroll()
+                            .children(items),
+                    ),
+                div().child(button_ghost(ui, &Btn::new("Close", Intent::CancelSheet))),
+            )
+        }
         SheetVm::Branches(b) => {
             let mut items: Vec<AnyElement> = Vec::new();
             if b.reading {

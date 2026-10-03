@@ -119,6 +119,8 @@ pub trait Store {
     fn sequence(&self) -> Option<SequenceVm>;
     /// Every saved workspace matching `query`, for the modal.
     fn all_workspaces(&self, query: &str) -> AllWorkspacesVm;
+    /// Every service of the open workspace and how each one stands, for the modal.
+    fn services_modal(&self) -> ServicesModalVm;
     /// The branches of the open workspace for the modal that picks one, narrowed by `query`; `chosen`
     /// is what has been picked in it, so the modal can say what switching would do. `reading` while
     /// the first check of the workspace is still running: nothing is claimed before it is known.

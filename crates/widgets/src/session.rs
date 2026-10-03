@@ -41,6 +41,8 @@ enum Sheet {
     CloseTab(TicketKey),
     /// The modal that lists every saved workspace.
     AllWorkspaces,
+    /// The modal that lists every service of the open workspace and how each one stands.
+    Services,
     /// The modal that picks a branch for the workspace to move to, and what is picked in it.
     Branches {
         chosen: Option<Branch>,
@@ -212,6 +214,10 @@ impl Session {
                 self.picker_open = false;
                 self.texts.remove(&Field::WorkspaceSearch);
                 self.sheet = Some(Sheet::AllWorkspaces);
+            }
+            Intent::OpenServices => {
+                self.picker_open = false;
+                self.sheet = Some(Sheet::Services);
             }
             Intent::OpenBranchPicker => {
                 self.texts.remove(&Field::BranchSearch);
@@ -873,6 +879,7 @@ impl Session {
                 &self.text(&Field::BranchSearch),
                 chosen.as_ref(),
             )),
+            Sheet::Services => SheetVm::Services(self.store.services_modal()),
             Sheet::Palette => {
                 let query = self.text(&Field::Palette);
                 SheetVm::Palette {
@@ -1150,6 +1157,7 @@ mod tests {
             Some(Sheet::CloseTab(_)) => "close-tab",
             Some(Sheet::AllWorkspaces) => "all-workspaces",
             Some(Sheet::Branches { .. }) => "branches",
+            Some(Sheet::Services) => "services",
         }
     }
 
@@ -2331,7 +2339,7 @@ mod tests {
         // The services are stopped in the reverse of the order they start.
         let stops: Vec<&&str> = closing.iter().filter(|l| l.starts_with("Stop services")).collect();
         let starts_of_shop: Vec<String> = {
-            let mut order: Vec<String> = Sim::default().repos.iter().filter(|r| r.services > 0).map(|r| r.name.to_string()).collect();
+            let mut order: Vec<String> = Sim::default().repos.iter().filter(|r| !r.services.is_empty()).map(|r| r.name.to_string()).collect();
             order.reverse();
             order
         };
@@ -2464,6 +2472,31 @@ mod tests {
                 assert!(s.view().sequence.is_none(), "the switch finished");
             }
         }
+    }
+
+    #[test]
+    fn the_footer_dot_opens_what_every_service_is_doing() {
+        let mut s = Session::demo();
+        // The demo workspace is running: the dot is quiet but there.
+        let dot = s.view().status.services.expect("the services dot");
+        assert_eq!(dot.label, "Services");
+
+        s.handle(Intent::OpenServices);
+        let SheetVm::Services(m) = s.view().sheet.expect("the modal") else {
+            panic!("not the services modal")
+        };
+        assert_eq!(m.title, "Services");
+        assert_eq!(m.note, None);
+        let projects: Vec<String> =
+            m.groups.iter().map(|g| g.project.to_string()).collect();
+        assert_eq!(projects, vec!["api-client", "web", "worker"]);
+        assert!(
+            m.groups.iter().flat_map(|g| &g.rows).all(|r| r.state == "running"),
+            "everything runs: {m:?}"
+        );
+
+        s.handle(Intent::CancelSheet);
+        assert!(s.view().sheet.is_none());
     }
 
     #[test]

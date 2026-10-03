@@ -5,6 +5,7 @@ use super::common::*;
 use super::ids::*;
 use super::intent::{Command, ComposeKind, Field, Then};
 use super::screens::*;
+use super::services::ServicesModalVm;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShellTab {
@@ -98,6 +99,8 @@ pub enum SheetVm {
     AllWorkspaces(AllWorkspacesVm),
     /// The branches of the open workspace, searchable: pick one to move the whole workspace to.
     Branches(BranchPickerVm),
+    /// Every service of the open workspace and how each one stands.
+    Services(ServicesModalVm),
 }
 
 #[derive(Clone, Debug, PartialEq)]

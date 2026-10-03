@@ -3,6 +3,7 @@
 use super::common::*;
 use super::ids::*;
 use super::intent::{Command, DiffMode, Intent};
+use super::services::ServiceIndicatorVm;
 
 /* ------------------------------ shell ------------------------------ */
 
@@ -47,6 +48,8 @@ pub struct StatusVm {
     pub sync_text: String,
     pub sync_tone: Tone,
     pub sync_running: bool,
+    /// The footer's services dot; `None` when there is no open workspace with services.
+    pub services: Option<ServiceIndicatorVm>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
