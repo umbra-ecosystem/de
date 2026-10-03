@@ -1411,7 +1411,6 @@ impl Store for Sim {
                 .current_workspace()
                 .map_or_else(String::new, |n| n.to_string()),
             up: self.ws.up,
-            order: "db → api → web".to_string(),
             health,
             rows,
             note: active.map(|t| {

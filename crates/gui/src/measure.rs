@@ -158,11 +158,6 @@ pub fn workspace_vm(
     WorkspaceVm {
         name: name.map(ToString::to_string).unwrap_or_default(),
         up,
-        order: projects
-            .iter()
-            .map(|p| p.to_string())
-            .collect::<Vec<_>>()
-            .join(" \u{2192} "),
         health: health_vm(measured.and_then(|m| m.health.as_ref())),
         rows: projects.iter().map(|id| row(id, measured)).collect(),
         note: measured.and_then(|m| m.active.as_ref()).map(|key| {

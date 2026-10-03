@@ -83,18 +83,6 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
         .child(
             strip(pal)
                 .child(div().flex_none().child(v.name.clone()))
-                // The order runs to eighteen projects: it takes what is left of the strip and is
-                // cut with an ellipsis, so the buttons at its end are always on screen.
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .font_family(ui.mono.clone())
-                        .text_xs()
-                        .text_color(pal.faint)
-                        .child(v.order.clone()),
-                )
                 // One badge, and only for something that is off: all running says nothing.
                 .children(
                     v.health

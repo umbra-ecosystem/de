@@ -712,7 +712,6 @@ pub struct WsRow {
 pub struct WorkspaceVm {
     pub name: String,
     pub up: bool,
-    pub order: String,
     /// What to say about the services when they are not all running; `None` is silence (all
     /// running, or none declared), the normal state.
     pub health: Option<HealthVm>,
