@@ -574,8 +574,8 @@ pub fn run_with(make: impl FnOnce() -> Session + 'static) {
             cx.on_action(|_: &Quit, cx| cx.quit());
             cx.set_menus(vec![
                 Menu {
-                    name: "de".into(),
-                    items: vec![MenuItem::action("Quit de", Quit)],
+                    name: "Deus".into(),
+                    items: vec![MenuItem::action("Quit Deus", Quit)],
                     disabled: false,
                 },
                 Menu {

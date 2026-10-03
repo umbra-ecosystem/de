@@ -96,7 +96,7 @@ pub fn title_bar_minimal() -> Div {
         .flex()
         .items_center()
         .w_full()
-        .child(div().child("de"))
+        .child(div().child("Deus"))
 }
 
 /// The title bar's workspace button: the open workspace's name (or a prompt when there is none) and a chevron.

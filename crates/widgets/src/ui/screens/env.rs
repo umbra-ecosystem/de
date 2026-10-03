@@ -459,7 +459,7 @@ pub fn landing(ui: &Ui, v: &WelcomeVm) -> Div {
                         .flex()
                         .flex_col()
                         .gap_2()
-                        .child(div().text_xl().child("Welcome to de"))
+                        .child(div().text_xl().child("Welcome to Deus"))
                         .child(muted(
                             pal,
                             "A calm place for your reviews, testing and releases. Pick a workspace and I'll start its services and look over its repos, then show you what needs you.",
