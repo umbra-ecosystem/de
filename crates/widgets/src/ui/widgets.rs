@@ -8,7 +8,7 @@ use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::empty::{Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle};
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::tag::Tag;
-use gpui_kit::component::{Disableable, Selectable, Sizable};
+use gpui_kit::component::{Disableable, IconName, Selectable, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
@@ -99,6 +99,46 @@ pub fn key_text(ui: &Ui, key: &str) -> Div {
         .text_sm()
         .text_color(ui.pal.accent)
         .child(key.to_string())
+}
+
+/// A quiet icon button that copies `value` to the clipboard.
+pub fn copy_button(ui: &Ui, value: impl Into<String>) -> Button {
+    let value: String = value.into();
+    Button::new(hash_id("copy", &value))
+        .ghost()
+        .small()
+        .icon(IconName::Copy)
+        .tooltip("Copy")
+        .on_click(ui.on_click(Intent::Copy(value)))
+}
+
+/// A quiet icon button that opens `url` in the browser.
+pub fn open_button(ui: &Ui, url: impl Into<String>, tip: &str) -> Button {
+    let url: String = url.into();
+    Button::new(hash_id("open", &url))
+        .ghost()
+        .small()
+        .icon(IconName::ExternalLink)
+        .tooltip(tip.to_string())
+        .on_click(ui.on_click(Intent::OpenExternal(url)))
+}
+
+/// Mono text with a copy button beside it (branch, SHA, command). The button is
+/// small and quiet; it copies `copy` (defaults to what is shown).
+pub fn copyable_mono(ui: &Ui, shown: impl Into<String>, copy: Option<String>) -> Div {
+    let shown: String = shown.into();
+    let value = copy.unwrap_or_else(|| shown.clone());
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .child(
+            div()
+                .font_family(ui.mono.clone())
+                .text_sm()
+                .child(shown),
+        )
+        .child(copy_button(ui, value))
 }
 
 pub fn muted(pal: &Pal, text: impl Into<SharedString>) -> Div {

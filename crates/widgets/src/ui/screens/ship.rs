@@ -118,7 +118,17 @@ fn integrate(ui: &Ui, b: &IntegrateBody) -> Div {
             .child(div().flex().flex_col().children(rows.iter().map(|(repo, commit, at)| {
                 row(ui)
                     .child(repo_cell(ui, repo))
-                    .child(div().font_family(ui.mono.clone()).text_xs().text_color(pal.faint).child(commit.clone()))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .font_family(ui.mono.clone())
+                            .text_xs()
+                            .text_color(pal.faint)
+                            .child(commit.clone())
+                            .child(copy_button(ui, commit.clone())),
+                    )
                     .child(faint(pal, at.clone()))
             })))
             .when(*new_commits, |d| {
@@ -192,31 +202,60 @@ fn prep_row(ui: &Ui, r: &PrepRow) -> Div {
                     )
                     .child(
                         div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
                             .font_family(ui.mono.clone())
                             .text_xs()
                             .text_color(pal.faint)
-                            .child(format!("uat {uat_before} → {merge}")),
+                            .child(format!("uat {uat_before} → {merge}"))
+                            .child(copy_button(ui, merge.clone())),
                     ),
             )
             .when(!overlaps.is_empty(), |d| {
-                d.child(quiet(
-                    ui,
-                    Tone::Warn,
-                    format!(
-                        "Also changed by {} on uat. Not a conflict; check the combined behaviour.",
-                        overlaps.join(", ")
-                    ),
-                ))
+                d.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .children(overlaps.iter().map(|o| {
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .child(quiet(
+                                    ui,
+                                    Tone::Warn,
+                                    format!(
+                                        "Also changed by {} on uat. Not a conflict; check the combined behaviour.",
+                                        o.text
+                                    ),
+                                ))
+                                .when_some(o.tickets.first().cloned(), |d, k| {
+                                    d.child(button_ghost(
+                                        ui,
+                                        &Btn::new(
+                                            k.to_string(),
+                                            Intent::go_ticket(k, TicketTab::Overview),
+                                        ),
+                                    ))
+                                })
+                        })),
+                )
             }),
         PrepRow::AlreadyPushed { repo, commit } => row(ui)
             .child(repo_cell(ui, repo))
             .child(pill(pal, &Badge::new("already pushed", Tone::Ok)))
             .child(
                 div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
                     .font_family(ui.mono.clone())
                     .text_xs()
                     .text_color(pal.faint)
-                    .child(commit.clone()),
+                    .child(commit.clone())
+                    .child(copy_button(ui, commit.clone())),
             ),
         PrepRow::Conflict {
             repo,
@@ -227,9 +266,25 @@ fn prep_row(ui: &Ui, r: &PrepRow) -> Div {
         } => row(ui)
             .child(repo_cell(ui, repo))
             .child(pill(pal, &Badge::new("conflict", Tone::Bad)))
-            .child(div().text_sm().flex_1().min_w_0().child(format!(
-                "Conflicts with {with} in {files}. The merge was aborted; nothing was pushed."
-            )))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .flex_1()
+                    .min_w_0()
+                    .text_sm()
+                    .child(format!(
+                        "Conflicts with {with} in {files}. The merge was aborted; nothing was pushed."
+                    ))
+                    .child(button_ghost(
+                        ui,
+                        &Btn::new(
+                            with.to_string(),
+                            Intent::go_ticket(with.clone(), TicketTab::Overview),
+                        ),
+                    )),
+            )
             .when_some(comment.clone(), |d, a| d.child(button(ui, &a)))
             .when_some(sent.clone(), |d, at| {
                 d.child(pill(
@@ -261,9 +316,23 @@ fn runs(ui: &Ui, cx: &App, s: &ShipVm) -> Div {
                     row(ui)
                         .child(repo_cell(ui, &r.repo))
                         .child(if r.chip.tone == Tone::Ok {
-                            faint(pal, format!("deployed to alpha · run #{}", r.chip.run))
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .child(faint(pal, format!("deployed to alpha · run #{}", r.chip.run)))
+                                .when_some(r.chip.url.clone(), |d, url| {
+                                    d.child(open_button(ui, url, "Open run"))
+                                })
                         } else {
-                            deploy_chip(pal, &r.chip)
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .child(deploy_chip(pal, &r.chip))
+                                .when_some(r.chip.url.clone(), |d, url| {
+                                    d.child(open_button(ui, url, "Open run"))
+                                })
                         })
                         .when_some(r.rerun.clone(), |d, a| d.child(button(ui, &a))),
                 )
@@ -286,12 +355,34 @@ fn runs(ui: &Ui, cx: &App, s: &ShipVm) -> Div {
                                     )
                                     .child(faint(pal, format!("run #{run}"))),
                             )
-                            .child(code_block(pal, cx, log)),
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_1()
+                                    .child(code_block(pal, cx, log.clone()))
+                                    .child(
+                                        div().flex().child(copy_button(ui, log)),
+                                    ),
+                            ),
                     )
                 })
         }))
         .when_some(s.uat_moved.clone(), |d, m| {
-            d.child(quiet(ui, Tone::Warn, m))
+            d.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(quiet(ui, Tone::Warn, m.text()))
+                    .child(button_ghost(
+                        ui,
+                        &Btn::new(
+                            m.ticket.to_string(),
+                            Intent::go_ticket(m.ticket.clone(), TicketTab::Overview),
+                        ),
+                    )),
+            )
         })
 }
 
@@ -318,6 +409,7 @@ fn announce(ui: &Ui, cx: &App, inputs: &Inputs, key: &TicketKey, b: &AnnounceBod
             .flex_col()
             .gap_2()
             .child(code_block(pal, cx, text.clone()))
+            .child(div().flex().child(copy_button(ui, text.clone())))
             .child(faint(
                 pal,
                 match moved {
@@ -345,11 +437,17 @@ pub fn ship(ui: &Ui, cx: &App, inputs: &Inputs, s: &ShipVm) -> Div {
             row(ui)
                 .child(
                     div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
                         .w(px(150.0))
                         .flex_none()
                         .font_family(ui.mono.clone())
                         .text_sm()
-                        .child(r.label.clone()),
+                        .child(r.label.clone())
+                        .when_some(r.url.clone(), |d, url| {
+                            d.child(open_button(ui, url, "Open pull request"))
+                        }),
                 )
                 .child(pill(pal, &r.badge))
                 .when_some(r.approve.clone(), |d, a| d.child(button(ui, &a)))

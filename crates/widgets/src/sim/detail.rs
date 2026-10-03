@@ -151,7 +151,20 @@ fn thread_vm(th: &Thread) -> ThreadVm {
     }
 }
 
-pub fn deploy_chip(d: &Deploy) -> DeployChip {
+/// Synthetic outside URLs for the simulation (example hosts only, never real data).
+pub fn jira_url(key: &TicketKey) -> String {
+    format!("https://example.atlassian.net/browse/{key}")
+}
+
+pub fn pr_url(host: &str, id: PrNumber) -> String {
+    format!("https://github.com/{host}/pull/{id}")
+}
+
+pub fn run_url(host: &str, run: u32) -> String {
+    format!("https://github.com/{host}/actions/runs/{run}")
+}
+
+pub fn deploy_chip_for(host: &str, d: &Deploy) -> DeployChip {
     let (text, tone) = match d.state {
         DeployState::Deployed => ("● deployed alpha".to_string(), Tone::Ok),
         DeployState::Failed => ("✕ failed".to_string(), Tone::Bad),
@@ -163,6 +176,7 @@ pub fn deploy_chip(d: &Deploy) -> DeployChip {
         run: d.run,
         step: matches!(d.state, DeployState::Pending | DeployState::Running)
             .then(|| d.step.clone()),
+        url: (d.run > 0).then(|| run_url(host, d.run)),
     }
 }
 
@@ -404,6 +418,7 @@ impl Sim {
             local: local_badge(st),
             hotfix: self.is_hotfix(t),
             uat_flag: self.uat_flag(t),
+            jira_url: Some(jira_url(key)),
             actions,
             banners,
             stepper: self.stepper(t),
@@ -475,7 +490,10 @@ impl Sim {
                     repo: p.repo.clone(),
                     branch,
                     pr: pr.map(|x| format!("#{} → {}", x.id, x.dst)),
-                    deploy: t.landing(&p.repo).map(|l| deploy_chip(&l.deploy)),
+                    pr_url: pr.map(|x| pr_url(self.repo(&x.repo).host, x.id)),
+                    deploy: t.landing(&p.repo).map(|l| {
+                        deploy_chip_for(self.repo(&p.repo).host, &l.deploy)
+                    }),
                     touched: true,
                 }
             })
@@ -486,6 +504,7 @@ impl Sim {
                     repo: r.name.clone(),
                     branch: BranchCell::Baseline(r.base.clone()),
                     pr: None,
+                    pr_url: None,
                     deploy: None,
                     touched: false,
                 });
@@ -597,6 +616,7 @@ impl Sim {
         let empty_vm = |uat: Option<BannerVm>| ReviewVm {
             key: key.clone(),
             pr_id: PrNumber(0),
+            pr_url: None,
             uat,
             stale: None,
             since_toggle: None,
@@ -815,6 +835,7 @@ impl Sim {
         Some(ReviewVm {
             key: key.clone(),
             pr_id: pr.id,
+            pr_url: Some(pr_url(self.repo(&pr.repo).host, pr.id)),
             uat,
             stale: stale_banner,
             since_toggle,
@@ -836,6 +857,7 @@ impl Sim {
             pr: Some(PrHeadVm {
                 title: pr.title.clone(),
                 source: pr.src.to_string(),
+                url: Some(pr_url(self.repo(&pr.repo).host, pr.id)),
                 dest: {
                     let cfg = self.repo(&pr.repo);
                     Badge::new(
@@ -1023,7 +1045,13 @@ impl Sim {
                             files: *files,
                             uat_before: uat_before.clone(),
                             merge: merge.clone(),
-                            overlaps: overlaps.iter().map(|(k, f)| format!("{k} ({f})")).collect(),
+                            overlaps: overlaps
+                                .iter()
+                                .map(|(k, f)| OverlapVm {
+                                    text: format!("{k} ({f})"),
+                                    tickets: vec![k.clone()],
+                                })
+                                .collect(),
                         },
                         PrepOutcome::AlreadyPushed { commit } => PrepRow::AlreadyPushed {
                             repo: r.repo.clone(),
@@ -1121,7 +1149,7 @@ impl Sim {
                 let d = &l.deploy;
                 RunRow {
                     repo: l.repo.clone(),
-                    chip: deploy_chip(d),
+                    chip: deploy_chip_for(self.repo(&l.repo).host, d),
                     rerun: (d.state == DeployState::Failed).then(|| {
                         Btn::new(
                             "Re-run…",
@@ -1156,11 +1184,10 @@ impl Sim {
             .landings()
             .iter()
             .find_map(|l| l.deploy.uat_moved.clone())
-            .map(|u| {
-                format!(
-                    "uat moved after your push: {} ({}) was pushed at {}. Alpha now contains both, so check the combined behaviour.",
-                    u.ticket, u.by, u.at
-                )
+            .map(|u| UatMovedVm {
+                ticket: u.ticket,
+                by: u.by,
+                at: u.at,
             });
 
         // While the ticket is active the integration is still in progress (a first merge or a re-merge), so
@@ -1236,6 +1263,7 @@ impl Sim {
                     let ok = p.reviewers.iter().any(|r| r.name == ME && r.approved);
                     AfterRow {
                         label: format!("{} #{}", p.repo, p.id),
+                        url: Some(pr_url(self.repo(&p.repo).host, p.id)),
                         badge: if ok {
                             Badge::new("approved by you", Tone::Ok)
                         } else {

@@ -34,13 +34,14 @@ fn repos_table(ui: &Ui, rows: &[RepoRowVm]) -> Div {
                 BranchCell::Chosen { name, manual } => div()
                     .flex()
                     .items_center()
-                    .gap_2()
+                    .gap_1()
                     .child(
                         div()
                             .font_family(ui.mono.clone())
                             .text_sm()
                             .child(name.to_string()),
                     )
+                    .child(copy_button(ui, name.to_string()))
                     .when(*manual, |d| d.child(faint(pal, "chosen"))),
                 BranchCell::Ambiguous(choices) => warn_box(
                     pal,
@@ -53,10 +54,14 @@ fn repos_table(ui: &Ui, rows: &[RepoRowVm]) -> Div {
                     ],
                 ),
                 BranchCell::Baseline(b) => div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
                     .text_sm()
                     .text_color(pal.faint)
                     .font_family(ui.mono.clone())
-                    .child(format!("{b} (baseline)")),
+                    .child(format!("{b} (baseline)"))
+                    .child(copy_button(ui, b.to_string())),
                 BranchCell::None => div().text_color(pal.faint).child("–"),
             };
             div()
@@ -74,13 +79,26 @@ fn repos_table(ui: &Ui, rows: &[RepoRowVm]) -> Div {
                         .child(r.repo.to_string()),
                 )
                 .child(div().flex_1().px_2().child(branch))
-                .child(
-                    col(150.0)
+                .child(col(150.0).child(match (&r.pr, &r.pr_url) {
+                    (Some(label), Some(url)) => div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
                         .text_sm()
-                        .child(r.pr.clone().unwrap_or_else(|| "–".to_string())),
-                )
+                        .child(label.clone())
+                        .child(open_button(ui, url.clone(), "Open pull request")),
+                    (Some(label), None) => div().text_sm().child(label.clone()),
+                    (None, _) => div().text_sm().child("–".to_string()),
+                }))
                 .child(col(180.0).child(match &r.deploy {
-                    Some(c) => deploy_chip(pal, c),
+                    Some(c) => div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .child(deploy_chip(pal, c))
+                        .when_some(c.url.clone(), |d, url| {
+                            d.child(open_button(ui, url, "Open run"))
+                        }),
                     None => faint(
                         pal,
                         if r.touched {

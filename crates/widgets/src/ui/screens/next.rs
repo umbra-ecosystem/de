@@ -145,7 +145,12 @@ pub fn suggestion_row(ui: &Ui, s: &SuggestionCard) -> Stateful<Div> {
                     .children(marks),
             )
         })
-        .when_some(s.ticket.clone(), |d, k| d.child(key_text(ui, &k)))
+        .when_some(s.ticket.clone(), |d, k| {
+            d.child(match s.open.clone() {
+                Some(go) => key_link(ui, &k, go).into_any_element(),
+                None => key_text(ui, &k).into_any_element(),
+            })
+        })
         .child(
             div()
                 .truncate()

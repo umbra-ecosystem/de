@@ -44,9 +44,13 @@ fn env_table(ui: &Ui, rows: &[EnvRow]) -> Div {
                 )
                 .child(
                     div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
                         .font_family(ui.mono.clone())
                         .text_sm()
-                        .child(r.branch.to_string()),
+                        .child(r.branch.to_string())
+                        .child(copy_button(ui, r.branch.to_string())),
                 )
                 .child(faint(pal, r.note.clone()))
         }))
@@ -54,7 +58,12 @@ fn env_table(ui: &Ui, rows: &[EnvRow]) -> Div {
 
 /// The test overlay is part of activating, not a problem: one faint line, no box, no warning colour.
 fn overlay_note(ui: &Ui, text: &str) -> Div {
-    faint(&ui.pal, text.to_string())
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .child(faint(&ui.pal, text.to_string()))
+        .child(copy_button(ui, text))
 }
 
 pub fn test(ui: &Ui, _cx: &App, inputs: &Inputs, key: &TicketKey, t: &TestVm) -> Div {

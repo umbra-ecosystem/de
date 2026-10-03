@@ -83,6 +83,8 @@ pub struct Session {
     /// The mapping fields have been filled from the store. Edits then stay until saved or discarded, also when
     /// the user leaves the page and comes back.
     mapping_seeded: bool,
+    copied: Vec<String>,
+    opened: Vec<String>,
 }
 
 impl Session {
@@ -119,12 +121,34 @@ impl Session {
             seen_snap: BTreeMap::new(),
             log_view: None,
             mapping_seeded: false,
+            copied: Vec::new(),
+            opened: Vec::new(),
         }
     }
 
     /// A session over the in-memory simulation, as the showcase uses it.
     pub fn demo() -> Self {
         Self::new(Box::new(Sim::new()))
+    }
+
+    /// Text handed to the clipboard since the last drain (headless tests and the app shell).
+    pub fn copied(&self) -> &[String] {
+        &self.copied
+    }
+
+    /// URLs asked to open since the last drain.
+    pub fn opened(&self) -> &[String] {
+        &self.opened
+    }
+
+    /// Take and clear the pending clipboard writes for the app shell to perform.
+    pub fn take_copied(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.copied)
+    }
+
+    /// Take and clear the pending external opens for the app shell to perform.
+    pub fn take_opened(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.opened)
     }
 
     pub fn route(&self) -> &Route {
@@ -344,6 +368,17 @@ impl Session {
             Intent::RequestChangesFrom { key, pr } => {
                 self.texts.remove(&Field::Compose);
                 self.sheet = Some(Sheet::Compose(ComposeKind::RequestChanges { key, pr }));
+            }
+            Intent::Copy(text) => {
+                if !text.trim().is_empty() {
+                    self.copied.push(text);
+                    self.push_toast("Copied to clipboard.".to_string(), ToastKind::Ok, None);
+                }
+            }
+            Intent::OpenExternal(url) => {
+                if !url.trim().is_empty() {
+                    self.opened.push(url);
+                }
             }
             Intent::Noop => {}
         }
@@ -3006,5 +3041,82 @@ mod tests {
         let card = &s.store().next(false).cards[0];
         let labels: Vec<&str> = card.snooze.iter().map(|b| b.label.as_str()).collect();
         assert_eq!(labels, ["2 minutes", "10 minutes"]);
+    }
+
+    #[test]
+    fn copying_records_the_text_and_says_so() {
+        let mut s = Session::demo();
+        s.handle(Intent::Copy("PROJ-142".into()));
+        assert_eq!(s.copied(), ["PROJ-142"]);
+        assert!(s.toasts.iter().any(|t| t.text.contains("Copied")));
+        let taken = s.take_copied();
+        assert_eq!(taken, ["PROJ-142"]);
+        assert!(s.copied().is_empty());
+        // Blank copies are ignored: nothing recorded, no toast.
+        s.handle(Intent::Copy("   ".into()));
+        assert!(s.copied().is_empty());
+    }
+
+    #[test]
+    fn opening_a_url_records_it_for_the_shell() {
+        let mut s = Session::demo();
+        let url = "https://example.atlassian.net/browse/PROJ-142".to_string();
+        s.handle(Intent::OpenExternal(url.clone()));
+        assert_eq!(s.opened(), [url.clone()]);
+        let taken = s.take_opened();
+        assert_eq!(taken, [url]);
+        assert!(s.opened().is_empty());
+    }
+
+    #[test]
+    fn every_ticket_head_carries_its_jira_url() {
+        let s = Session::demo();
+        let head = s
+            .store()
+            .ticket_head(&k("PROJ-142"), TicketTab::Overview)
+            .expect("head");
+        assert_eq!(
+            head.jira_url.as_deref(),
+            Some("https://example.atlassian.net/browse/PROJ-142")
+        );
+    }
+
+    #[test]
+    fn overview_and_review_carry_pr_urls_and_run_urls() {
+        let s = Session::demo();
+        let o = s
+            .store()
+            .overview(&k("PROJ-142"), None)
+            .expect("overview");
+        let row = o.repos.iter().find(|r| r.pr.is_some()).expect("a PR row");
+        let url = row.pr_url.clone().expect("PR url");
+        assert!(url.starts_with("https://github.com/"), "{url}");
+        assert!(url.contains("/pull/"), "{url}");
+        let r = s
+            .store()
+            .review(&k("PROJ-142"), &crate::store::ReviewSel {
+                pr: None,
+                file: 0,
+                mode: DiffMode::Unified,
+                since: SinceMode::Since,
+                viewed: Default::default(),
+                composer: None,
+            })
+            .expect("review");
+        let pr_url = r.pr_url.clone();
+        assert!(pr_url.clone().is_some_and(|u| u.contains("/pull/")));
+        assert_eq!(r.pr.as_ref().and_then(|p| p.url.clone()), pr_url);
+    }
+
+    #[test]
+    fn audit_tickets_link_back_to_their_tickets() {
+        let mut s = Session::demo();
+        s.handle(Intent::Do(Command::Undo(Undo::Claim("PROJ-142".into()))));
+        s.handle(Intent::Do(Command::Claim("PROJ-150".into())));
+        let rows = s.store().audit();
+        assert!(
+            rows.iter().any(|r| r.ticket.as_deref() == Some("PROJ-150")),
+            "the claim is audited with its ticket, so the row can link to it"
+        );
     }
 }

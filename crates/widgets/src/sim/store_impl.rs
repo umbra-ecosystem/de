@@ -357,6 +357,7 @@ impl Sim {
                             Self::fmt_dur(self.duration_ms(t)),
                             t.checklist.len()
                         )),
+                        open: Some(Intent::go_ticket(t.key.clone(), TicketTab::Test)),
                     },
                     RightRow::Button(Btn::new(
                         "Open",
@@ -507,6 +508,7 @@ impl Sim {
                     key: None,
                     title: p.title.clone(),
                     sub: Some(sub),
+                    open: Some(Intent::go_ticket(t.key.clone(), TicketTab::Review)),
                 }
             })
             .collect();
@@ -533,6 +535,9 @@ impl Sim {
                         key: self.tk(&l.key).map(|_| l.key.clone()),
                         title: l.title.to_string(),
                         sub: Some(format!("{} · {}", l.rel, l.status.label())),
+                        open: self
+                            .tk(&l.key)
+                            .map(|_| Intent::go_ticket(l.key.clone(), TicketTab::Overview)),
                     })
                     .collect(),
             });
@@ -1268,10 +1273,13 @@ impl Store for Sim {
                     };
                     let b = paths(list[j]);
                     for f in paths(list[i]).into_iter().filter(|f| b.contains(f)) {
-                        overlaps.push(format!(
-                            "{}: {} and {} both change {f}.",
-                            r.name, list[i].key, list[j].key
-                        ));
+                        overlaps.push(OverlapVm {
+                            text: format!(
+                                "{}: {} and {} both change {f}.",
+                                r.name, list[i].key, list[j].key
+                            ),
+                            tickets: vec![list[i].key.clone(), list[j].key.clone()],
+                        });
                     }
                 }
             }

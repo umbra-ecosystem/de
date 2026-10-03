@@ -64,6 +64,8 @@ pub enum RightRow {
         key: Option<TicketKey>,
         title: String,
         sub: Option<String>,
+        /// Where clicking the row goes. `None` follows `key` to the ticket's Overview.
+        open: Option<Intent>,
     },
     /// One line about a ticket that opens it when clicked: key and title, with a mark for what is urgent.
     Ticket {
@@ -300,6 +302,8 @@ pub struct TicketHeadVm {
     pub local: Option<Badge>,
     pub hotfix: bool,
     pub uat_flag: Option<Badge>,
+    /// `https://{site}/browse/{KEY}` when the store knows it; the head offers it as Open in Jira.
+    pub jira_url: Option<String>,
     pub actions: Vec<Btn>,
     pub banners: Vec<BannerVm>,
     pub stepper: StepperVm,
@@ -308,11 +312,43 @@ pub struct TicketHeadVm {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct OverlapVm {
+    /// `PROJ-142 (web/api.php)`, or `web: PROJ-142 and PROJ-150 both change web/api.php`.
+    pub text: String,
+    /// Every ticket named in `text`, in order, for in-app navigation.
+    pub tickets: Vec<TicketKey>,
+}
+
+impl OverlapVm {
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct UatMovedVm {
+    pub ticket: TicketKey,
+    pub by: String,
+    pub at: String,
+}
+
+impl UatMovedVm {
+    pub fn text(&self) -> String {
+        format!(
+            "uat moved after your push: {} ({}) was pushed at {}. Alpha now contains both, so check the combined behaviour.",
+            self.ticket, self.by, self.at
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct DeployChip {
     pub text: String,
     pub tone: Tone,
     pub run: u32,
     pub step: Option<String>,
+    /// The Actions run in the browser, when the store knows it.
+    pub url: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -328,6 +364,8 @@ pub struct RepoRowVm {
     pub repo: RepoName,
     pub branch: BranchCell,
     pub pr: Option<String>,
+    /// The pull request in the browser, when the store knows it.
+    pub pr_url: Option<String>,
     pub deploy: Option<DeployChip>,
     pub touched: bool,
 }
@@ -428,6 +466,8 @@ pub struct PrHeadVm {
     pub title: String,
     pub source: String,
     pub dest: Badge,
+    /// The pull request in the browser, when the store knows it.
+    pub url: Option<String>,
     /// `(name, approved)`.
     pub reviewers: Vec<(String, bool)>,
 }
@@ -437,6 +477,8 @@ pub struct ReviewVm {
     pub key: TicketKey,
     /// The pull request being read (0 when there is none).
     pub pr_id: PrNumber,
+    /// The selected pull request in the browser, when the store knows it.
+    pub pr_url: Option<String>,
     pub uat: Option<BannerVm>,
     pub stale: Option<BannerVm>,
     pub since_toggle: Option<(Btn, Btn, bool)>,
@@ -491,7 +533,7 @@ pub enum PrepRow {
         files: u32,
         uat_before: String,
         merge: String,
-        overlaps: Vec<String>,
+        overlaps: Vec<OverlapVm>,
     },
     AlreadyPushed {
         repo: RepoName,
@@ -558,6 +600,8 @@ pub enum AnnounceBody {
 #[derive(Clone, Debug, PartialEq)]
 pub struct AfterRow {
     pub label: String,
+    /// The pull request in the browser, when the store knows it.
+    pub url: Option<String>,
     pub badge: Badge,
     pub approve: Option<Btn>,
 }
@@ -569,7 +613,7 @@ pub struct ShipVm {
     pub integrate: IntegrateBody,
     pub runs_state: StepState,
     pub runs: Vec<RunRow>,
-    pub uat_moved: Option<String>,
+    pub uat_moved: Option<UatMovedVm>,
     pub announce_state: StepState,
     pub announce: AnnounceBody,
     pub after_state: StepState,
@@ -584,7 +628,7 @@ pub struct ShipVm {
 #[derive(Clone, Debug, PartialEq)]
 pub struct OnUatVm {
     pub table: TicketListVm,
-    pub overlaps: Vec<String>,
+    pub overlaps: Vec<OverlapVm>,
 }
 
 /// What one project's Services cell says: the count when things are fine, `1 of 3` when they

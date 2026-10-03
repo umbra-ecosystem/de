@@ -63,7 +63,28 @@ pub fn on_uat(ui: &Ui, inputs: &Inputs, v: &OnUatVm) -> AnyElement {
                     .flex_col()
                     .gap_2()
                     .children(v.overlaps.iter().map(|o| {
-                        warn_box(pal, Tone::Warn, [div().child(o.clone()).into_any_element()])
+                        warn_box(
+                            pal,
+                            Tone::Warn,
+                            [
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(div().flex_1().min_w_0().child(o.text.clone()))
+                                    .children(o.tickets.iter().map(|k| {
+                                        button_ghost(
+                                            ui,
+                                            &Btn::new(
+                                                k.to_string(),
+                                                Intent::go_ticket(k.clone(), TicketTab::Overview),
+                                            ),
+                                        )
+                                        .into_any_element()
+                                    }))
+                                    .into_any_element(),
+                            ],
+                        )
                     }))),
             ))
         })
@@ -147,10 +168,23 @@ pub fn workspace(ui: &Ui, v: &WorkspaceVm) -> Div {
                 // One line, however long the branch: a ticket branch can be a hundred characters.
                 .child(
                     slack()
-                        .truncate()
-                        .font_family(ui.mono.clone())
-                        .text_sm()
-                        .child(r.branch.to_string()),
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .min_w_0()
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .truncate()
+                                        .font_family(ui.mono.clone())
+                                        .text_sm()
+                                        .child(r.branch.to_string()),
+                                )
+                                .child(copy_button(ui, r.branch.to_string())),
+                        ),
                 )
                 // Only what is off. A project with nothing wrong says nothing at all — silence is
                 // the normal state, not a row of "clean".
@@ -260,9 +294,10 @@ pub fn logs(ui: &Ui, cx: &App, v: &LogsVm) -> Div {
                         None => "Pick a run".to_string(),
                     },
                 ))
-                .children(v.selected.iter().map(|id| {
-                    button_ghost(ui, &Btn::new("Reload", Intent::SelectLog(id.clone())))
-                })),
+                .when_some(v.selected.clone(), |d, id| {
+                    d.child(copy_button(ui, v.lines.join("\n")))
+                        .child(button_ghost(ui, &Btn::new("Reload", Intent::SelectLog(id))))
+                }),
         )
         .child(if v.selected.is_some() {
             uniform_list("log-lines", lines.len(), move |range, _, _| {
@@ -322,9 +357,10 @@ fn providers_band(ui: &Ui, providers: &[ProviderVm], first: bool) -> Div {
                         div()
                             .flex()
                             .items_center()
-                            .gap_2()
+                            .gap_1()
                             .child(pill(pal, &Badge::new("signed out", Tone::Warn)))
                             .child(faint(pal, format!("run {}", p.login_hint)))
+                            .child(copy_button(ui, p.login_hint.clone()))
                             .into_any_element()
                     })
                     .child(button(ui, &p.toggle))
@@ -439,6 +475,7 @@ pub fn landing(ui: &Ui, v: &WelcomeVm) -> Div {
                         .text_color(pal.muted)
                         .child(if v.workspaces.is_empty() { "Run" } else { "Need another? Run" })
                         .child(div().font_family(ui.mono.clone()).text_color(pal.fg).child(v.init_command.clone()))
+                        .child(copy_button(ui, v.init_command.clone()))
                         .child("in the folder with your repos."),
                 )
                 .child(
@@ -459,6 +496,7 @@ pub fn landing(ui: &Ui, v: &WelcomeVm) -> Div {
                                 .child(div().text_color(pal.muted).child(p.name.clone()))
                                 .when(!p.ready, |d| {
                                     d.child(faint(pal, format!("signed out, run {}", p.login_hint)))
+                                        .child(copy_button(ui, p.login_hint.clone()))
                                 })
                         })),
                 ),
@@ -477,7 +515,17 @@ pub fn settings(ui: &Ui, inputs: &Inputs, v: &SettingsVm) -> Div {
                     .text_color(pal.muted)
                     .child(k.to_string()),
             )
-            .child(div().flex_1().min_w_0().text_sm().text_right().child(val))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_end()
+                    .gap_1()
+                    .flex_1()
+                    .min_w_0()
+                    .child(div().text_sm().text_right().child(val.clone()))
+                    .child(copy_button(ui, val)),
+            )
     };
     div()
         .flex()

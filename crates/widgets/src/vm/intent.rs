@@ -332,6 +332,11 @@ pub enum Intent {
         key: TicketKey,
         pr: PrNumber,
     },
+    /// Copy raw text to the clipboard (branch, SHA, URL, command, log line). Handled by
+    /// the app shell; the session records it and toasts.
+    Copy(String),
+    /// Open a URL in the browser. Handled by the app shell; the session records it.
+    OpenExternal(String),
     Noop,
 }
 

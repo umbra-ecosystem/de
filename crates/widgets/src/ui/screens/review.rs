@@ -102,7 +102,8 @@ fn thread(ui: &Ui, t: &ThreadVm) -> Div {
                             if t.resolved { "resolved" } else { "unresolved" },
                         )),
                 )
-                .child(div().text_sm().child(t.text.clone())),
+                .child(div().text_sm().child(t.text.clone()))
+                .child(div().flex().child(copy_button(ui, t.text.clone()))),
         )
 }
 
@@ -368,6 +369,7 @@ fn diff_pane(ui: &Ui, inputs: &Inputs, r: &ReviewVm) -> Div {
             div()
                 .flex()
                 .items_center()
+                .gap_2()
                 .flex_none()
                 .h_9()
                 .px_3()
@@ -376,7 +378,8 @@ fn diff_pane(ui: &Ui, inputs: &Inputs, r: &ReviewVm) -> Div {
                 .text_xs()
                 .font_family(ui.mono.clone())
                 .text_color(pal.muted)
-                .child(r.file_path.clone()),
+                .child(r.file_path.clone())
+                .child(copy_button(ui, r.file_path.clone())),
         )
         .child(
             div()
@@ -442,12 +445,13 @@ fn toolbar(ui: &Ui, r: &ReviewVm) -> Div {
                 div()
                     .flex()
                     .items_center()
-                    .gap_2()
+                    .gap_1()
                     .min_w_0()
                     .text_xs()
                     .font_family(ui.mono.clone())
                     .text_color(pal.muted)
                     .child(div().truncate().child(p.source.clone()))
+                    .child(copy_button(ui, p.source.clone()))
                     .child(
                         Icon::new(IconName::ArrowRight)
                             .small()
@@ -455,6 +459,9 @@ fn toolbar(ui: &Ui, r: &ReviewVm) -> Div {
                     )
                     .child(pill(pal, &p.dest)),
             )
+            .when_some(r.pr_url.clone(), |d, url| {
+                d.child(open_button(ui, url, "Open pull request"))
+            })
             .child(
                 div()
                     .flex()

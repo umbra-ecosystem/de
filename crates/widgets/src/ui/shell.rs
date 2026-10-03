@@ -492,7 +492,8 @@ pub fn workspace_picker(ui: &Ui, inputs: &Inputs, p: &PickerVm) -> Div {
                                         .font_family(ui.mono.clone())
                                         .text_color(pal.fg)
                                         .child(p.init_command.clone()),
-                                ),
+                                )
+                                .child(copy_button(ui, p.init_command.clone())),
                         )
                         .when(p.current.is_some(), |d| {
                             d.child(button_ghost(
@@ -689,35 +690,49 @@ fn right_row(ui: &Ui, r: &RightRow) -> AnyElement {
         RightRow::Muted(t) => faint(pal, t.clone()).into_any_element(),
         RightRow::Tags(tags) => pills(pal, tags).into_any_element(),
         // An item reads key, then title, then detail: three steps down in brightness.
+        // `open` navigates when the row is clicked (a PR goes to Review); otherwise the key links.
         RightRow::Item {
             head,
             key,
             title,
             sub,
-        } => div()
-            .flex()
-            .flex_col()
-            .gap_0p5()
-            .when(!head.is_empty() || key.is_some(), |d| {
-                d.child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .items_center()
-                        .gap_1()
-                        .children(head.iter().map(|b| pill(pal, b)))
-                        .when_some(key.clone(), |d, k| {
-                            d.child(key_link(
-                                ui,
-                                &k,
-                                Intent::go_ticket(k.clone(), TicketTab::Overview),
-                            ))
-                        }),
-                )
-            })
-            .child(div().text_sm().child(title.clone()))
-            .when_some(sub.clone(), |d, s| d.child(faint(pal, s)))
-            .into_any_element(),
+            open,
+        } => {
+            let body = div()
+                .flex()
+                .flex_col()
+                .gap_0p5()
+                .when(!head.is_empty() || key.is_some(), |d| {
+                    d.child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_1()
+                            .children(head.iter().map(|b| pill(pal, b)))
+                            .when_some(key.clone(), |d, k| {
+                                d.child(key_link(
+                                    ui,
+                                    &k,
+                                    Intent::go_ticket(k.clone(), TicketTab::Overview),
+                                ))
+                            }),
+                    )
+                })
+                .child(div().text_sm().child(title.clone()))
+                .when_some(sub.clone(), |d, s| d.child(faint(pal, s)));
+            match open.clone() {
+                Some(go) => div()
+                    .id(hash_id("right-item", &(title, sub)))
+                    .rounded_md()
+                    .cursor_pointer()
+                    .hover(|d| d.bg(pal.hover))
+                    .on_click(ui.on_click(go))
+                    .child(body)
+                    .into_any_element(),
+                None => body.into_any_element(),
+            }
+        }
         // One line, clickable as a whole: a mark for what is urgent, the key, then as much of the title as fits.
         RightRow::Ticket { key, title, mark } => {
             let full: SharedString = title.clone().into();
@@ -1225,11 +1240,19 @@ fn confirm_sheet(ui: &Ui, cx: &App, inputs: &Inputs, preview: &Preview, can_conf
         .gap_3()
         .child(div().text_sm().child(preview.summary.clone()))
         .when(!preview.payload.is_empty(), |d| {
-            d.child(section(pal, "This will run, exactly").child(code_block(
-                pal,
-                cx,
-                preview.payload.join("\n"),
-            )))
+            d.child(
+                section(pal, "This will run, exactly").child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(code_block(pal, cx, preview.payload.join("\n")))
+                        .child(div().flex().child(copy_button(
+                            ui,
+                            preview.payload.join("\n"),
+                        ))),
+                ),
+            )
         })
         .when(!preview.facts.is_empty(), |d| {
             d.child(
@@ -1458,7 +1481,8 @@ pub fn sheet(ui: &Ui, cx: &App, inputs: &Inputs, sheet: &SheetVm) -> Div {
                         .child("Real output can contain ticket titles and names. Read it before sharing.")
                         .into_any_element()],
                 ))
-                .child(code_block(pal, cx, text.clone())),
+                .child(code_block(pal, cx, text.clone()))
+                .child(div().flex().child(copy_button(ui, text.clone()))),
             div().flex().child(button(ui, &Btn::new("Close", Intent::CancelSheet).primary())),
         ),
         SheetVm::AllWorkspaces(a) => sheet_frame(

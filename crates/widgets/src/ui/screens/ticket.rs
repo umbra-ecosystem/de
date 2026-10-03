@@ -36,6 +36,10 @@ fn head(ui: &Ui, h: &TicketHeadVm, tab: TicketTab) -> Div {
                                 .items_center()
                                 .gap_2()
                                 .child(key_text(ui, &h.key))
+                                .child(copy_button(ui, h.key.to_string()))
+                                .when_some(h.jira_url.clone(), |d, url| {
+                                    d.child(open_button(ui, url, "Open in Jira"))
+                                })
                                 .child(pill(pal, &h.jira))
                                 .when_some(h.local.clone(), |d, b| d.child(pill(pal, &b)))
                                 .when(h.hotfix, |d| d.child(hotfix_pill(pal)))
@@ -191,7 +195,13 @@ fn audit_table(ui: &Ui, rows: &[AuditRow], show_ticket: bool) -> Div {
                         .flex()
                         .gap_2()
                         .when(show_ticket, |d| {
-                            d.when_some(a.ticket.clone(), |d, k| d.child(key_text(ui, &k)))
+                            d.when_some(a.ticket.clone(), |d, k| {
+                                d.child(key_link(
+                                    ui,
+                                    &k,
+                                    Intent::go_ticket(k.clone(), TicketTab::Overview),
+                                ))
+                            })
                         })
                         .child(div().flex_1().min_w_0().text_xs().child(a.details.clone())),
                 )
