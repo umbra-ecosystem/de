@@ -28,7 +28,8 @@ pub use guard::{
     working_tree_has_overlay, working_tree_overlay,
 };
 pub use runner::{
-    CommandOutput, CommandRunner, ExternalCommand, ProcessRunner, TimedOut, run_checked,
+    CommandOutput, CommandRunner, ExternalCommand, ProcessRunner, TimedOut, missing_dirs,
+    run_checked, tool_fallback_dirs,
 };
 
 #[derive(Debug, thiserror::Error)]

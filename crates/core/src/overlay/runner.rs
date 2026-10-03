@@ -120,6 +120,45 @@ fn tail(text: &str) -> Option<String> {
     Some(lines[start..].join("\n"))
 }
 
+/// Where macOS keeps developer tools outside the skeletal `PATH` of a bundled launch
+/// (Dock, Finder): Homebrew on both architectures, MacPorts, Docker Desktop's CLI
+/// directory and its app bundle. Only consulted when a program resolves nowhere, so
+/// normal resolution never changes.
+pub fn tool_fallback_dirs(home: Option<PathBuf>) -> Vec<PathBuf> {
+    let mut dirs = vec![
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/opt/homebrew/sbin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/opt/local/bin"),
+        PathBuf::from("/Applications/Docker.app/Contents/Resources/bin"),
+    ];
+    if let Some(h) = home {
+        dirs.push(h.join(".docker").join("bin"));
+    }
+    dirs
+}
+
+/// The `candidates` that exist and are not already listed in `path_var`.
+pub fn missing_dirs(path_var: Option<&std::ffi::OsStr>, candidates: &[PathBuf]) -> Vec<PathBuf> {
+    let listed: Vec<PathBuf> = path_var
+        .map(|v| std::env::split_paths(v).collect())
+        .unwrap_or_default();
+    candidates
+        .iter()
+        .filter(|d| d.is_dir() && !listed.contains(d))
+        .cloned()
+        .collect()
+}
+
+/// Whether `program` (no directory part) is found nowhere in `path_var`.
+fn program_missing(path_var: Option<&std::ffi::OsStr>, program: &str) -> bool {
+    let listed: Vec<PathBuf> = path_var
+        .map(std::env::split_paths)
+        .map(Iterator::collect)
+        .unwrap_or_default();
+    !listed.iter().any(|dir| dir.join(program).is_file())
+}
+
 /// Runs the process for real, with the command's directory as its working directory.
 #[derive(Debug, Clone, Default)]
 pub struct ProcessRunner {
@@ -227,8 +266,21 @@ impl CommandRunner for ProcessRunner {
         let mut process = Command::new(&command.program);
         process.args(&command.args).current_dir(&command.dir);
 
-        if !self.path_prefix.is_empty() {
-            let mut paths: Vec<PathBuf> = self.path_prefix.clone();
+        let mut prefix = self.path_prefix.clone();
+        if prefix.is_empty()
+            && !command.program.contains(std::path::MAIN_SEPARATOR)
+            && program_missing(std::env::var_os("PATH").as_deref(), &command.program)
+        {
+            // Nowhere on PATH (a Dock/Finder launch inherits a skeletal one): look in the
+            // usual macOS tool locations before reporting the tool missing.
+            let home = std::env::var_os("HOME").map(PathBuf::from);
+            prefix = missing_dirs(
+                std::env::var_os("PATH").as_deref(),
+                &tool_fallback_dirs(home),
+            );
+        }
+        if !prefix.is_empty() {
+            let mut paths = prefix;
             let existing: OsString = std::env::var_os("PATH").unwrap_or_default();
             paths.extend(std::env::split_paths(&existing));
             process.env("PATH", std::env::join_paths(paths)?);
@@ -270,6 +322,57 @@ mod tests {
 
         let missing = ExternalCommand::new(dir.path(), "definitely-not-a-program", &[], "x");
         assert!(run_checked(&runner, &missing).is_err());
+    }
+
+    #[test]
+    fn fallback_dirs_cover_homebrew_macports_and_docker() {
+        let dirs = tool_fallback_dirs(None);
+        assert_eq!(
+            dirs,
+            [
+                "/opt/homebrew/bin",
+                "/opt/homebrew/sbin",
+                "/usr/local/bin",
+                "/opt/local/bin",
+                "/Applications/Docker.app/Contents/Resources/bin",
+            ]
+            .into_iter()
+            .map(PathBuf::from)
+            .collect::<Vec<_>>()
+        );
+        let home = tempfile::tempdir().unwrap();
+        let dirs = tool_fallback_dirs(Some(home.path().into()));
+        assert_eq!(
+            dirs.last().unwrap(),
+            &home.path().join(".docker").join("bin")
+        );
+    }
+
+    #[test]
+    fn only_existing_unlisted_dirs_are_added() {
+        let home = tempfile::tempdir().unwrap();
+        let present = home.path().join("present");
+        std::fs::create_dir(&present).unwrap();
+        let candidates = vec![
+            PathBuf::from("/definitely/not/here"),
+            present.clone(),
+            PathBuf::from("/usr/bin"),
+        ];
+        let path_var = std::env::join_paths([PathBuf::from("/usr/bin")]).unwrap();
+        assert_eq!(
+            missing_dirs(Some(path_var.as_os_str()), &candidates),
+            [present]
+        );
+    }
+
+    #[test]
+    fn a_program_on_path_needs_no_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("mytool"), "").unwrap();
+        let path_var = std::env::join_paths([dir.path()]).unwrap();
+        assert!(!program_missing(Some(path_var.as_os_str()), "mytool"));
+        assert!(program_missing(Some(path_var.as_os_str()), "other-tool"));
+        assert!(program_missing(None, "other-tool"));
     }
 
     fn pid_alive(pid: &str) -> bool {
