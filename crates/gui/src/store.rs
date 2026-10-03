@@ -98,13 +98,35 @@ fn now() -> i64 {
         .unwrap_or(0)
 }
 
+/// Which workspace the window opens on: the recorded active one, or none.
+///
+/// This deliberately reads only the recorded workspace (`config.toml`'s active one), never the
+/// workspace of the current folder — that resolution belongs to the CLI, which runs in the
+/// folder. `None` opens on the welcome screen.
+fn startup_workspace() -> Option<Slug> {
+    pick_startup_workspace(
+        Workspace::working()
+            .ok()
+            .flatten()
+            .map(|w| w.config().name.clone()),
+    )
+}
+
+/// The choice itself, kept separate so it can be pinned down: the recorded workspace, or the
+/// welcome screen when there is none.
+fn pick_startup_workspace(recorded: Option<Slug>) -> Option<Slug> {
+    recorded
+}
+
 impl CoreStore {
     /// Starts from the cached tickets of the open workspace and looks for new ones right away.
     ///
-    /// The workspace this folder or `config.toml` points at is already open: the app never
-    /// starts on the list when it knows which workspace was being used.
+    /// The window opens on the recorded workspace, whatever folder the app started in: a GUI has
+    /// no current directory the way a CLI does (it is opened from the Dock), so the workspace of
+    /// the current folder says nothing about what was being worked on. With nothing recorded, it
+    /// opens on the welcome screen instead.
     pub fn open() -> Self {
-        let workspace = Workspace::active().ok().flatten().map(|w| w.config().name.clone());
+        let workspace = startup_workspace();
         let scope = workspace.as_ref();
         let cached = load_cached(scope).unwrap_or_default();
         let mut sim = Sim::with_tickets(cached);
@@ -1107,6 +1129,18 @@ mod tests {
 
     fn slug(text: &str) -> Slug {
         Slug::from_str(text).unwrap()
+    }
+
+    /// The window opens on the recorded workspace, whatever folder it started in — and on the
+    /// welcome screen when nothing is recorded. The workspace of the current folder is never
+    /// consulted here; that resolution belongs to the CLI.
+    #[test]
+    fn the_window_opens_on_the_recorded_workspace_or_on_the_welcome_screen() {
+        assert_eq!(
+            pick_startup_workspace(Some(slug("shop"))),
+            Some(slug("shop"))
+        );
+        assert_eq!(pick_startup_workspace(None), None);
     }
 
     fn saved(name: &str, projects: &[&str], last_used: Option<i64>) -> SavedWs {
